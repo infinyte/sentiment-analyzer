@@ -1,5 +1,44 @@
+# Environment files — never commit secrets
 .env
-.env.local
+.env.*
 *.env
-/frontend/*.env
-/backend/*.env
+
+# Keep example templates in source control
+!.env.example
+!*.env.example
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Runtime
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Cache
+.npm
+.eslintcache
+.parcelcache
+.cache/
+
+# TypeScript
+*.tsbuildinfo
+
+# OS
+.DS_Store
+Thumbs.db
