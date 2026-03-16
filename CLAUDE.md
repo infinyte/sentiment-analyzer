@@ -76,4 +76,6 @@ Frontend `.env` only needs `VITE_API_BASE_URL=http://localhost:3000` for non-pro
 
 ## Implementation Status
 
-Scheduled jobs (`node-cron`), Azure Table Storage persistence, Application Insights, and Chart.js visualizations are declared as dependencies but **not yet implemented** in the source code. The app runs entirely on in-memory cache — no database.
+**Implemented:** All 5 API endpoints, sentiment analysis pipeline, 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, daily cron job (`node-cron`), Chart.js price chart in detail modal, ESC/backdrop modal close, volatility calculation from CoinGecko high/low, `trending_score` from headline count.
+
+**Not yet implemented:** Azure Table Storage persistence (app is in-memory only — data lost on restart), GitHub Actions CI/CD (`.github/workflows/` is empty), Application Insights structured logging.
