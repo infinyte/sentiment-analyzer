@@ -5,6 +5,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ interface Sentiment {
   risk_factors: string[];
   short_term_outlook: string;
   volatility_warning: boolean;
+  trending_score: number;
 }
 
 // ============================================================================
@@ -61,24 +63,33 @@ class CoinGeckoService {
 
       const data = await response.json();
 
-      return data.map((coin: any) => ({
-        id: coin.id,
-        symbol: coin.symbol.toUpperCase(),
-        name: coin.name,
-        price_usd: coin.current_price,
-        market_cap_usd: coin.market_cap || 0,
-        volume_24h_usd: coin.total_volume || 0,
-        price_change_24h_percent: coin.price_change_percentage_24h || 0,
-        price_change_7d_percent: coin.price_change_percentage_7d || 0,
-        volatility_24h: 0,
-        volatility_7d: 0,
-        sentiment_score: 'NEUTRAL' as const,
-        sentiment_confidence: 0,
-        sentiment_summary: '',
-        trending_score: 0,
-        timestamp: new Date(),
-        market_rank: coin.market_cap_rank || 999,
-      }));
+      return data.map((coin: any) => {
+        // Calculate volatility_24h from high/low range
+        const high24h = coin.high_24h || coin.current_price;
+        const low24h = coin.low_24h || coin.current_price;
+        const volatility24h = coin.current_price 
+          ? ((high24h - low24h) / coin.current_price) * 100 
+          : 0;
+
+        return {
+          id: coin.id,
+          symbol: coin.symbol.toUpperCase(),
+          name: coin.name,
+          price_usd: coin.current_price,
+          market_cap_usd: coin.market_cap || 0,
+          volume_24h_usd: coin.total_volume || 0,
+          price_change_24h_percent: coin.price_change_percentage_24h || 0,
+          price_change_7d_percent: coin.price_change_percentage_7d || 0,
+          volatility_24h: volatility24h,
+          volatility_7d: 0,
+          sentiment_score: 'NEUTRAL' as const,
+          sentiment_confidence: 0,
+          sentiment_summary: '',
+          trending_score: 0,
+          timestamp: new Date(),
+          market_rank: coin.market_cap_rank || 999,
+        };
+      });
     } catch (error) {
       console.error('CoinGecko error:', error);
       throw error;
@@ -185,7 +196,7 @@ Respond with ONLY this JSON (no markdown, no explanation):
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: 'claude-opus-4-1-20250805',
+          model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-6',
           max_tokens: 500,
           messages: [{ role: 'user', content: prompt }],
         }),
@@ -260,6 +271,10 @@ class Cache {
     }
     return entry.value as T;
   }
+
+  delete(key: string) {
+    this.data.delete(key);
+  }
 }
 
 // ============================================================================
@@ -278,9 +293,51 @@ const coingecko = new CoinGeckoService();
 const newsapi = new NewsAPIService();
 const sentiment = new SentimentService();
 const cache = new Cache();
+const sentimentCache = new Cache();
 
-// Store coins in memory
-let cachedCoins: Coin[] = [];
+
+// ============================================================================
+// HELPER: Fetch and cache sentiment for a coin
+// ============================================================================
+
+async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
+  const cacheKey = `sentiment_${coin.symbol}`;
+  
+  // Check if sentiment is already cached (24-hour TTL)
+  const cached = sentimentCache.get<Sentiment>(cacheKey);
+  if (cached) {
+    coin.sentiment_score = cached.sentiment_score;
+    coin.sentiment_confidence = cached.confidence;
+    coin.sentiment_summary = cached.summary;
+    coin.trending_score = cached.trending_score;
+    return;
+  }
+
+  // Fetch fresh sentiment data
+  try {
+    const headlines = await newsapi.getHeadlines(coin.name, 7);
+    const sentimentData = await sentiment.analyzeSentiment(
+      coin.symbol,
+      headlines,
+      coin.price_change_7d_percent,
+      coin.volatility_24h
+    );
+
+    sentimentData.trending_score = headlines.length;
+
+    // Cache sentiment for 24 hours
+    sentimentCache.set(cacheKey, sentimentData, 24 * 60 * 60 * 1000);
+
+    // Update coin with sentiment data
+    coin.sentiment_score = sentimentData.sentiment_score;
+    coin.sentiment_confidence = sentimentData.confidence;
+    coin.sentiment_summary = sentimentData.summary;
+    coin.trending_score = sentimentData.trending_score;
+  } catch (error) {
+    console.error(`Failed to fetch sentiment for ${coin.symbol}:`, error);
+    // Keep defaults on error
+  }
+}
 
 // ============================================================================
 // API ROUTES
@@ -298,6 +355,9 @@ app.get('/api/coins', async (req, res) => {
       coins = await coingecko.getTopCoins(limit);
       cache.set('coins', coins, 5 * 60 * 1000);
     }
+
+    // Fetch sentiment for each coin (cached separately with 24-hour TTL)
+    await Promise.all(coins.map(coin => fetchAndCacheSentiment(coin)));
 
     // Apply sorting
     if (sortBy === 'volatility') {
@@ -328,15 +388,30 @@ app.get('/api/coins/:symbol', async (req, res) => {
     const { symbol } = req.params;
     const days = Math.min(parseInt(req.query.days as string) || 7, 30);
 
-    const allCoins = await coingecko.getTopCoins(200);
+    // Reuse the cached coin list rather than fetching 200 coins on every modal open
+    const allCoins = cache.get<Coin[]>('coins') || await coingecko.getTopCoins(200);
     const coin = allCoins.find(c => c.symbol === symbol.toUpperCase());
 
     if (!coin) {
       return res.status(404).json({ error: 'Coin not found' });
     }
 
-    const priceHistory = await coingecko.getCoinHistory(coin.id, days);
-    const headlines = await newsapi.getHeadlines(coin.name, days);
+    // Fetch sentiment for this coin (also sets trending_score via cache)
+    await fetchAndCacheSentiment(coin);
+
+    const historyKey = `history_${coin.id}_${days}`;
+    const priceHistory = cache.get<object[]>(historyKey) || await (async () => {
+      const data = await coingecko.getCoinHistory(coin.id, days);
+      cache.set(historyKey, data, 15 * 60 * 1000);
+      return data;
+    })();
+
+    const headlinesKey = `headlines_${coin.id}_${days}`;
+    const headlines = cache.get<string[]>(headlinesKey) || await (async () => {
+      const data = await newsapi.getHeadlines(coin.name, days);
+      cache.set(headlinesKey, data, 15 * 60 * 1000);
+      return data;
+    })();
 
     res.json({
       coin,
@@ -358,25 +433,68 @@ app.get('/api/coins/:symbol', async (req, res) => {
 // POST /api/refresh-sentiment - Trigger sentiment analysis (admin only)
 app.post('/api/refresh-sentiment', async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    const token = req.headers['x-api-key'];
     if (token !== process.env.API_SECRET_KEY) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
     const { symbols } = req.body;
-    const coinsToProcess = symbols || [];
+    const jobId = `job_${Date.now()}`;
 
     res.status(202).json({
-      job_id: `job_${Date.now()}`,
-      status: 'queued',
-      coins_to_process: coinsToProcess.length,
+      job_id: jobId,
+      status: 'processing',
+      coins_to_process: symbols?.length || 'all',
     });
 
-    console.log('Sentiment refresh job queued for:', coinsToProcess);
+    // Process sentiment in background
+    (async () => {
+      try {
+        // Use cached coin list if available, otherwise fetch fresh
+        let coins: Coin[] = cache.get<Coin[]>('coins') || await coingecko.getTopCoins(
+          parseInt(process.env.SENTIMENT_BATCH_SIZE || '50')
+        );
+
+        // Filter to specific symbols if provided
+        if (symbols && Array.isArray(symbols) && symbols.length > 0) {
+          const upperSymbols = symbols.map((s: string) => s.toUpperCase());
+          coins = coins.filter(c => upperSymbols.includes(c.symbol));
+        }
+
+        console.log(`[${jobId}] Starting forced sentiment refresh for ${coins.length} coins...`);
+
+        // Clear sentiment cache entries first so fetchAndCacheSentiment re-analyzes
+        for (const coin of coins) {
+          sentimentCache.delete(`sentiment_${coin.symbol}`);
+        }
+
+        // Analyze sequentially to respect NewsAPI and Claude rate limits
+        for (const coin of coins) {
+          await fetchAndCacheSentiment(coin);
+          console.log(`[${jobId}] Refreshed sentiment for ${coin.symbol}: ${coin.sentiment_score}`);
+        }
+
+        console.log(`[${jobId}] Sentiment refresh completed for ${coins.length} coins`);
+      } catch (error) {
+        console.error(`[${jobId}] Sentiment refresh failed:`, error);
+      }
+    })();
   } catch (error) {
     console.error('Error in /api/refresh-sentiment:', error);
     res.status(500).json({ error: 'Failed to queue job' });
   }
+});
+
+// GET /api/sentiment/:symbol - Get cached sentiment for a coin
+app.get('/api/sentiment/:symbol', (req, res) => {
+  const symbol = req.params.symbol.toUpperCase();
+  const cached = sentimentCache.get<Sentiment>(`sentiment_${symbol}`);
+
+  if (!cached) {
+    return res.status(404).json({ error: `No sentiment data for ${symbol}` });
+  }
+
+  res.json(cached);
 });
 
 // GET /api/health - Health check
@@ -405,6 +523,36 @@ app.listen(port, () => {
   console.log(`\n✓ Server running on port ${port}`);
   console.log(`✓ API: http://localhost:${port}/api/coins`);
   console.log(`✓ Health: http://localhost:${port}/api/health\n`);
+});
+
+// ============================================================================
+// SCHEDULED SENTIMENT JOB
+// ============================================================================
+
+const cronSchedule = process.env.SENTIMENT_JOB_CRON || '0 2 * * *';
+
+cron.schedule(cronSchedule, async () => {
+  const batchSize = parseInt(process.env.SENTIMENT_BATCH_SIZE || '50');
+  const started = Date.now();
+  console.log(`[cron] Sentiment batch job started (${batchSize} coins, schedule: ${cronSchedule})`);
+
+  try {
+    const coins = await coingecko.getTopCoins(batchSize);
+
+    // Force re-analysis by clearing existing sentiment cache entries
+    for (const coin of coins) {
+      sentimentCache.delete(`sentiment_${coin.symbol}`);
+    }
+
+    for (const coin of coins) {
+      await fetchAndCacheSentiment(coin);
+    }
+
+    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+    console.log(`[cron] Sentiment batch job completed: ${coins.length} coins in ${elapsed}s`);
+  } catch (error) {
+    console.error('[cron] Sentiment batch job failed:', error);
+  }
 });
 
 export default app;

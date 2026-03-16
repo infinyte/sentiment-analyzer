@@ -83,7 +83,7 @@ function useCoinDetail(symbol: string | null) {
         const response = await fetch(`/api/coins/${symbol}?days=7`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        setDetail(data.coin);
+        setDetail({ ...data.coin, price_history: data.price_history, headlines: data.headlines });
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -307,7 +307,12 @@ function Dashboard({ onCoinSelect }: DashboardProps) {
     );
   }
 
-  const displayCoins = sortBy === 'volatility' ? [...coins].sort((a, b) => b.volatility_24h - a.volatility_24h) : coins;
+  const sentimentOrder = { BULL: 0, NEUTRAL: 1, BEAR: 2 };
+  const displayCoins = sortBy === 'volatility'
+    ? [...coins].sort((a, b) => b.volatility_24h - a.volatility_24h)
+    : sortBy === 'sentiment'
+    ? [...coins].sort((a, b) => sentimentOrder[a.sentiment_score] - sentimentOrder[b.sentiment_score] || b.sentiment_confidence - a.sentiment_confidence)
+    : coins;
 
   return (
     <div style={{ padding: '1.5rem' }}>
