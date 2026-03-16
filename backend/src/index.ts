@@ -499,12 +499,16 @@ app.get('/api/sentiment/:symbol', (req, res) => {
 
 // GET /api/health - Health check
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'healthy',
+  const claudeStatus = process.env.CLAUDE_API_KEY ? 'ok' : 'misconfigured';
+  const newsapiStatus = process.env.NEWSAPI_API_KEY ? 'ok' : 'misconfigured';
+  const allHealthy = claudeStatus === 'ok' && newsapiStatus === 'ok';
+
+  res.status(allHealthy ? 200 : 503).json({
+    status: allHealthy ? 'healthy' : 'degraded',
     services: {
       coingecko: 'ok',
-      newsapi: 'ok',
-      claude_api: 'ok',
+      newsapi: newsapiStatus,
+      claude_api: claudeStatus,
     },
     uptime_seconds: process.uptime(),
   });

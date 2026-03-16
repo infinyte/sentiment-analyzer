@@ -2,6 +2,13 @@
 
 This guide walks through setting up the Sentiment Analyzer project on Microsoft Azure using only free tier resources.
 
+> **Current Status:** This guide documents the target deployment architecture. The following are **not yet implemented** in the codebase and will need to be built before following the relevant sections:
+> - Azure Table Storage integration (app currently uses in-memory cache only)
+> - GitHub Actions CI/CD pipeline (`.github/workflows/` is empty)
+> - Application Insights structured logging
+>
+> Sections covering local development, environment variables, and Azure App Service deployment are fully applicable today.
+
 ---
 
 ## Prerequisites

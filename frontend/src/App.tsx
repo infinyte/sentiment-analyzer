@@ -2,6 +2,17 @@
 // Main React component with dashboard and detail modal
 
 import React, { useEffect, useState } from 'react';
+import { Line } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  Tooltip,
+} from 'chart.js';
+
+ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip);
 
 // ============================================================================
 // TYPES
@@ -402,10 +413,17 @@ interface DetailModalProps {
 function DetailModal({ symbol, onClose }: DetailModalProps) {
   const { detail, loading } = useCoinDetail(symbol);
 
+  useEffect(() => {
+    const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handleKey);
+    return () => document.removeEventListener('keydown', handleKey);
+  }, [onClose]);
+
   if (!symbol) return null;
 
   return (
     <div
+      onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -418,6 +436,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
       }}
     >
       <div
+        onClick={e => e.stopPropagation()}
         style={{
           backgroundColor: '#ffffff',
           borderRadius: '0.5rem',
@@ -488,27 +507,38 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                 </p>
               </div>
 
-              {/* Chart Placeholder */}
-              <div
-                style={{
-                  backgroundColor: '#f9fafb',
-                  padding: '2rem',
-                  borderRadius: '0.375rem',
-                  marginBottom: '1.5rem',
-                  height: '300px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: '#6b7280',
-                }}
-              >
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ margin: '0', fontWeight: '600' }}>Interactive Chart</p>
-                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
-                    Chart integration with TradingView or Chart.js
-                  </p>
+              {/* Price History Chart */}
+              {detail.price_history && detail.price_history.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                    Price History (7d)
+                  </h3>
+                  <Line
+                    data={{
+                      labels: detail.price_history.map(p =>
+                        new Date(p.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                      ),
+                      datasets: [{
+                        label: `${detail.symbol} Price (USD)`,
+                        data: detail.price_history.map(p => p.close),
+                        borderColor: '#3b82f6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.05)',
+                        borderWidth: 2,
+                        pointRadius: 0,
+                        tension: 0.3,
+                      }],
+                    }}
+                    options={{
+                      responsive: true,
+                      plugins: { tooltip: { mode: 'index', intersect: false } },
+                      scales: {
+                        x: { grid: { display: false } },
+                        y: { ticks: { callback: v => `$${Number(v).toLocaleString()}` } },
+                      },
+                    }}
+                  />
                 </div>
-              </div>
+              )}
 
               {/* Headlines */}
               <div>

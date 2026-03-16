@@ -1,275 +1,92 @@
-# SENTIMENT ANALYZER - SYSTEM ARCHITECTURE
+# Sentiment Analyzer
 
-## OVERVIEW
+Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news headlines from NewsAPI, and uses Claude AI to generate daily Bull/Neutral/Bear sentiment scores for the top 50 coins. Displayed through an interactive React dashboard.
 
-Real-time cryptocurrency sentiment analysis platform combining:
-- Market data polling every 10 minutes (CoinGecko)
-- Daily sentiment analysis using Claude AI
-- Interactive React dashboard with trading insights
-- Deployed on Azure Free Tier (~$10-15/month)
+## Quick Start
 
----
+```bash
+# Backend (localhost:3000)
+cd backend
+npm install
+cp .env.example .env   # add your API keys
+npm run dev
 
-## DATA FLOW DIAGRAM
-
-```
-REACT FRONTEND (Dashboard)
-         |
-         | HTTPS API Calls
-         v
-EXPRESS BACKEND (Node.js)
-    |        |        |
-    v        v        v
-CoinGecko NewsAPI Claude API
-    |        |        |
-    v        v        v
-AZURE TABLE STORAGE (Time-Series Database)
+# Frontend (localhost:5173) — separate terminal
+cd frontend
+npm install
+npm run dev
 ```
 
----
+Visit `http://localhost:5173`. The Vite dev server proxies `/api/*` to the backend automatically.
 
-## KEY COMPONENTS
+## Required Environment Variables
 
-### 1. FRONTEND
-- React 18 with TypeScript
-- Responsive coin grid layout (1-4 columns)
-- Interactive detail modal
-- Real-time status indicators
-- Chart.js for price visualization
+Set these in `backend/.env`:
 
-### 2. BACKEND
-- Node.js + Express.js
-- TypeScript for type safety
-- Winston logging
-- Node-Cron for scheduled jobs
-- In-memory caching (node-cache)
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `CLAUDE_API_KEY` | Yes | From [console.anthropic.com](https://console.anthropic.com) |
+| `NEWSAPI_API_KEY` | Yes | From [newsapi.org](https://newsapi.org) |
+| `API_SECRET_KEY` | Yes | Any string — used to authenticate `POST /api/refresh-sentiment` |
+| `COINGECKO_API_KEY` | No | Free tier works without it |
 
-### 3. DATA SOURCES
-- CoinGecko API (free tier, no key needed)
-- NewsAPI (free tier, 500 requests/day)
-- Claude API (paid, ~$0.01-0.03 per analysis)
-- Azure Table Storage (first 5GB free)
+Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`.
 
-### 4. SCHEDULED JOBS
+## Architecture
 
-**Every 10 Minutes:**
-- Fetch top 50-100 coins from CoinGecko
-- Get current price, volume, market cap
-- Calculate volatility metrics
-- Store snapshot in Table Storage
-
-**Daily @ 2 AM UTC:**
-- Analyze sentiment for top 50 coins
-- Use Claude API to process news headlines
-- Generate Bull/Neutral/Bear scores
-- Cache results for 24 hours
-
----
-
-## API ENDPOINTS
-
-### GET /api/coins
-Returns list of top coins with current data
-
-Response:
-```
-{
-  "data": [
-    {
-      "symbol": "BTC",
-      "name": "Bitcoin",
-      "price_usd": 43250.50,
-      "sentiment_score": "BULL",
-      "sentiment_confidence": 0.87,
-      "price_change_24h_percent": 2.34,
-      "volatility_24h": 2.1
-    }
-  ],
-  "last_updated": "2024-03-16T10:45:00Z"
-}
-```
-
-### GET /api/coins/:symbol
-Returns detailed report for one coin
-
-Includes:
-- Current price and market data
-- 7-day price history (OHLCV)
-- Sentiment analysis
-- Recent news articles
-- Volatility trends
-
-### GET /api/sentiment/:symbol
-Returns cached sentiment data
-
-### POST /api/refresh-sentiment
-Admin endpoint to manually trigger analysis
-
-### GET /api/health
-Health check for monitoring
-
----
-
-## DATA MODELS
-
-### CoinSnapshot
-Fields:
-- id, symbol, name
-- price_usd, market_cap_usd, volume_24h_usd
-- price_change_24h_percent, price_change_7d_percent
-- volatility_24h, volatility_7d
-- sentiment_score (BULL/NEUTRAL/BEAR)
-- sentiment_confidence (0-1)
-- sentiment_summary (text)
-- trending_score (headline count)
-- timestamp
-
-Storage: Azure Table Storage, partitioned by SYMBOL
-
-### SentimentAnalysis
-Fields:
-- symbol, analysis_date
-- sentiment_score, confidence
-- summary (1-2 sentences)
-- key_catalysts (array of strings)
-- risk_factors (array of strings)
-- short_term_outlook
-- volatility_warning (boolean)
-- generated_at, model, tokens_used
-
-Storage: Azure Table Storage, TTL 24 hours
-
----
-
-## REFRESH SCHEDULE
+Single-file backend (`backend/src/index.ts`) with three service classes and an in-memory cache. Single-file frontend (`frontend/src/App.tsx`) with all components and hooks.
 
 ```
-EVERY 10 MINUTES:
-├─ Call CoinGecko API (top 100 coins)
-├─ Extract: price, volume, market cap, 24h change, 7d change
-├─ Calculate volatility from previous snapshots
-├─ Call NewsAPI for headlines
-└─ Store snapshot → Table Storage
-
-EVERY 24 HOURS @ 02:00 UTC:
-├─ Retrieve past 7 days of articles for top 50 coins
-├─ Batch call to Claude API (1-2 minute processing)
-├─ Extract sentiment score, catalysts, risks
-└─ Cache results for 24 hours
+React Dashboard (polling every 10 min)
+    ↓ /api/*
+Express Backend (port 3000)
+    ├── CoinGeckoService  → market data, OHLCV history
+    ├── NewsAPIService    → headlines per coin
+    ├── SentimentService  → Claude API (BULL/NEUTRAL/BEAR)
+    └── Cache             → 5-min coins TTL, 24-hr sentiment TTL
 ```
 
----
+**Scheduled job:** Daily at 2 AM UTC (`SENTIMENT_JOB_CRON`), the backend re-analyzes the top `SENTIMENT_BATCH_SIZE` coins (default 50) and refreshes the sentiment cache.
 
-## COST ESTIMATION (MONTHLY)
+## API Endpoints
 
-| Service | Free Tier | Cost Beyond |
-|---------|-----------|------------|
-| App Service | 100 hrs/mo | $0 |
-| Storage (5GB) | 5 GB | $0 |
-| Table Storage | 1M ops/mo | $0 |
-| App Insights | 1 GB/mo | $0 |
-| **Claude API** | — | **$8-15** |
-| **TOTAL** | | **$8-15/month** |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/coins` | Top coins with sentiment. Params: `limit`, `sort_by` |
+| GET | `/api/coins/:symbol` | Detail view — price history, headlines, sentiment |
+| GET | `/api/sentiment/:symbol` | Cached sentiment only (404 if not yet analyzed) |
+| POST | `/api/refresh-sentiment` | Force re-analysis. Requires `x-api-key` header |
+| GET | `/api/health` | Service status — reports `misconfigured` if API keys are missing |
 
----
+## Tech Stack
 
-## DEPLOYMENT TARGETS
+**Backend:** Node.js 18+, Express, TypeScript (strict), node-cron, Helmet, CORS
 
-### Development
-- Local machine (localhost:3000 backend, localhost:5173 frontend)
-- Docker Compose for containerized local dev
+**Frontend:** React 18, TypeScript, Vite, Chart.js / react-chartjs-2
 
-### Production
-- Azure App Service (B1 free tier)
-- Automatic scaling handled by GitHub Actions
-- Application Insights monitoring
+**External APIs:** CoinGecko (free), NewsAPI (free tier, 500 req/day), Claude API (pay-per-call, ~$6–15/month for daily batch)
 
-### Future Scale
-- Upgrade to S1 tier (~$45/mo)
-- Add Cosmos DB for global replication
-- Add Azure CDN for frontend distribution
-- Implement Azure Durable Functions for jobs
-
----
-
-## SECURITY CONSIDERATIONS
-
-- Environment variables for all secrets
-- API key stored in env, never in code
-- CORS restricted to frontend domain
-- Helmet.js for security headers
-- Input validation on all endpoints
-- Rate limiting (optional: express-rate-limit)
-- HTTPS enforced by Azure
-
----
-
-## MONITORING & ALERTING
-
-### Metrics to Track
-- API response time (target: <500ms)
-- Sentiment job duration (target: <2 min)
-- Cache hit rate (target: >90%)
-- Error rate (target: <0.1%)
-- Claude API token usage
-- Storage usage
-
-### Alerts
-- Backend service down
-- Claude API quota exceeded
-- Sentiment job takes >3 minutes
-- Error rate spike
-
-Setup: Azure Application Insights + Azure Portal alerts
-
----
-
-## FILE STRUCTURE
+## Project Structure
 
 ```
 sentiment-analyzer/
 ├── backend/
-│   ├── src/
-│   │   ├── index.ts (main server)
-│   │   ├── services/ (API clients)
-│   │   ├── routes/ (endpoints)
-│   │   ├── jobs/ (scheduled tasks)
-│   │   ├── models/ (types)
-│   │   ├── utils/ (helpers)
-│   │   └── middleware/ (auth, logging)
-│   ├── package.json
-│   ├── tsconfig.json
-│   └── .env.example
-│
+│   ├── src/index.ts        # All server logic — services, routes, cache, cron job
+│   ├── .env.example
+│   └── package.json
 ├── frontend/
-│   ├── src/
-│   │   ├── App.tsx
-│   │   ├── components/
-│   │   ├── pages/
-│   │   ├── services/
-│   │   ├── types/
-│   │   └── styles/
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   └── index.html
-│
-├── .github/
-│   └── workflows/
-│       └── deploy.yml (CI/CD)
-│
-└── docs/
-    ├── ARCHITECTURE.md
-    ├── QUICK_START.md
-    └── DEPLOYMENT.md
+│   ├── src/App.tsx         # All UI — components, hooks, chart
+│   ├── vite.config.ts      # Proxies /api to localhost:3000
+│   └── package.json
+├── postman/                # API test collection
+├── DEPLOYMENT_GUIDE.md     # Azure Free Tier deployment steps
+└── CLAUDE.md               # Claude Code guidance
 ```
 
----
+## Deployment
 
-## NEXT STEPS
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for Azure App Service setup. Note: Azure Table Storage and GitHub Actions CI/CD are documented as future targets but not yet configured.
 
-1. Read QUICK_START.md
-2. Set up local environment
-3. Run backend and frontend locally
-4. Test API endpoints
-5. Deploy to Azure (see DEPLOYMENT.md)
+## Cost
+
+Running the sentiment batch daily against 50 coins costs approximately **$6–15/month** in Claude API fees. All other services (CoinGecko, NewsAPI free tier, Azure App Service B1) are free.

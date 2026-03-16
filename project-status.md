@@ -13,8 +13,8 @@
 | ✅ Critical bugs fixed | 5 / 5 |
 | ✅ Stub implementations fixed | 3 / 3 |
 | ✅ Hardcoded zeroes fixed | 2 / 2 |
-| 🔲 Performance / quality issues remaining | 1 / 4 |
-| **✅ Total Completed** | **11 / 14** |
+| ✅ Performance / quality issues fixed | 4 / 4 |
+| **✅ Total Completed** | **14 / 14** |
 
 ---
 
@@ -163,7 +163,7 @@
 
 ---
 
-### 🔲 10. Health check always reports all services as "ok"
+### ✅ 10. Health check now reflects actual service configuration
 **File:** `backend/src/index.ts`, lines 484-492
 **Problem:** Returns hardcoded `{ coingecko: 'ok', newsapi: 'ok', claude_api: 'ok' }` regardless of configuration. Server without API keys reports as fully healthy.
 **What to do:**
@@ -177,7 +177,7 @@
 
 ---
 
-### 🔲 12. DetailModal missing ESC key and backdrop-click to close
+### ✅ 12. DetailModal ESC key and backdrop-click to close
 **File:** `frontend/src/App.tsx`, lines 404-430
 **Problem:** Modal can only be closed by ✕ button. ESC and clicking overlay do nothing.
 **What to do:**
@@ -192,7 +192,7 @@
 
 ---
 
-### 🔲 14. Chart.js installed but not used
+### ✅ 14. Chart.js price history chart integrated
 **File:** `frontend/src/App.tsx`, lines 487-506 (placeholder)
 **Problem:** `chart.js` and `react-chartjs-2` are installed but not imported. Detail modal shows static placeholder instead of chart.
 **What to do:**

@@ -1,0 +1,561 @@
+{
+  "info": {
+    "_postman_id": "sentiment-analyzer-suite-2026",
+    "name": "Sentiment Analyzer - Full Test Suite",
+    "description": "Comprehensive API test suite for the Sentiment Analyzer application. Tests all endpoints with validation, error cases, and performance checks.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "00 - Setup & Health",
+      "description": "Initial health check and environment setup",
+      "item": [
+        {
+          "name": "GET /api/health - Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Verify backend server is running and all services are accessible.\n\n**Expected Response:** 200 OK with service health status"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Health check returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Health check response has status field', function () { var jsonData = pm.response.json(); pm.expect(jsonData).to.have.property('status'); pm.expect(jsonData.status).to.equal('healthy'); });",
+                  "pm.test('Services object has required fields', function () { var jsonData = pm.response.json(); pm.expect(jsonData.services).to.have.all.keys('coingecko', 'newsapi', 'claude_api'); pm.expect(['ok', 'misconfigured']).to.include(jsonData.services.claude_api); pm.expect(['ok', 'misconfigured']).to.include(jsonData.services.newsapi); });",
+                  "pm.test('Uptime is reported', function () { pm.expect(pm.response.json().uptime_seconds).to.be.a('number'); });",
+                  "pm.environment.set('server_healthy', true);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Coins List Endpoint",
+      "description": "Test GET /api/coins with various parameters and scenarios",
+      "item": [
+        {
+          "name": "GET /api/coins - Default (Top 50)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"]
+            },
+            "description": "Fetch top 50 coins with sentiment analysis."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has data array, count, and last_updated', function () { var data = pm.response.json(); pm.expect(data).to.have.property('data'); pm.expect(data).to.have.property('count'); pm.expect(Array.isArray(data.data)).to.be.true; });",
+                  "pm.test('Coins have required fields including sentiment', function () { var coin = pm.response.json().data[0]; var required = ['symbol', 'name', 'price_usd', 'sentiment_score', 'sentiment_confidence', 'volatility_24h']; required.forEach(function(field) { pm.expect(coin).to.have.property(field); }); });",
+                  "pm.test('Valid sentiment scores (BULL/NEUTRAL/BEAR)', function () { var validScores = ['BULL', 'NEUTRAL', 'BEAR']; pm.response.json().data.forEach(function(coin) { pm.expect(validScores).to.include(coin.sentiment_score); pm.expect(coin.sentiment_confidence).to.be.within(0, 1); }); });",
+                  "pm.environment.set('test_symbol', pm.response.json().data[0].symbol);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins - Limit parameter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "10"}]
+            },
+            "description": "Test limit parameter"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns exactly 10 coins', function () { pm.expect(pm.response.json().data.length).to.equal(10); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins - Sort by volatility",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=20&sort_by=volatility",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "20"}, {"key": "sort_by", "value": "volatility"}]
+            },
+            "description": "Test volatility sorting"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Coins sorted by volatility descending', function () { var coins = pm.response.json().data; for (var i = 0; i < coins.length - 1; i++) { pm.expect(coins[i].volatility_24h).to.be.greaterThanOrEqual(coins[i + 1].volatility_24h); } })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins - Sort by sentiment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=20&sort_by=sentiment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "20"}, {"key": "sort_by", "value": "sentiment"}]
+            },
+            "description": "Test sentiment sorting (BULL > NEUTRAL > BEAR)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sorted by sentiment BULL > NEUTRAL > BEAR', function () { var order = {BULL: 0, NEUTRAL: 1, BEAR: 2}; var coins = pm.response.json().data; for (var i = 0; i < coins.length - 1; i++) { var curr = order[coins[i].sentiment_score]; var next = order[coins[i + 1].sentiment_score]; if (curr === next) { pm.expect(coins[i].sentiment_confidence).to.be.greaterThanOrEqual(coins[i + 1].sentiment_confidence); } else { pm.expect(curr).to.be.lessThanOrEqual(next); } } })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Coin Detail Endpoint",
+      "description": "Test GET /api/coins/:symbol for detailed coin information",
+      "item": [
+        {
+          "name": "GET /api/coins/:symbol - Detail view",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{test_symbol}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "{{test_symbol}}"]
+            },
+            "description": "Fetch detailed coin info with price history and headlines"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has coin, price_history, headlines, sentiment_today', function () { var data = pm.response.json(); pm.expect(data).to.have.all.keys('coin', 'price_history', 'sentiment_today', 'headlines', 'news_count'); });",
+                  "pm.test('Price history is array with OHLCV data', function () { var history = pm.response.json().price_history; pm.expect(Array.isArray(history)).to.be.true; pm.expect(history.length).to.be.greaterThan(0); var point = history[0]; pm.expect(point).to.have.all.keys('timestamp', 'open', 'high', 'low', 'close'); });",
+                  "pm.test('Headlines is array of strings', function () { pm.response.json().headlines.forEach(function(h) { pm.expect(h).to.be.a('string'); }); });",
+                  "pm.test('Coin symbol matches request', function () { pm.expect(pm.response.json().coin.symbol).to.equal(pm.environment.get('test_symbol')); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins/:symbol - Custom days",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{test_symbol}}?days=14",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "{{test_symbol}}"],
+              "query": [{"key": "days", "value": "14"}]
+            },
+            "description": "Test custom days parameter"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns history for requested days', function () { var history = pm.response.json().price_history; pm.expect(history.length).to.be.greaterThan(0); pm.expect(history.length).to.be.lessThanOrEqual(14); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins/:symbol - Invalid symbol (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/INVALID999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "INVALID999"]
+            },
+            "description": "Test error handling for invalid symbol"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 404 for invalid symbol', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Error response contains error message', function () { pm.expect(pm.response.json().error).to.be.a('string'); })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Sentiment Cache Endpoint",
+      "description": "Test GET /api/sentiment/:symbol",
+      "item": [
+        {
+          "name": "GET /api/sentiment/:symbol - Cached data",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/{{test_symbol}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "{{test_symbol}}"]
+            },
+            "description": "Get cached sentiment (read-only, no analysis triggered)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 (cached) or 404 (not cached)', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Sentiment has required fields', function () { var data = pm.response.json(); pm.expect(data).to.have.all.keys('symbol', 'analysis_date', 'sentiment_score', 'confidence', 'summary', 'key_catalysts', 'risk_factors', 'short_term_outlook', 'volatility_warning', 'trending_score'); }); } // 404 is expected if not yet analyzed"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Sentiment Refresh Endpoint",
+      "description": "Test POST /api/refresh-sentiment",
+      "item": [
+        {
+          "name": "POST /api/refresh-sentiment - No auth (401)",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"symbols\": [\"BTC\", \"ETH\"]}"},
+            "url": {
+              "raw": "{{base_url}}/api/refresh-sentiment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "refresh-sentiment"]
+            },
+            "description": "Test auth - request without API key"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 401 Unauthorized', function () { pm.response.to.have.status(401); });",
+                  "pm.test('Error message indicates unauthorized', function () { pm.expect(pm.response.json().error).to.equal('Unauthorized'); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/refresh-sentiment - With valid API key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-api-key", "value": "{{api_secret_key}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{\"symbols\": [\"{{test_symbol}}\"]}"},
+            "url": {
+              "raw": "{{base_url}}/api/refresh-sentiment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "refresh-sentiment"]
+            },
+            "description": "Trigger sentiment analysis with valid auth"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 202 Accepted', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Response has job_id, status, and coins_to_process', function () { var data = pm.response.json(); pm.expect(data).to.have.all.keys('job_id', 'status', 'coins_to_process'); });",
+                  "pm.test('Status is processing', function () { pm.expect(pm.response.json().status).to.equal('processing'); });",
+                  "pm.environment.set('last_job_id', pm.response.json().job_id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/refresh-sentiment - All coins",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"},
+              {"key": "x-api-key", "value": "{{api_secret_key}}"}
+            ],
+            "body": {"mode": "raw", "raw": "{}"},
+            "url": {
+              "raw": "{{base_url}}/api/refresh-sentiment",
+              "host": ["{{base_url}}"],
+              "path": ["api", "refresh-sentiment"]
+            },
+            "description": "Trigger sentiment analysis for all top 50 coins"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 202 Accepted', function () { pm.response.to.have.status(202); })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 - Performance Testing",
+      "description": "Test API performance and caching",
+      "item": [
+        {
+          "name": "Performance - /api/coins response time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "50"}]
+            },
+            "description": "Measure response time (first request slower, second faster due to cache)"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response time under 3 seconds', function () { pm.expect(pm.response.responseTime).to.be.lessThan(3000); });",
+                  "console.log('Response time: ' + pm.response.responseTime + 'ms');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Performance - /api/coins/:symbol response time",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{test_symbol}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "{{test_symbol}}"]
+            },
+            "description": "Measure coin detail response time"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Response time under 5 seconds', function () { pm.expect(pm.response.responseTime).to.be.lessThan(5000); })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 - Error Handling",
+      "description": "Test error scenarios and edge cases",
+      "item": [
+        {
+          "name": "Error - Limit over max (capped)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=500",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "500"}]
+            },
+            "description": "Test validation - limit over 200 should be capped"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 (not error)', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Coins count capped at max (200)', function () { pm.expect(pm.response.json().data.length).to.be.lessThanOrEqual(200); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Error - Invalid sort parameter",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?sort_by=invalid",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "sort_by", "value": "invalid"}]
+            },
+            "description": "Invalid sort should default to market_cap"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 with default sorting', function () { pm.response.to.have.status(200); })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Error - Days over max",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{test_symbol}}?days=999",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "{{test_symbol}}"],
+              "query": [{"key": "days", "value": "999"}]
+            },
+            "description": "Days over 30 should be capped"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Price history capped at 30 days', function () { pm.expect(pm.response.json().price_history.length).to.be.lessThanOrEqual(30); })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 - Data Consistency",
+      "description": "Test data consistency across endpoints",
+      "item": [
+        {
+          "name": "Consistency - Store first coin from list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins"],
+              "query": [{"key": "limit", "value": "1"}]
+            },
+            "description": "Store first coin for consistency check"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var coin = pm.response.json().data[0];",
+                  "pm.environment.set('consistency_symbol', coin.symbol);",
+                  "pm.environment.set('consistency_sentiment', coin.sentiment_score);",
+                  "console.log('Stored: ' + coin.symbol + ' with sentiment: ' + coin.sentiment_score);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Consistency - Verify detail matches list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{consistency_symbol}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "coins", "{{consistency_symbol}}"]
+            },
+            "description": "Verify detail endpoint matches list data"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Sentiment matches between list and detail', function () { pm.expect(pm.response.json().coin.sentiment_score).to.equal(pm.environment.get('consistency_sentiment')); });",
+                  "pm.test('Symbol matches between list and detail', function () { pm.expect(pm.response.json().coin.symbol).to.equal(pm.environment.get('consistency_symbol')); })"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {"key": "base_url", "value": "http://localhost:3000", "type": "string"},
+    {"key": "api_secret_key", "value": "", "type": "string"},
+    {"key": "test_symbol", "value": "", "type": "string"}
+  ]
+}

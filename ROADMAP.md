@@ -6,9 +6,9 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** 1 (Core Foundation Complete)  
-**Latest Release:** v1.0.0  
-**Last Updated:** March 2024
+**Phase:** 1 (Core Foundation Complete)
+**Latest Release:** v1.0.0
+**Last Updated:** March 2026
 
 ---
 
@@ -20,36 +20,39 @@ Core sentiment analysis platform with basic functionality.
 
 **Backend:**
 - [x] Express.js REST API with 5 endpoints
-- [x] CoinGecko market data integration
+- [x] CoinGecko market data integration (volatility calculated from high/low range)
 - [x] NewsAPI news aggregation
-- [x] Claude API sentiment analysis
-- [x] Azure Table Storage integration
-- [x] In-memory caching layer
-- [x] Scheduled jobs (10-min market data, daily sentiment)
-- [x] Error handling and logging
-- [x] Health check endpoint
+- [x] Claude API sentiment analysis (model: `claude-sonnet-4-6`)
+- [x] In-memory caching (5-min coins, 24-hr sentiment, 15-min history/headlines)
+- [x] Scheduled daily sentiment batch job (node-cron, configurable via `SENTIMENT_JOB_CRON`)
+- [x] `POST /api/refresh-sentiment` forces re-analysis (clears cache, processes sequentially)
+- [x] `GET /api/sentiment/:symbol` — read-only cached sentiment endpoint
+- [x] Health check reports `misconfigured` for missing API keys (HTTP 503)
+- [x] `x-api-key` header auth on admin endpoint
 
 **Frontend:**
-- [x] React 18 dashboard with responsive grid
-- [x] Coin card components with sentiment badges
-- [x] Interactive detail modals
-- [x] Real-time status indicators
-- [x] Sorting and filtering (by market cap, volatility, sentiment)
-- [x] Mobile-responsive design
+- [x] React 18 dashboard with responsive auto-fill grid
+- [x] Coin card components with sentiment badges (BULL/NEUTRAL/BEAR)
+- [x] Interactive detail modal (ESC key + backdrop click to close)
+- [x] Chart.js line chart for 7-day price history
+- [x] Real-time status indicators and polling (every 10 min)
+- [x] Sorting by market cap, volatility, and sentiment
 
 **Deployment:**
-- [x] Azure Free Tier setup guide
-- [x] GitHub Actions CI/CD pipeline
-- [x] Environment configuration
-- [x] Application Insights monitoring
+- [x] Azure Free Tier setup guide (`DEPLOYMENT_GUIDE.md`)
+- [x] Environment configuration (`.env.example`)
+
+**Not Yet Implemented (tracked as future work):**
+- [ ] Azure Table Storage persistence
+- [ ] GitHub Actions CI/CD pipeline
+- [ ] Application Insights monitoring
 
 **Documentation:**
-- [x] Complete architecture documentation
-- [x] Quick start guide
-- [x] API endpoint specifications
+- [x] Architecture documentation (`SENTIMENT_ANALYZER_ARCHITECTURE.md`)
+- [x] API endpoint specifications and Postman collection
 - [x] Deployment guide
-- [x] Environment setup guide
 - [x] Contributing guidelines
+- [x] `CLAUDE.md` for AI-assisted development
 
 ---
 
@@ -57,15 +60,11 @@ Core sentiment analysis platform with basic functionality.
 
 Add interactive charting, user accounts, and advanced analysis features.
 
-### 🔄 In Progress
+### ✅ Completed from Phase 2
 
-- [ ] **Interactive Price Charts**
-  - TradingView Lightweight Charts integration
-  - Support for multiple timeframes (1h, 4h, 1d, 1w)
-  - Technical indicators (MA, EMA, RSI, MACD)
-  - Volume and volatility overlays
-  - Zoom and pan functionality
-  - Estimated effort: 2-3 weeks
+- [x] **Interactive Price Charts** — Chart.js line chart integrated in detail modal (7-day close prices)
+
+### 🔄 Remaining Phase 2 Work
 
 - [ ] **User Accounts & Authentication**
   - User registration and login
@@ -436,5 +435,5 @@ May require:
 **Questions about the roadmap?**
 Open an issue or join the discussion forum!
 
-**Last Updated:** March 16, 2024  
-**Next Review:** June 2024
+**Last Updated:** March 16, 2026
+**Next Review:** June 2026
