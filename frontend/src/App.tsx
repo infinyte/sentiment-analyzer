@@ -32,7 +32,57 @@ interface Coin {
   sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
   sentiment_confidence: number;
   sentiment_summary: string;
+  trending_score: number;
   market_rank: number;
+}
+
+interface ScoredSentimentItem {
+  id: string;
+  source: 'newsapi' | 'reddit' | 'x';
+  source_label: string;
+  title: string;
+  body: string;
+  url: string;
+  author?: string;
+  published_at?: string;
+  engagement_score: number;
+  recency_score: number;
+  relevance_score: number;
+  keyword_score: number;
+  sentiment_score: number;
+  weighted_score: number;
+  source_weight: number;
+}
+
+interface SentimentSourceBreakdown {
+  source: 'newsapi' | 'reddit' | 'x';
+  source_label: string;
+  item_count: number;
+  average_sentiment_score: number;
+  average_weighted_score: number;
+  weighted_frequency: number;
+}
+
+interface SentimentCollectionStats {
+  total_items: number;
+  source_count: number;
+  weighted_frequency: number;
+  average_recency_score: number;
+  trending_score: number;
+  collected_at: string;
+}
+
+interface CoinSentimentDetail {
+  sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
+  confidence: number;
+  summary: string;
+  key_catalysts: string[];
+  risk_factors: string[];
+  short_term_outlook: string;
+  volatility_warning: boolean;
+  trending_score: number;
+  source_breakdown: SentimentSourceBreakdown[];
+  collection_stats?: SentimentCollectionStats;
 }
 
 interface CoinDetail extends Coin {
@@ -44,6 +94,8 @@ interface CoinDetail extends Coin {
     close: number;
   }>;
   headlines: string[];
+  scored_items: ScoredSentimentItem[];
+  sentiment_today?: CoinSentimentDetail;
 }
 
 // ============================================================================
@@ -95,7 +147,13 @@ function useCoinDetail(symbol: string | null) {
         const response = await fetch(`/api/coins/${symbol}?days=7`);
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
-        setDetail({ ...data.coin, price_history: data.price_history, headlines: data.headlines });
+        setDetail({
+          ...data.coin,
+          price_history: data.price_history,
+          headlines: data.headlines,
+          scored_items: data.scored_items ?? [],
+          sentiment_today: data.sentiment_today,
+        });
         setError(null);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Unknown error');
@@ -412,7 +470,7 @@ interface DetailModalProps {
 }
 
 function DetailModal({ symbol, onClose }: DetailModalProps) {
-  const { detail, loading } = useCoinDetail(symbol);
+  const { detail, loading, error } = useCoinDetail(symbol);
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -421,6 +479,18 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
   }, [onClose]);
 
   if (!symbol) return null;
+
+  const scoreColor = (value: number) => {
+    if (value > 0.1) return '#10b981';
+    if (value < -0.1) return '#ef4444';
+    return '#6b7280';
+  };
+
+  const scoreLabel = (value: number) => {
+    if (value > 0.1) return 'Positive';
+    if (value < -0.1) return 'Negative';
+    return 'Mixed';
+  };
 
   return (
     <div
@@ -473,6 +543,10 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
             <div style={{ textAlign: 'center', padding: '2rem' }}>
               Loading {symbol}...
             </div>
+          ) : error ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#b91c1c' }}>
+              Failed to load detail: {error}
+            </div>
           ) : detail ? (
             <>
               {/* Header */}
@@ -506,7 +580,161 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                 <p style={{ margin: '0', color: '#1f2937' }}>
                   {detail.sentiment_summary}
                 </p>
+                {detail.sentiment_today?.short_term_outlook && (
+                  <p style={{ margin: '0.75rem 0 0 0', color: '#4b5563', fontSize: '0.875rem' }}>
+                    {detail.sentiment_today.short_term_outlook}
+                  </p>
+                )}
               </div>
+
+              {(detail.sentiment_today?.collection_stats || detail.sentiment_today?.source_breakdown?.length) && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                    Signal Overview
+                  </h3>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                      gap: '0.75rem',
+                      marginBottom: '1rem',
+                    }}
+                  >
+                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Trending Score
+                      </div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                        {(detail.sentiment_today?.collection_stats?.trending_score ?? detail.trending_score).toFixed(1)}
+                      </div>
+                    </div>
+                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Items Collected
+                      </div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                        {detail.sentiment_today?.collection_stats?.total_items ?? detail.scored_items.length}
+                      </div>
+                    </div>
+                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Sources Active
+                      </div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                        {detail.sentiment_today?.collection_stats?.source_count ?? detail.sentiment_today?.source_breakdown?.length ?? 0}
+                      </div>
+                    </div>
+                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
+                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Avg Recency
+                      </div>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                        {((detail.sentiment_today?.collection_stats?.average_recency_score ?? 0) * 100).toFixed(0)}%
+                      </div>
+                    </div>
+                  </div>
+
+                  {detail.sentiment_today?.source_breakdown && detail.sentiment_today.source_breakdown.length > 0 && (
+                    <div>
+                      <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '0.95rem', fontWeight: '600' }}>
+                        Source Breakdown
+                      </h4>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                        {detail.sentiment_today.source_breakdown.map(source => (
+                          <div
+                            key={source.source}
+                            style={{
+                              padding: '0.875rem',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '0.5rem',
+                              backgroundColor: '#ffffff',
+                            }}
+                          >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                              <span style={{ fontWeight: '700', color: '#111827' }}>{source.source_label}</span>
+                              <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{source.item_count} items</span>
+                            </div>
+                            <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.8125rem', color: '#4b5563' }}>
+                              <span>Sentiment: <strong style={{ color: scoreColor(source.average_sentiment_score) }}>{source.average_sentiment_score.toFixed(2)}</strong></span>
+                              <span>Weighted: <strong style={{ color: scoreColor(source.average_weighted_score) }}>{source.average_weighted_score.toFixed(2)}</strong></span>
+                              <span>Frequency: <strong>{source.weighted_frequency.toFixed(2)}</strong></span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {detail.scored_items && detail.scored_items.length > 0 && (
+                <div style={{ marginBottom: '1.5rem' }}>
+                  <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: '600' }}>
+                    Scored Market Signals
+                  </h3>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {detail.scored_items.slice(0, 6).map(item => (
+                      <div
+                        key={item.id}
+                        style={{
+                          padding: '1rem',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.5rem',
+                          backgroundColor: '#ffffff',
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'start', marginBottom: '0.5rem' }}>
+                          <div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.35rem' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: '700', color: '#2563eb', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                {item.source_label}
+                              </span>
+                              <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                                {item.published_at ? new Date(item.published_at).toLocaleString() : 'Timestamp unavailable'}
+                              </span>
+                            </div>
+                            <div style={{ fontWeight: '700', color: '#111827', marginBottom: '0.35rem' }}>
+                              {item.url ? (
+                                <a href={item.url} target="_blank" rel="noreferrer" style={{ color: '#111827', textDecoration: 'none' }}>
+                                  {item.title}
+                                </a>
+                              ) : item.title}
+                            </div>
+                            {item.body && (
+                              <div style={{ fontSize: '0.875rem', color: '#4b5563', lineHeight: 1.5 }}>
+                                {item.body}
+                              </div>
+                            )}
+                          </div>
+                          <div
+                            style={{
+                              minWidth: '110px',
+                              textAlign: 'right',
+                              padding: '0.5rem 0.65rem',
+                              borderRadius: '0.5rem',
+                              backgroundColor: `${scoreColor(item.weighted_score)}15`,
+                              color: scoreColor(item.weighted_score),
+                            }}
+                          >
+                            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                              {scoreLabel(item.weighted_score)}
+                            </div>
+                            <div style={{ fontSize: '1.125rem', fontWeight: '700' }}>
+                              {item.weighted_score.toFixed(2)}
+                            </div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
+                          <span>Sentiment: <strong style={{ color: scoreColor(item.sentiment_score) }}>{item.sentiment_score.toFixed(2)}</strong></span>
+                          <span>Relevance: <strong>{item.relevance_score.toFixed(2)}</strong></span>
+                          <span>Recency: <strong>{item.recency_score.toFixed(2)}</strong></span>
+                          <span>Engagement: <strong>{item.engagement_score.toFixed(2)}</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Price History Chart */}
               {detail.price_history && detail.price_history.length > 0 && (

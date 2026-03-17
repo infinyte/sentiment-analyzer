@@ -20,6 +20,9 @@ import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
 import { storage } from './storage.js';
 import marlRoutes from './routes/marl-competition.js';
+import { SocialScraperService } from './services/social-scraper.js';
+import type { SocialPlatform } from './services/social-scraper.js';
+import { TrendingTopicsEngine } from './services/trending-topics.js';
 import logger from './logger.js';
 
 dotenv.config();
@@ -57,6 +60,8 @@ const cache = new Cache();
 const sentimentCache = new Cache();
 const analyzer = new SentimentAnalyzerEngine();
 const backtestEngine = new BacktestingEngine();
+const socialScraper = new SocialScraperService();
+const trendingEngine = new TrendingTopicsEngine();
 
 // In-memory agent registry (cleared on restart)
 const configuredAgents: Map<string, AgentConfig> = new Map();
@@ -684,6 +689,108 @@ app.get('/api/info/modes', (_req, res) => {
 });
 
 // ============================================================================
+// SOCIAL SCRAPING & TRENDING TOPIC ROUTES
+// ============================================================================
+
+// GET /api/scrape/social?symbol=BTC[&query=defi][&platforms=reddit,stocktwits]
+// Scrape one symbol from social platforms and return raw posts.
+app.get('/api/scrape/social', async (req, res) => {
+  try {
+    const symbol = (req.query.symbol as string | undefined)?.toUpperCase();
+    if (!symbol) {
+      return res.status(400).json({ error: '"symbol" query parameter is required' });
+    }
+
+    const query = req.query.query as string | undefined;
+    const platformsParam = req.query.platforms as string | undefined;
+    const platforms = platformsParam
+      ? (platformsParam.split(',').map(p => p.trim()) as SocialPlatform[])
+      : undefined;
+
+    const result = await socialScraper.scrape(symbol, query, platforms);
+
+    // Auto-ingest into the trending engine so scraped data contributes to trends
+    trendingEngine.ingestPosts(result.platforms.flatMap(p => p.posts));
+
+    res.json(result);
+  } catch (error) {
+    logger.error('route error', { endpoint: '/api/scrape/social', error: String(error) });
+    res.status(500).json({ error: 'Social scrape failed' });
+  }
+});
+
+// POST /api/scrape/batch
+// Scrape multiple symbols. Body: { symbols: string[], query?: string, platforms?: string[] }
+app.post('/api/scrape/batch', async (req, res) => {
+  try {
+    const { symbols, query, platforms } = req.body as {
+      symbols?: string[];
+      query?: string;
+      platforms?: string[];
+    };
+
+    if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+      return res.status(400).json({ error: '"symbols" array is required' });
+    }
+    if (symbols.length > 20) {
+      return res.status(400).json({ error: 'Maximum 20 symbols per batch request' });
+    }
+
+    const upperSymbols = symbols.map(s => s.toUpperCase());
+    const results = await socialScraper.scrapeBatch(
+      upperSymbols,
+      query,
+      platforms as SocialPlatform[] | undefined
+    );
+
+    trendingEngine.ingestPosts(results.flatMap(r => r.platforms.flatMap(p => p.posts)));
+
+    res.json({
+      results,
+      total_symbols: results.length,
+      total_posts: results.reduce((sum, r) => sum + r.total_posts, 0),
+      scraped_at: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('route error', { endpoint: '/api/scrape/batch', error: String(error) });
+    res.status(500).json({ error: 'Batch scrape failed' });
+  }
+});
+
+// GET /api/trending?window=4[&limit=20][&min_volume=2]
+// Return currently trending topics across all ingested posts.
+app.get('/api/trending', (req, res) => {
+  try {
+    const windowHours = Math.min(parseFloat(req.query.window as string) || 4, 48);
+    const limit       = Math.min(parseInt(req.query.limit as string) || 20, 100);
+    const minVolume   = parseInt(req.query.min_volume as string) || 2;
+
+    const result = trendingEngine.getTrendingTopics(windowHours, limit, minVolume);
+    res.json(result);
+  } catch (error) {
+    logger.error('route error', { endpoint: '/api/trending', error: String(error) });
+    res.status(500).json({ error: 'Failed to compute trending topics' });
+  }
+});
+
+// POST /api/trending/ingest
+// Manually push an array of ScrapedPost objects into the trending engine.
+// Useful for piping data from external collectors or tests.
+app.post('/api/trending/ingest', (req, res) => {
+  try {
+    const { posts } = req.body as { posts?: unknown[] };
+    if (!posts || !Array.isArray(posts) || posts.length === 0) {
+      return res.status(400).json({ error: '"posts" array is required' });
+    }
+    trendingEngine.ingestPosts(posts as any);
+    res.json({ ingested: posts.length, stored_total: trendingEngine.storedPostCount });
+  } catch (error) {
+    logger.error('route error', { endpoint: '/api/trending/ingest', error: String(error) });
+    res.status(500).json({ error: 'Ingest failed' });
+  }
+});
+
+// ============================================================================
 // MARL COMPETITION ROUTES (Phase 2)
 // ============================================================================
 
@@ -731,6 +838,26 @@ cron.schedule(cronSchedule, async () => {
     logger.info('cron completed', { coinCount: coins.length, elapsed_s: elapsed });
   } catch (error) {
     logger.error('cron failed', { error: String(error) });
+  }
+});
+
+// ============================================================================
+// SCHEDULED TRENDING SCRAPE JOB (every 30 minutes)
+// Pulls social posts for the top coins and feeds them into the trending engine.
+// ============================================================================
+
+const trendingCronSchedule = process.env.TRENDING_JOB_CRON || '*/30 * * * *';
+
+cron.schedule(trendingCronSchedule, async () => {
+  try {
+    const coins = cache.get<{ symbol: string }[]>('coins');
+    if (!coins || coins.length === 0) return; // wait until coins are loaded
+
+    const symbols = coins.slice(0, 20).map(c => c.symbol);
+    const { ingested } = await trendingEngine.scrapeAndIngest(symbols, socialScraper);
+    logger.info('trending cron completed', { symbols: symbols.length, ingested });
+  } catch (error) {
+    logger.error('trending cron failed', { error: String(error) });
   }
 });
 
