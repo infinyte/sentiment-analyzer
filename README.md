@@ -30,7 +30,7 @@ Set these in `backend/.env`:
 | `API_SECRET_KEY` | Yes | Any string — used to authenticate `POST /api/refresh-sentiment` |
 | `COINGECKO_API_KEY` | No | Free tier works without it |
 
-Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`.
+Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`.
 
 ## Architecture
 
@@ -89,6 +89,12 @@ Express Backend (port 3000)
 - `SINGLE` — one-shot tournament; all agents compete simultaneously on a shared order book
 - `EVOLUTIONARY` — multi-round tournament where underperformers are mutated/replaced each round
 - `CONTINUOUS` — ongoing learning loop; agents update Q-tables and policy weights in real time
+
+**MARL rate limiting:**
+- `POST /api/marl/competition/start` defaults to 5 requests per 60 seconds per client IP
+- `POST /api/marl/agents/compare` defaults to 10 requests per 60 seconds per client IP
+- MARL read endpoints default to 120 requests per 60 seconds per client IP
+- Override these with `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, and `MARL_READ_RATE_LIMIT_MAX`
 
 **Example cURL:**
 ```bash

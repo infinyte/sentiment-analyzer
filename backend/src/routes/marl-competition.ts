@@ -26,6 +26,19 @@ type RateLimitEntry = {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
+function readPositiveIntEnv(name: string, fallback: number, minimum = 1): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+
+  const parsed = Number.parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed < minimum) {
+    logger.warn('invalid marl rate limit env value', { name, raw, fallback });
+    return fallback;
+  }
+
+  return parsed;
+}
+
 function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
@@ -65,9 +78,23 @@ function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs
   };
 }
 
-const competitionWriteRateLimit = createRateLimitMiddleware('marl-competition-start', 5, 60_000);
-const compareRateLimit = createRateLimitMiddleware('marl-agents-compare', 10, 60_000);
-const competitionReadRateLimit = createRateLimitMiddleware('marl-competition-read', 120, 60_000);
+const marlRateLimitWindowMs = readPositiveIntEnv('MARL_RATE_LIMIT_WINDOW_MS', 60_000, 1_000);
+
+const competitionWriteRateLimit = createRateLimitMiddleware(
+  'marl-competition-start',
+  readPositiveIntEnv('MARL_START_RATE_LIMIT_MAX', 5),
+  marlRateLimitWindowMs
+);
+const compareRateLimit = createRateLimitMiddleware(
+  'marl-agents-compare',
+  readPositiveIntEnv('MARL_COMPARE_RATE_LIMIT_MAX', 10),
+  marlRateLimitWindowMs
+);
+const competitionReadRateLimit = createRateLimitMiddleware(
+  'marl-competition-read',
+  readPositiveIntEnv('MARL_READ_RATE_LIMIT_MAX', 120),
+  marlRateLimitWindowMs
+);
 
 export function resetMarlRateLimitersForTests(): void {
   rateLimitStore.clear();
