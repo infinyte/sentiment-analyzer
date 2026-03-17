@@ -1,0 +1,298 @@
+name: Bug Report
+description: Report a bug or issue with the Sentiment Analyzer
+title: "[BUG] "
+labels: ["bug", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting an issue! Please fill in the details below to help us understand the problem.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Component
+      description: Which part of the application is affected?
+      options:
+        - Backend API
+        - Frontend Dashboard
+        - Data Fetching
+        - Sentiment Analysis
+        - Azure Deployment
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the bug clearly and concisely
+      placeholder: "What happened? What did you expect to happen?"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the issue?
+      placeholder: |
+        1. Go to...
+        2. Click on...
+        3. See error...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+      placeholder: "The dashboard should display..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Error Logs
+      description: Paste relevant error messages or console logs
+      render: bash
+      placeholder: |
+        Error: ENOENT: no such file or directory
+        at async Function...
+
+  - type: dropdown
+    id: environment
+    attributes:
+      label: Environment
+      description: Where are you experiencing this issue?
+      options:
+        - Local (localhost)
+        - Azure Production
+        - Both
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      options:
+        - Windows
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: input
+    id: node-version
+    attributes:
+      label: Node.js Version
+      placeholder: "18.12.0"
+      description: "Run `node --version` to check"
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: Any other relevant information
+      placeholder: "Screenshots, related issues, etc."
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have checked existing issues
+          required: true
+        - label: I have read the README
+          required: false
+        - label: I can reproduce this issue
+          required: true
+
+---
+
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[FEATURE] "
+labels: ["enhancement", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting a feature! Help us understand what you'd like to see.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What problem does this solve?
+      placeholder: "Users want to be able to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: How should this feature work?
+      placeholder: "Add a button that..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any other approaches you've thought of?
+      placeholder: "We could also..."
+    validations:
+      required: false
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Ideas
+      description: How might this be implemented?
+      placeholder: "This could be done by..."
+    validations:
+      required: false
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - Low
+        - Medium
+        - High
+        - Critical
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      description: Which parts of the application does this affect?
+      options:
+        - label: Frontend
+        - label: Backend
+        - label: Database
+        - label: Deployment
+        - label: Documentation
+
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I have checked existing feature requests
+          required: true
+        - label: This feature is aligned with project goals
+          required: false
+
+---
+
+name: Documentation Request
+description: Report missing or unclear documentation
+title: "[DOCS] "
+labels: ["documentation", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Help us improve the documentation!
+
+  - type: dropdown
+    id: section
+    attributes:
+      label: Documentation Section
+      options:
+        - README
+        - Architecture
+        - API Guide
+        - Deployment Guide
+        - Setup Instructions
+        - Troubleshooting
+        - Contributing
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: issue
+    attributes:
+      label: What's Missing or Unclear?
+      description: Describe the documentation issue
+      placeholder: "The README doesn't explain how to..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested Improvement
+      description: How should this be documented?
+      placeholder: "We should add a section about..."
+    validations:
+      required: false
+
+---
+
+name: Question
+description: Ask a question about the project
+title: "[QUESTION] "
+labels: ["question", "needs-triage"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Have a question about Sentiment Analyzer? Ask here!
+
+  - type: dropdown
+    id: category
+    attributes:
+      label: Question Category
+      options:
+        - Setup & Installation
+        - Usage & Features
+        - Architecture & Design
+        - Deployment & Cloud
+        - API Integration
+        - Troubleshooting
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: Your Question
+      description: What would you like to know?
+      placeholder: "How do I..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Provide any relevant context
+      placeholder: "I'm trying to..."
+    validations:
+      required: false

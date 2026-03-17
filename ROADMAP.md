@@ -6,65 +6,91 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** 1 (Core Foundation Complete)
-**Latest Release:** v1.0.0
+**Phase:** 1 Advanced Complete / Phase 2 In Development
+**Latest Release:** v1.1.0
 **Last Updated:** March 2026
 
 ---
 
-## 🎯 Phase 1: Foundation (Completed ✅)
+## 🎯 Phase 1: Foundation + Advanced Intelligence (Completed ✅)
 
-Core sentiment analysis platform with basic functionality.
+Core sentiment analysis platform with advanced trading intelligence.
 
 ### ✅ Completed Features
 
 **Backend:**
-- [x] Express.js REST API with 5 endpoints
-- [x] CoinGecko market data integration (volatility calculated from high/low range)
-- [x] NewsAPI news aggregation
-- [x] Claude API sentiment analysis (model: `claude-sonnet-4-6`)
-- [x] In-memory caching (5-min coins, 24-hr sentiment, 15-min history/headlines)
-- [x] Scheduled daily sentiment batch job (node-cron, configurable via `SENTIMENT_JOB_CRON`)
-- [x] `POST /api/refresh-sentiment` forces re-analysis (clears cache, processes sequentially)
-- [x] `GET /api/sentiment/:symbol` — read-only cached sentiment endpoint
-- [x] Health check reports `misconfigured` for missing API keys (HTTP 503)
-- [x] `x-api-key` header auth on admin endpoint
+- [x] Express.js REST API with 11 endpoints
+- [x] CoinGecko market data integration (live prices, OHLCV history)
+- [x] NewsAPI news aggregation (headlines per coin)
+- [x] Claude API sentiment analysis (BULL/NEUTRAL/BEAR)
+- [x] SQLite persistence (backtest results, sentiment cache survive restarts)
+- [x] In-memory TTL caching layer (5-min coins, 24-hr sentiment, 15-min history)
+- [x] Scheduled sentiment batch job (daily via node-cron)
+- [x] Error handling throughout; NEUTRAL fallback on API errors
+- [x] Health check endpoint with per-service status
+
+**Advanced Intelligence (Phase 1 Enhancement):**
+- [x] `SentimentAnalyzerEngine` — 4 analysis modes (BASIC / ADVANCED / TRADING_SIGNALS / SMART)
+- [x] `TradingAgent` framework — RuleBased, MLBased, Hybrid agents + AgentFactory
+- [x] 3 risk profiles — Conservative (1%), Aggressive (5%), Scalping (3%)
+- [x] `BacktestingEngine` — day-by-day simulation, Sharpe ratio, max drawdown, equity curves
+- [x] Slippage models — FIXED / VOLUME_BASED / MARKET_IMPACT
+- [x] Coin ranking by composite SMART score
 
 **Frontend:**
-- [x] React 18 dashboard with responsive auto-fill grid
-- [x] Coin card components with sentiment badges (BULL/NEUTRAL/BEAR)
-- [x] Interactive detail modal (ESC key + backdrop click to close)
-- [x] Chart.js line chart for 7-day price history
-- [x] Real-time status indicators and polling (every 10 min)
-- [x] Sorting by market cap, volatility, and sentiment
-
-**Deployment:**
-- [x] Azure Free Tier setup guide (`DEPLOYMENT_GUIDE.md`)
-- [x] Environment configuration (`.env.example`)
-
-**Not Yet Implemented (tracked as future work):**
-- [ ] Azure Table Storage persistence
-- [ ] GitHub Actions CI/CD pipeline
-- [ ] Application Insights monitoring
+- [x] React 18 dashboard with coin cards and sentiment badges
+- [x] Interactive detail modals with Chart.js price history chart
+- [x] Sorting by market cap, volatility, sentiment
+- [x] ESC / backdrop click to close modals
+- [x] Polls `/api/coins` every 10 minutes
 
 **Documentation:**
 - [x] Architecture documentation (`SENTIMENT_ANALYZER_ARCHITECTURE.md`)
-- [x] API endpoint specifications and Postman collection
-- [x] Deployment guide
-- [x] Contributing guidelines
-- [x] `CLAUDE.md` for AI-assisted development
+- [x] API endpoint specifications + cURL examples
+- [x] Phase 1 detailed docs in `docs/phase1/`
+- [x] Azure deployment guide
+- [x] Contributing and testing guidelines
 
 ---
 
-## 🚀 Phase 2: Enhanced Analytics (Q2-Q3 2024)
+## 🚀 Phase 2: Multi-Agent Reinforcement Learning (In Development 🔄)
+
+Competitive multi-agent trading where AI agents compete for trading opportunities in a shared market environment.
+
+### 🔄 In Progress
+
+- [ ] **MARL Competition Engine** (`marl-competition-engine.ts`)
+  - Multiple agents trading the same coins simultaneously
+  - Agents affect each other through shared order book
+  - ELO-style rating system across tournaments
+
+- [ ] **Game Theory Integration**
+  - Nash equilibrium strategy discovery
+  - Cooperative and competitive agent dynamics
+  - Agent specialization (momentum, mean-reversion, arbitrage)
+
+- [ ] **Tournament System**
+  - Structured bracket competitions
+  - Round-robin and elimination formats
+  - Performance leaderboard
+
+See [`docs/phase2/`](./docs/phase2/) for full specification.
+
+---
+
+## 📋 Phase 3: Enhanced Analytics (Previously Phase 2)
 
 Add interactive charting, user accounts, and advanced analysis features.
 
-### ✅ Completed from Phase 2
+### 🔄 In Progress
 
-- [x] **Interactive Price Charts** — Chart.js line chart integrated in detail modal (7-day close prices)
-
-### 🔄 Remaining Phase 2 Work
+- [ ] **Interactive Price Charts**
+  - TradingView Lightweight Charts integration
+  - Support for multiple timeframes (1h, 4h, 1d, 1w)
+  - Technical indicators (MA, EMA, RSI, MACD)
+  - Volume and volatility overlays
+  - Zoom and pan functionality
+  - Estimated effort: 2-3 weeks
 
 - [ ] **User Accounts & Authentication**
   - User registration and login
@@ -435,5 +461,5 @@ May require:
 **Questions about the roadmap?**
 Open an issue or join the discussion forum!
 
-**Last Updated:** March 16, 2026
-**Next Review:** June 2026
+**Last Updated:** March 16, 2024  
+**Next Review:** June 2024

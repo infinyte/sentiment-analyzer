@@ -26,8 +26,8 @@ export interface NewsData {
 }
 
 export interface TechnicalData {
-  rsi_14: number;          // 0–100
-  price_history: number[]; // close prices, chronological
+  rsi_14?: number;          // 0–100; computed from price_history if omitted
+  price_history?: number[]; // close prices, chronological
 }
 
 // ─── Output Types ─────────────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ export class SentimentAnalyzerEngine {
       market.market_cap_usd
     );
     const rsi_score = technical
-      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history))
+      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
       : 0;
 
     // Weighted composite (no technical weight when not provided)
@@ -247,7 +247,7 @@ export class SentimentAnalyzerEngine {
       market.market_cap_usd
     );
     const rsi_score = technical
-      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history))
+      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
       : 0;
 
     const composite =
