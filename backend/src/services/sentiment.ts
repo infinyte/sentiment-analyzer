@@ -1,5 +1,17 @@
-import type { Sentiment } from '../types.js';
+import type {
+  ScoredSentimentItem,
+  Sentiment,
+  SentimentCollectionStats,
+  SentimentSourceBreakdown,
+} from '../types.js';
 import logger from '../logger.js';
+
+interface SentimentAnalysisContext {
+  aggregateScore?: number;
+  scoredItems?: ScoredSentimentItem[];
+  sourceBreakdown?: SentimentSourceBreakdown[];
+  collectionStats?: SentimentCollectionStats;
+}
 
 export class SentimentService {
   private apiKey: string;
@@ -13,26 +25,33 @@ export class SentimentService {
     symbol: string,
     headlines: string[],
     priceChange7d: number,
-    volatility: number
+    volatility: number,
+    context?: SentimentAnalysisContext
   ): Promise<Sentiment> {
     const buildLocalFallback = (): Sentiment => {
-      const positiveTerms = ['surge', 'rally', 'gain', 'bull', 'breakout', 'approval', 'adoption', 'record', 'high'];
-      const negativeTerms = ['drop', 'sell-off', 'bear', 'hack', 'lawsuit', 'ban', 'liquidation', 'outflow', 'loss'];
-      const headlineText = headlines.join(' ').toLowerCase();
-      const positiveHits = positiveTerms.filter(term => headlineText.includes(term)).length;
-      const negativeHits = negativeTerms.filter(term => headlineText.includes(term)).length;
+      const scoredItems = context?.scoredItems ?? [];
+      const aggregateScore = context?.aggregateScore ?? 0;
       const momentumBias = priceChange7d >= 4 ? 1 : priceChange7d <= -4 ? -1 : 0;
-      const headlineBias = positiveHits > negativeHits ? 1 : negativeHits > positiveHits ? -1 : 0;
-      const bias = headlineBias !== 0 ? headlineBias : momentumBias;
+      const bias = Math.abs(aggregateScore) >= 0.1 ? Math.sign(aggregateScore) : momentumBias;
 
       const sentiment_score = bias > 0 ? 'BULL' : bias < 0 ? 'BEAR' : 'NEUTRAL';
-      const confidenceBase = 0.35 + Math.min(Math.abs(priceChange7d) / 20, 0.25) + Math.min(headlines.length / 20, 0.15);
+      const confidenceBase = 0.3 + Math.min(Math.abs(priceChange7d) / 20, 0.2) + Math.min(Math.abs(aggregateScore) * 0.4, 0.25) + Math.min(scoredItems.length / 20, 0.15);
       const confidence = Number(Math.min(0.75, confidenceBase).toFixed(2));
+      const positiveDrivers = scoredItems
+        .filter(item => item.weighted_score > 0)
+        .slice(0, 2)
+        .map(item => item.title);
+      const negativeDrivers = scoredItems
+        .filter(item => item.weighted_score < 0)
+        .slice(0, 2)
+        .map(item => item.title);
+      const sourceLabels = Array.from(new Set(scoredItems.map(item => item.source_label))).slice(0, 3);
+      const sourceText = sourceLabels.length > 0 ? ` across ${sourceLabels.join(', ')}` : '';
       const summary = sentiment_score === 'BULL'
-        ? `${symbol} is showing bullish signals from recent market momentum${headlines.length ? ' and headline activity' : ''}.`
+        ? `${symbol} is showing bullish signals from recent market momentum${headlines.length ? ' and scored content activity' : ''}${sourceText}.`
         : sentiment_score === 'BEAR'
-          ? `${symbol} is showing bearish pressure from recent market weakness${headlines.length ? ' and negative headline flow' : ''}.`
-          : `${symbol} sentiment is neutral based on the current price action${headlines.length ? ' and limited headline conviction' : ''}.`;
+          ? `${symbol} is showing bearish pressure from recent market weakness${headlines.length ? ' and negative scored content flow' : ''}${sourceText}.`
+          : `${symbol} sentiment is neutral based on current price action${headlines.length ? ' and mixed scored content' : ''}${sourceText}.`;
 
       return {
         symbol,
@@ -40,15 +59,18 @@ export class SentimentService {
         sentiment_score,
         confidence,
         summary,
-        key_catalysts: headlines.slice(0, 2),
-        risk_factors: volatility >= 8 ? ['Elevated short-term volatility'] : [],
+        key_catalysts: positiveDrivers.length > 0 ? positiveDrivers : headlines.slice(0, 2),
+        risk_factors: negativeDrivers.length > 0 ? negativeDrivers : volatility >= 8 ? ['Elevated short-term volatility'] : [],
         short_term_outlook: sentiment_score === 'BULL'
           ? 'Near-term momentum remains constructive, but confirmation is limited.'
           : sentiment_score === 'BEAR'
             ? 'Near-term risk remains skewed to the downside until momentum improves.'
             : 'Near-term direction is unclear and likely range-bound without stronger catalysts.',
         volatility_warning: volatility >= 8,
-        trending_score: 0,
+        trending_score: context?.collectionStats?.trending_score ?? 0,
+        scored_items: scoredItems,
+        source_breakdown: context?.sourceBreakdown ?? [],
+        collection_stats: context?.collectionStats,
       };
     };
 
@@ -63,6 +85,9 @@ export class SentimentService {
       short_term_outlook: '',
       volatility_warning: false,
       trending_score: 0,
+      scored_items: context?.scoredItems ?? [],
+      source_breakdown: context?.sourceBreakdown ?? [],
+      collection_stats: context?.collectionStats,
     });
 
     try {
@@ -117,7 +142,10 @@ Respond with ONLY this JSON (no markdown, no explanation):
           risk_factors: analysis.risk_factors,
           short_term_outlook: analysis.short_term_outlook,
           volatility_warning: analysis.volatility_warning,
-          trending_score: 0,
+          trending_score: context?.collectionStats?.trending_score ?? 0,
+          scored_items: context?.scoredItems ?? [],
+          source_breakdown: context?.sourceBreakdown ?? [],
+          collection_stats: context?.collectionStats,
         };
       } catch {
         logger.error('claude parse failed', { symbol, content });

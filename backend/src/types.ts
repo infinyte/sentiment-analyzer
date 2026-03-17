@@ -30,4 +30,45 @@ export interface Sentiment {
   short_term_outlook: string;
   volatility_warning: boolean;
   trending_score: number;
+  scored_items?: ScoredSentimentItem[];
+  source_breakdown?: SentimentSourceBreakdown[];
+  collection_stats?: SentimentCollectionStats;
+}
+
+export type SentimentContentSource = 'newsapi' | 'reddit' | 'x';
+
+export interface ScoredSentimentItem {
+  id: string;
+  source: SentimentContentSource;
+  source_label: string;
+  title: string;
+  body: string;
+  url: string;
+  author?: string;
+  published_at?: string;
+  engagement_score: number;
+  recency_score: number;
+  relevance_score: number;
+  keyword_score: number;
+  sentiment_score: number;
+  weighted_score: number;
+  source_weight: number;
+}
+
+export interface SentimentSourceBreakdown {
+  source: SentimentContentSource;
+  source_label: string;
+  item_count: number;
+  average_sentiment_score: number;
+  average_weighted_score: number;
+  weighted_frequency: number;
+}
+
+export interface SentimentCollectionStats {
+  total_items: number;
+  source_count: number;
+  weighted_frequency: number;
+  average_recency_score: number;
+  trending_score: number;
+  collected_at: string;
 }

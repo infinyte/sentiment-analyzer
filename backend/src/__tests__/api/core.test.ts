@@ -58,6 +58,50 @@ jest.mock('../../services/newsapi.js', () => ({
   })),
 }));
 
+jest.mock('../../services/content-signals.js', () => ({
+  ContentSignalService: jest.fn().mockImplementation(() => ({
+    collect: jest.fn().mockResolvedValue({
+      items: [
+        {
+          id: 'news-1',
+          source: 'newsapi',
+          source_label: 'CoinDesk',
+          title: 'Bitcoin surges',
+          body: 'Bullish momentum builds',
+          url: 'https://example.com/news-1',
+          published_at: '2026-03-17T00:00:00.000Z',
+          engagement_score: 0.1,
+          recency_score: 0.95,
+          relevance_score: 0.9,
+          keyword_score: 0.75,
+          sentiment_score: 0.7,
+          weighted_score: 0.6,
+          source_weight: 1,
+        },
+      ],
+      aggregateScore: 0.6,
+      sourceBreakdown: [
+        {
+          source: 'newsapi',
+          source_label: 'CoinDesk',
+          item_count: 1,
+          average_sentiment_score: 0.7,
+          average_weighted_score: 0.6,
+          weighted_frequency: 0.95,
+        },
+      ],
+      collectionStats: {
+        total_items: 1,
+        source_count: 1,
+        weighted_frequency: 0.95,
+        average_recency_score: 0.95,
+        trending_score: 42,
+        collected_at: '2026-03-17T00:00:00.000Z',
+      },
+    }),
+  })),
+}));
+
 jest.mock('../../services/sentiment.js', () => ({
   SentimentService: jest.fn().mockImplementation(() => ({
     analyzeSentiment: jest.fn().mockResolvedValue({
@@ -182,7 +226,13 @@ describe('GET /api/coins/:symbol', () => {
     expect(res.body).toHaveProperty('coin');
     expect(res.body).toHaveProperty('price_history');
     expect(res.body).toHaveProperty('headlines');
+    expect(res.body).toHaveProperty('scored_items');
     expect(res.body.coin.symbol).toBe('BTC');
+    expect(res.body.sentiment_today.trending_score).toBe(42);
+    expect(res.body.scored_items[0]).toMatchObject({
+      source: 'newsapi',
+      title: 'Bitcoin surges',
+    });
   });
 
   it('returns 404 for an unknown symbol', async () => {
@@ -213,6 +263,8 @@ describe('GET /api/sentiment/:symbol', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('sentiment_score');
     expect(res.body).toHaveProperty('confidence');
+    expect(res.body).toHaveProperty('scored_items');
+    expect(res.body).toHaveProperty('collection_stats');
   });
 });
 

@@ -1,5 +1,13 @@
 import logger from '../logger.js';
 
+export interface NewsArticle {
+  title: string;
+  description: string;
+  url: string;
+  sourceName: string;
+  publishedAt?: string;
+}
+
 export class NewsAPIService {
   private apiKey: string;
   private apiUrl = 'https://newsapi.org/v2';
@@ -8,13 +16,13 @@ export class NewsAPIService {
     this.apiKey = apiKey ?? process.env.NEWSAPI_API_KEY ?? '';
   }
 
-  async getHeadlines(topic: string, days: number = 7): Promise<string[]> {
+  async getArticles(topic: string, days: number = 7): Promise<NewsArticle[]> {
     try {
       const fromDate = new Date();
       fromDate.setDate(fromDate.getDate() - days);
 
       const response = await fetch(
-        `${this.apiUrl}/everything?q=${encodeURIComponent(topic)}&sortBy=publishedAt&language=en&from=${fromDate.toISOString()}&apiKey=${this.apiKey}`,
+        `${this.apiUrl}/everything?q=${encodeURIComponent(topic)}&sortBy=publishedAt&language=en&from=${fromDate.toISOString().split('T')[0]}&apiKey=${this.apiKey}`,
         { headers: { Accept: 'application/json' } }
       );
 
@@ -24,10 +32,21 @@ export class NewsAPIService {
       }
 
       const data = (await response.json()) as any;
-      return (data.articles || []).slice(0, 20).map((a: any) => a.title);
+      return (data.articles || []).slice(0, 20).map((article: any) => ({
+        title: article.title || '',
+        description: article.description || '',
+        url: article.url || '',
+        sourceName: article.source?.name || 'NewsAPI',
+        publishedAt: article.publishedAt,
+      }));
     } catch (error) {
       logger.error('newsapi fetch error', { topic, error: String(error) });
       return [];
     }
+  }
+
+  async getHeadlines(topic: string, days: number = 7): Promise<string[]> {
+    const articles = await this.getArticles(topic, days);
+    return articles.map(article => article.title).filter(Boolean);
   }
 }

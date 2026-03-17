@@ -9,6 +9,7 @@ import cron from 'node-cron';
 import type { Coin, Sentiment } from './types.js';
 import { Cache } from './services/cache.js';
 import { CoinGeckoService } from './services/coingecko.js';
+import { ContentSignalService } from './services/content-signals.js';
 import { NewsAPIService } from './services/newsapi.js';
 import { SentimentService } from './services/sentiment.js';
 import { SentimentAnalyzerEngine } from './services/sentiment-analyzer.js';
@@ -49,6 +50,7 @@ app.use((req, res, next) => {
 
 // Initialize services
 const coingecko = new CoinGeckoService();
+const contentSignals = new ContentSignalService();
 const newsapi = new NewsAPIService();
 const sentiment = new SentimentService();
 const cache = new Cache();
@@ -125,14 +127,15 @@ function applySentimentToCoin(coin: Coin, sentimentData: Sentiment): void {
   coin.trending_score = sentimentData.trending_score;
 }
 
-async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
+async function fetchAndCacheSentiment(coin: Coin): Promise<Sentiment> {
   const cacheKey = `sentiment_${coin.symbol}`;
 
   // 1. Hot path: in-memory cache hit
   const cached = sentimentCache.get<Sentiment>(cacheKey);
   if (cached) {
-    applySentimentToCoin(coin, normalizeSentimentForCoin(coin, cached));
-    return;
+    const normalizedCached = normalizeSentimentForCoin(coin, cached);
+    applySentimentToCoin(coin, normalizedCached);
+    return normalizedCached;
   }
 
   // 2. Warm path: SQLite has a non-expired row from a previous run
@@ -143,7 +146,7 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
       sentimentCache.set(cacheKey, normalizedPersisted, 24 * 60 * 60 * 1000);
       try { storage.saveSentiment(coin.symbol, normalizedPersisted); } catch { /* non-fatal */ }
       applySentimentToCoin(coin, normalizedPersisted);
-      return;
+      return normalizedPersisted;
     }
   } catch {
     // SQLite unavailable — continue to live fetch
@@ -151,17 +154,22 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
 
   // 3. Cold path: fetch from APIs
   try {
-    const headlines = await newsapi.getHeadlines(coin.name, 7);
+    const contentAnalysis = await contentSignals.collect(coin.name, coin.symbol, 7);
+    const headlines = contentAnalysis.items.map(item => item.title).filter(Boolean).slice(0, 20);
     const analyzedSentiment = await sentiment.analyzeSentiment(
       coin.symbol,
       headlines,
       coin.price_change_7d_percent,
-      coin.volatility_24h
+      coin.volatility_24h,
+      contentAnalysis
     );
 
     const sentimentData = normalizeSentimentForCoin(coin, {
       ...analyzedSentiment,
-      trending_score: headlines.length,
+      trending_score: contentAnalysis.collectionStats.trending_score,
+      scored_items: contentAnalysis.items,
+      source_breakdown: contentAnalysis.sourceBreakdown,
+      collection_stats: contentAnalysis.collectionStats,
     });
 
     // Store in both caches
@@ -169,6 +177,7 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
     try { storage.saveSentiment(coin.symbol, sentimentData); } catch { /* non-fatal */ }
 
     applySentimentToCoin(coin, sentimentData);
+    return sentimentData;
   } catch (error) {
     logger.error('sentiment fetch failed', { symbol: coin.symbol, error: String(error) });
     const fallbackSentiment = normalizeSentimentForCoin(coin, {
@@ -182,8 +191,19 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
       short_term_outlook: '',
       volatility_warning: false,
       trending_score: coin.trending_score,
+      scored_items: [],
+      source_breakdown: [],
+      collection_stats: {
+        total_items: 0,
+        source_count: 0,
+        weighted_frequency: 0,
+        average_recency_score: 0,
+        trending_score: 0,
+        collected_at: new Date().toISOString(),
+      },
     });
     applySentimentToCoin(coin, fallbackSentiment);
+    return fallbackSentiment;
   }
 }
 
@@ -245,7 +265,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
     }
 
     // Fetch sentiment for this coin (also sets trending_score via cache)
-    await fetchAndCacheSentiment(coin);
+    const sentimentData = await fetchAndCacheSentiment(coin);
 
     const historyKey = `history_${coin.id}_${days}`;
     const priceHistory = cache.get<object[]>(historyKey) || await (async () => {
@@ -255,8 +275,8 @@ app.get('/api/coins/:symbol', async (req, res) => {
     })();
 
     const headlinesKey = `headlines_${coin.id}_${days}`;
-    const headlines = cache.get<string[]>(headlinesKey) || await (async () => {
-      const data = await newsapi.getHeadlines(coin.name, days);
+    const headlines = cache.get<string[]>(headlinesKey) || (() => {
+      const data = (sentimentData.scored_items ?? []).map(item => item.title).filter(Boolean).slice(0, 10);
       cache.set(headlinesKey, data, 15 * 60 * 1000);
       return data;
     })();
@@ -268,9 +288,17 @@ app.get('/api/coins/:symbol', async (req, res) => {
         sentiment_score: coin.sentiment_score,
         confidence: coin.sentiment_confidence,
         summary: coin.sentiment_summary,
+        key_catalysts: sentimentData.key_catalysts,
+        risk_factors: sentimentData.risk_factors,
+        short_term_outlook: sentimentData.short_term_outlook,
+        volatility_warning: sentimentData.volatility_warning,
+        trending_score: sentimentData.trending_score,
+        source_breakdown: sentimentData.source_breakdown ?? [],
+        collection_stats: sentimentData.collection_stats,
       },
+      scored_items: sentimentData.scored_items ?? [],
       headlines: headlines.slice(0, 10),
-      news_count: headlines.length,
+      news_count: sentimentData.collection_stats?.total_items ?? headlines.length,
     });
   } catch (error) {
     logger.error('route error', { endpoint: '/api/coins/:symbol', error: String(error) });
