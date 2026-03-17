@@ -97,6 +97,15 @@ function AgentRow({
         <option value="AGGRESSIVE">Aggressive</option>
         <option value="SCALPING">Scalping</option>
       </select>
+      <input
+        type="number"
+        style={{ ...input, flex: 1.1 }}
+        value={agent.initialCapital ?? 10000}
+        min={100}
+        step={100}
+        placeholder="Starting Capital"
+        onChange={e => onChange({ ...agent, initialCapital: Number(e.target.value) })}
+      />
       {index > 1 && (
         <button onClick={onRemove} style={{ ...btn('#6b7280'), padding: '0.5rem 0.75rem' }}>
           ✕
@@ -147,8 +156,8 @@ export function MarlCompetitionViewer() {
   // ── Form state ────────────────────────────────────────────────────────────
   const [mode, setMode] = useState<CompetitionMode>('SINGLE');
   const [agents, setAgents] = useState<CompetitionAgentSpec[]>([
-    { id: 'bull', riskProfile: 'AGGRESSIVE' },
-    { id: 'bear', riskProfile: 'CONSERVATIVE' },
+    { id: 'bull', riskProfile: 'AGGRESSIVE', initialCapital: 10000 },
+    { id: 'bear', riskProfile: 'CONSERVATIVE', initialCapital: 10000 },
   ]);
   const [symbolInput, setSymbolInput] = useState('BTC,ETH');
   const [duration, setDuration] = useState(200);
@@ -157,8 +166,8 @@ export function MarlCompetitionViewer() {
 
   // ── Compare form state ────────────────────────────────────────────────────
   const [showCompare, setShowCompare] = useState(false);
-  const [cmpA, setCmpA] = useState<CompetitionAgentSpec>({ id: 'aggressive', riskProfile: 'AGGRESSIVE' });
-  const [cmpB, setCmpB] = useState<CompetitionAgentSpec>({ id: 'conservative', riskProfile: 'CONSERVATIVE' });
+  const [cmpA, setCmpA] = useState<CompetitionAgentSpec>({ id: 'aggressive', riskProfile: 'AGGRESSIVE', initialCapital: 10000 });
+  const [cmpB, setCmpB] = useState<CompetitionAgentSpec>({ id: 'conservative', riskProfile: 'CONSERVATIVE', initialCapital: 10000 });
   const [cmpRounds, setCmpRounds] = useState(3);
   const [cmpDuration, setCmpDuration] = useState(100);
 
@@ -187,7 +196,7 @@ export function MarlCompetitionViewer() {
 
   const addAgent = () => {
     if (agents.length < 10) {
-      setAgents([...agents, { id: `agent_${agents.length + 1}`, riskProfile: 'CONSERVATIVE' }]);
+      setAgents([...agents, { id: `agent_${agents.length + 1}`, riskProfile: 'CONSERVATIVE', initialCapital: 10000 }]);
     }
   };
 
@@ -366,12 +375,21 @@ export function MarlCompetitionViewer() {
                   <label style={label}>{title}</label>
                   <input style={{ ...input, marginBottom: '0.5rem' }} value={val.id}
                     onChange={e => set({ ...val, id: e.target.value })} placeholder="Agent ID" />
-                  <select style={input} value={val.riskProfile}
+                  <select style={{ ...input, marginBottom: '0.5rem' }} value={val.riskProfile}
                     onChange={e => set({ ...val, riskProfile: e.target.value as RiskProfile })}>
                     <option value="CONSERVATIVE">Conservative</option>
                     <option value="AGGRESSIVE">Aggressive</option>
                     <option value="SCALPING">Scalping</option>
                   </select>
+                  <input
+                    type="number"
+                    style={input}
+                    value={val.initialCapital ?? 10000}
+                    min={100}
+                    step={100}
+                    onChange={e => set({ ...val, initialCapital: Number(e.target.value) })}
+                    placeholder="Starting Capital"
+                  />
                 </div>
               ))}
               <div>

@@ -92,6 +92,14 @@ describe('MarlCompetitionViewer — initial render', () => {
     expect(agentInputs[1].value).toBe('bear');
   });
 
+  it('renders default starting capital inputs for tournament agents', () => {
+    render(<MarlCompetitionViewer />);
+    const capitalInputs = screen.getAllByPlaceholderText('Starting Capital') as HTMLInputElement[];
+    expect(capitalInputs).toHaveLength(2);
+    expect(capitalInputs[0].value).toBe('10000');
+    expect(capitalInputs[1].value).toBe('10000');
+  });
+
   it('renders + Add Agent button', () => {
     render(<MarlCompetitionViewer />);
     expect(screen.getByRole('button', { name: /add agent/i })).toBeInTheDocument();
@@ -197,6 +205,36 @@ describe('MarlCompetitionViewer — form submission', () => {
     expect(config.mode).toBe('SINGLE');
     expect(config.symbols).toEqual(['BTC', 'ETH']);
     expect(config.agents).toHaveLength(2);
+    expect(config.agents[0].initialCapital).toBe(10000);
+  });
+
+  it('submits edited starting capital in tournament mode', () => {
+    const startCompetition = vi.fn();
+    mockUseMarl.mockReturnValue({ ...defaultHook, startCompetition });
+    render(<MarlCompetitionViewer />);
+
+    const capitalInputs = screen.getAllByPlaceholderText('Starting Capital') as HTMLInputElement[];
+    fireEvent.change(capitalInputs[0], { target: { value: '25000' } });
+    fireEvent.click(screen.getByRole('button', { name: /start tournament/i }));
+
+    expect(startCompetition.mock.calls[0][0].agents[0].initialCapital).toBe(25000);
+  });
+
+  it('submits starting capital in head-to-head mode', () => {
+    const compareAgents = vi.fn();
+    mockUseMarl.mockReturnValue({ ...defaultHook, compareAgents });
+    render(<MarlCompetitionViewer />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Head-to-Head' }));
+
+    const capitalInputs = screen.getAllByPlaceholderText('Starting Capital') as HTMLInputElement[];
+    fireEvent.change(capitalInputs[0], { target: { value: '30000' } });
+    fireEvent.change(capitalInputs[1], { target: { value: '12000' } });
+    fireEvent.click(screen.getByRole('button', { name: /compare agents/i }));
+
+    expect(compareAgents).toHaveBeenCalledOnce();
+    expect(compareAgents.mock.calls[0][0].initialCapital).toBe(30000);
+    expect(compareAgents.mock.calls[0][1].initialCapital).toBe(12000);
   });
 
   it('uppercases and trims symbols from the input', () => {

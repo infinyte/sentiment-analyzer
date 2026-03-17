@@ -295,6 +295,33 @@ describe('POST /api/marl/competition/start — success', () => {
     );
   });
 
+  it('passes per-agent initial capital through to the competition config', async () => {
+    await request(app)
+      .post('/api/marl/competition/start')
+      .send({
+        mode: 'SINGLE',
+        agents: [
+          { id: 'a1', riskProfile: 'CONSERVATIVE', initialCapital: 25000 },
+          { id: 'a2', riskProfile: 'AGGRESSIVE', initialCapital: 50000 },
+        ],
+        symbols: ['BTC'],
+        duration: 100,
+        refreshInterval: 1000,
+        learningEnabled: true,
+      });
+
+    expect(engine.storeRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        config: expect.objectContaining({
+          agents: [
+            expect.objectContaining({ id: 'a1', initialCapital: 25000 }),
+            expect.objectContaining({ id: 'a2', initialCapital: 50000 }),
+          ],
+        }),
+      })
+    );
+  });
+
   it('sanitises agent ids (strips special characters)', async () => {
     const res = await request(app)
       .post('/api/marl/competition/start')
@@ -487,6 +514,27 @@ describe('POST /api/marl/agents/compare', () => {
     expect(res.body).toHaveProperty('roundDetails');
     expect(Array.isArray(res.body.roundDetails)).toBe(true);
     expect(res.body.roundDetails).toHaveLength(3);
+  });
+
+  it('passes per-agent initial capital into head-to-head comparisons', async () => {
+    await request(app)
+      .post('/api/marl/agents/compare')
+      .send({
+        agent1: { id: 'alpha', riskProfile: 'AGGRESSIVE', initialCapital: 20000 },
+        agent2: { id: 'beta', riskProfile: 'CONSERVATIVE', initialCapital: 15000 },
+        symbols: ['BTC'],
+        rounds: 1,
+        duration: 100,
+      });
+
+    expect(engine.runSingleTournament).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agents: [
+          expect.objectContaining({ id: 'alpha', initialCapital: 20000 }),
+          expect.objectContaining({ id: 'beta', initialCapital: 15000 }),
+        ],
+      })
+    );
   });
 
   it('win rates sum to 100%', async () => {

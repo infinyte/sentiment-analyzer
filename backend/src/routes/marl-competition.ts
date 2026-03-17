@@ -159,6 +159,14 @@ function sanitizeAgentId(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 64);
 }
 
+function normalizeInitialCapital(value: unknown): number | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined;
+  }
+
+  return Math.min(Math.max(Math.floor(value), 100), 10_000_000);
+}
+
 // ─── POST /api/marl/competition/start ─────────────────────────────────────────
 /**
  * Start a new MARL competition tournament.
@@ -208,7 +216,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       if (typeof a !== 'object' || a === null) {
         return res.status(400).json({ error: 'Each agent must be an object' });
       }
-      const agentObj = a as { id?: unknown; riskProfile?: unknown };
+      const agentObj = a as { id?: unknown; riskProfile?: unknown; initialCapital?: unknown };
       if (typeof agentObj.id !== 'string' || !agentObj.id.trim()) {
         return res.status(400).json({ error: 'Each agent must have a non-empty "id" string' });
       }
@@ -220,6 +228,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       agentSpecs.push({
         id: sanitizeAgentId(agentObj.id),
         riskProfile: agentObj.riskProfile,
+        initialCapital: normalizeInitialCapital(agentObj.initialCapital),
       });
     }
 
@@ -444,8 +453,8 @@ router.post('/api/marl/agents/compare', compareRateLimit, async (req, res) => {
       rounds?: unknown;
     };
 
-    const a1 = body.agent1 as { id?: unknown; riskProfile?: unknown } | undefined;
-    const a2 = body.agent2 as { id?: unknown; riskProfile?: unknown } | undefined;
+    const a1 = body.agent1 as { id?: unknown; riskProfile?: unknown; initialCapital?: unknown } | undefined;
+    const a2 = body.agent2 as { id?: unknown; riskProfile?: unknown; initialCapital?: unknown } | undefined;
 
     if (!a1 || !a2 || typeof a1.id !== 'string' || typeof a2.id !== 'string') {
       return res.status(400).json({ error: '"agent1" and "agent2" with string "id" are required' });
@@ -464,8 +473,16 @@ router.post('/api/marl/agents/compare', compareRateLimit, async (req, res) => {
     const config: CompetitionConfig = {
       mode: 'SINGLE',
       agents: [
-        { id: sanitizeAgentId(a1.id), riskProfile: a1.riskProfile },
-        { id: sanitizeAgentId(a2.id), riskProfile: a2.riskProfile },
+        {
+          id: sanitizeAgentId(a1.id),
+          riskProfile: a1.riskProfile,
+          initialCapital: normalizeInitialCapital(a1.initialCapital),
+        },
+        {
+          id: sanitizeAgentId(a2.id),
+          riskProfile: a2.riskProfile,
+          initialCapital: normalizeInitialCapital(a2.initialCapital),
+        },
       ],
       symbols,
       duration,

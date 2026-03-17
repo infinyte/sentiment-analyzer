@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback } from 'react';
 import type {
   CompetitionConfig,
+  CompetitionAgent,
   CompetitionResult,
   CompetitionStatus,
   StartCompetitionResponse,
@@ -99,8 +100,8 @@ export function useMarlCompetition() {
   // ── Compare two agents over N rounds ───────────────────────────────────────
 
   const compareAgents = useCallback(async (
-    agent1: { id: string; riskProfile: 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING' },
-    agent2: { id: string; riskProfile: 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING' },
+    agent1: CompetitionAgent,
+    agent2: CompetitionAgent,
     symbols: string[],
     rounds: number,
     duration: number,

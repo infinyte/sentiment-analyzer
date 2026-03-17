@@ -80,6 +80,7 @@ export interface AgentAction {
 export interface CompetitionAgentSpec {
   id: string;
   riskProfile: 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
+  initialCapital?: number;
 }
 
 export interface CompetitionConfig {
@@ -869,7 +870,7 @@ export class MarlCompetitionEngine {
 
   private createAgentState(
     spec: CompetitionAgentSpec,
-    capital = 10000,
+    capital = spec.initialCapital ?? 10000,
     learningSnapshot?: LearningStateSnapshot,
     mutationRate?: number
   ): MarlAgentState {

@@ -77,16 +77,61 @@ process.on('SIGINT',  () => { storage.close(); process.exit(0); });
 // HELPER: Fetch and cache sentiment for a coin
 // ============================================================================
 
+function buildFallbackSentimentSummary(coin: Coin, sentimentScore: Sentiment['sentiment_score']): string {
+  const weeklyMove = coin.price_change_7d_percent;
+  const absMove = Math.abs(weeklyMove).toFixed(2);
+
+  if (sentimentScore === 'BULL') {
+    return weeklyMove >= 0
+      ? `${coin.name} is showing bullish sentiment with a ${absMove}% move over the last 7 days.`
+      : `${coin.name} remains bullish despite a recent ${absMove}% pullback over the last 7 days.`;
+  }
+
+  if (sentimentScore === 'BEAR') {
+    return weeklyMove <= 0
+      ? `${coin.name} is showing bearish sentiment after a ${absMove}% move lower over the last 7 days.`
+      : `${coin.name} is showing bearish sentiment despite a recent ${absMove}% rise over the last 7 days.`;
+  }
+
+  return `${coin.name} sentiment is neutral with limited confirmed catalysts right now.`;
+}
+
+const invalidSentimentSummaries = new Set([
+  '',
+  'Analysis failed',
+  'Error during analysis',
+  'No sentiment data available',
+  'Sentiment analysis pending...',
+]);
+
+function normalizeSentimentForCoin(coin: Coin, sentimentData: Sentiment): Sentiment {
+  const rawSummary = sentimentData.summary?.trim() || '';
+  const normalizedSummary = invalidSentimentSummaries.has(rawSummary)
+    ? buildFallbackSentimentSummary(coin, sentimentData.sentiment_score)
+    : rawSummary;
+
+  return {
+    ...sentimentData,
+    confidence: Number.isFinite(sentimentData.confidence) ? sentimentData.confidence : 0,
+    summary: normalizedSummary,
+    trending_score: Number.isFinite(sentimentData.trending_score) ? sentimentData.trending_score : 0,
+  };
+}
+
+function applySentimentToCoin(coin: Coin, sentimentData: Sentiment): void {
+  coin.sentiment_score = sentimentData.sentiment_score;
+  coin.sentiment_confidence = sentimentData.confidence;
+  coin.sentiment_summary = sentimentData.summary;
+  coin.trending_score = sentimentData.trending_score;
+}
+
 async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
   const cacheKey = `sentiment_${coin.symbol}`;
 
   // 1. Hot path: in-memory cache hit
   const cached = sentimentCache.get<Sentiment>(cacheKey);
   if (cached) {
-    coin.sentiment_score = cached.sentiment_score;
-    coin.sentiment_confidence = cached.confidence;
-    coin.sentiment_summary = cached.summary;
-    coin.trending_score = cached.trending_score;
+    applySentimentToCoin(coin, normalizeSentimentForCoin(coin, cached));
     return;
   }
 
@@ -94,11 +139,10 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
   try {
     const persisted = storage.getSentiment(coin.symbol);
     if (persisted) {
-      sentimentCache.set(cacheKey, persisted, 24 * 60 * 60 * 1000);
-      coin.sentiment_score = persisted.sentiment_score;
-      coin.sentiment_confidence = persisted.confidence;
-      coin.sentiment_summary = persisted.summary;
-      coin.trending_score = persisted.trending_score;
+      const normalizedPersisted = normalizeSentimentForCoin(coin, persisted);
+      sentimentCache.set(cacheKey, normalizedPersisted, 24 * 60 * 60 * 1000);
+      try { storage.saveSentiment(coin.symbol, normalizedPersisted); } catch { /* non-fatal */ }
+      applySentimentToCoin(coin, normalizedPersisted);
       return;
     }
   } catch {
@@ -108,26 +152,38 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
   // 3. Cold path: fetch from APIs
   try {
     const headlines = await newsapi.getHeadlines(coin.name, 7);
-    const sentimentData = await sentiment.analyzeSentiment(
+    const analyzedSentiment = await sentiment.analyzeSentiment(
       coin.symbol,
       headlines,
       coin.price_change_7d_percent,
       coin.volatility_24h
     );
 
-    sentimentData.trending_score = headlines.length;
+    const sentimentData = normalizeSentimentForCoin(coin, {
+      ...analyzedSentiment,
+      trending_score: headlines.length,
+    });
 
     // Store in both caches
     sentimentCache.set(cacheKey, sentimentData, 24 * 60 * 60 * 1000);
     try { storage.saveSentiment(coin.symbol, sentimentData); } catch { /* non-fatal */ }
 
-    coin.sentiment_score = sentimentData.sentiment_score;
-    coin.sentiment_confidence = sentimentData.confidence;
-    coin.sentiment_summary = sentimentData.summary;
-    coin.trending_score = sentimentData.trending_score;
+    applySentimentToCoin(coin, sentimentData);
   } catch (error) {
     logger.error('sentiment fetch failed', { symbol: coin.symbol, error: String(error) });
-    // Keep defaults on error
+    const fallbackSentiment = normalizeSentimentForCoin(coin, {
+      symbol: coin.symbol,
+      analysis_date: new Date().toISOString().split('T')[0],
+      sentiment_score: coin.sentiment_score,
+      confidence: coin.sentiment_confidence,
+      summary: coin.sentiment_summary,
+      key_catalysts: [],
+      risk_factors: [],
+      short_term_outlook: '',
+      volatility_warning: false,
+      trending_score: coin.trending_score,
+    });
+    applySentimentToCoin(coin, fallbackSentiment);
   }
 }
 

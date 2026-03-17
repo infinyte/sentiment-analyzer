@@ -9,6 +9,7 @@ export type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 export interface CompetitionAgent {
   id: string;
   riskProfile: RiskProfile;
+  initialCapital?: number;
 }
 
 export interface CompetitionConfig {

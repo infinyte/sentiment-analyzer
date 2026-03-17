@@ -159,6 +159,8 @@ describe('SentimentService', () => {
     const result = await service.analyzeSentiment('BTC', HEADLINES, PRICE_CHANGE, VOLATILITY);
 
     expect(result.sentiment_score).toBe('NEUTRAL');
+    expect(result.summary).not.toBe('Analysis failed');
+    expect(result.summary).toMatch(/BTC|sentiment/i);
   });
 
   // 1.4.10 — Returns NEUTRAL when Claude API returns non-ok response
@@ -168,6 +170,8 @@ describe('SentimentService', () => {
     const result = await service.analyzeSentiment('BTC', HEADLINES, PRICE_CHANGE, VOLATILITY);
 
     expect(result.sentiment_score).toBe('NEUTRAL');
+    expect(result.summary).not.toBe('Error during analysis');
+    expect(result.summary).toMatch(/BTC|sentiment/i);
   });
 
   // 1.4.11 — Returns NEUTRAL on network error
@@ -177,6 +181,8 @@ describe('SentimentService', () => {
     const result = await service.analyzeSentiment('BTC', HEADLINES, PRICE_CHANGE, VOLATILITY);
 
     expect(result.sentiment_score).toBe('NEUTRAL');
+    expect(result.summary).not.toBe('Error during analysis');
+    expect(result.summary).toMatch(/BTC|sentiment/i);
   });
 
   // 1.4.12 — volatility_warning is a boolean
