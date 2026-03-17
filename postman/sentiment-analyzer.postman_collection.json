@@ -663,7 +663,9 @@
               "script": {
                 "exec": [
                   "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
-                  "pm.test('Comparison payload includes summary fields', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agent1'); pm.expect(data).to.have.property('agent2'); pm.expect(data).to.have.property('roundDetails'); pm.expect(Array.isArray(data.roundDetails)).to.be.true; });"
+                  "pm.test('Comparison payload has agent identifiers and win counts', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agent1'); pm.expect(data).to.have.property('agent2'); pm.expect(data).to.have.property('rounds'); pm.expect(data).to.have.property('agent1Wins'); pm.expect(data).to.have.property('agent2Wins'); pm.expect(data.agent1Wins + data.agent2Wins).to.equal(data.rounds); });",
+                  "pm.test('Comparison payload has win rates and returns', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agent1WinRate'); pm.expect(data).to.have.property('agent2WinRate'); pm.expect(data).to.have.property('avgAgent1Return'); pm.expect(data).to.have.property('avgAgent2Return'); pm.expect(data).to.have.property('overallWinner'); pm.expect([data.agent1, data.agent2]).to.include(data.overallWinner); });",
+                  "pm.test('roundDetails is an array matching rounds count with correct structure', function () { var data = pm.response.json(); pm.expect(Array.isArray(data.roundDetails)).to.be.true; pm.expect(data.roundDetails.length).to.equal(data.rounds); data.roundDetails.forEach(function (r) { pm.expect(r).to.have.property('round'); pm.expect(r).to.have.property('winner'); pm.expect(r).to.have.property('agent1Return'); pm.expect(r).to.have.property('agent2Return'); }); });"
                 ]
               }
             }
