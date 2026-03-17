@@ -1,8 +1,8 @@
 jest.mock('../../services/coingecko', () => ({
   CoinGeckoService: jest.fn().mockImplementation(() => ({
     getTopCoins: jest.fn().mockResolvedValue([
-      { symbol: 'BTC', current_price: 50000 },
-      { symbol: 'ETH', current_price: 3000 },
+      { symbol: 'BTC', price_usd: 50000 },
+      { symbol: 'ETH', price_usd: 3000 },
     ]),
     getCoinHistory: jest.fn().mockResolvedValue([]),
   })),
@@ -104,6 +104,11 @@ describe('SharedOrderBook', () => {
 });
 
 describe('MarlCompetitionEngine', () => {
+  beforeEach(() => {
+    (MarlCompetitionEngine as unknown as { basePriceCache: unknown }).basePriceCache = null;
+    (MarlCompetitionEngine as unknown as { learningStateCache: Map<string, unknown> }).learningStateCache = new Map();
+  });
+
   it('preserves the caller-provided competition ID in the result payload', async () => {
     const engine = new MarlCompetitionEngine();
     const config: CompetitionConfig = {
@@ -122,5 +127,123 @@ describe('MarlCompetitionEngine', () => {
 
     expect(result.competitionId).toBe('comp_test_fixed_id');
     expect(result.finalRankings).toHaveLength(2);
+  });
+
+  it('reuses cached base prices when CoinGecko rate limits subsequent runs', async () => {
+    const engine = new MarlCompetitionEngine() as unknown as {
+      coinGecko: { getTopCoins: jest.Mock };
+      fetchBasePrices: (symbols: string[]) => Promise<Map<string, number>>;
+    };
+
+    engine.coinGecko.getTopCoins
+      .mockResolvedValueOnce([
+        { symbol: 'BTC', price_usd: 50000 },
+        { symbol: 'ETH', price_usd: 3000 },
+      ])
+      .mockRejectedValueOnce(new Error('CoinGecko API error: 429'));
+
+    const first = await engine.fetchBasePrices(['BTC', 'ETH']);
+    const second = await engine.fetchBasePrices(['BTC', 'ETH']);
+
+    expect(first.get('BTC')).toBe(50000);
+    expect(second.get('BTC')).toBe(50000);
+    expect(second.get('ETH')).toBe(3000);
+  });
+
+  it('computes trade reward from the next price step instead of same-step fills', () => {
+    const engine = new MarlCompetitionEngine() as unknown as {
+      createAgentState: (
+        spec: { id: string; riskProfile: 'AGGRESSIVE'; initialCapital: number },
+        capital: number
+      ) => {
+        agent: MarlTradingAgent;
+        cash: number;
+        portfolio: Map<string, { symbol: string; quantity: number; avgPrice: number }>;
+        orderCounter: number;
+        impactStats: { timesOutbid: number; timesOutsold: number; liquidityImpacts: number[] };
+      };
+      executeAction: (
+        state: ReturnType<typeof engine.createAgentState>,
+        action: { type: 'BUY'; symbol: string; quantity: number },
+        prices: Map<string, number>,
+        nextPrices: Map<string, number>,
+        orderBook: SharedOrderBook,
+        competitors: unknown[]
+      ) => { reward: number; tradeExecuted: boolean; realizedPnl: number };
+    };
+
+    const state = engine.createAgentState(
+      { id: 'alpha', riskProfile: 'AGGRESSIVE', initialCapital: 10000 },
+      10000
+    );
+    const orderBook = new SharedOrderBook();
+    orderBook.placeOrder('mm-ask', '_mm_', 'BTC', 'ASK', 100, 1_000_000);
+    orderBook.placeOrder('mm-bid', '_mm_', 'BTC', 'BID', 100, 1_000_000);
+
+    const result = engine.executeAction(
+      state,
+      { type: 'BUY', symbol: 'BTC', quantity: 1 },
+      new Map([['BTC', 100]]),
+      new Map([['BTC', 110]]),
+      orderBook,
+      []
+    );
+
+    expect(result.tradeExecuted).toBe(true);
+    expect(result.reward).toBeGreaterThan(0);
+    expect(result.realizedPnl).toBe(0);
+  });
+
+  it('uses bounded scale-invariant state keys instead of raw absolute price buckets', () => {
+    const agent = new MarlTradingAgent({
+      agentId: 'alpha',
+      type: 'ML_BASED',
+      riskProfile: 'AGGRESSIVE',
+      initialCapital: 10000,
+    }) as unknown as { discretizeState: (obs: AgentObservation) => string };
+
+    const lowPriceKey = agent.discretizeState(createObservation({ currentPrice: 50000, cash: 10000, equity: 10000 }));
+    const highPriceKey = agent.discretizeState(createObservation({ currentPrice: 75000, cash: 10000, equity: 10000 }));
+
+    expect(lowPriceKey).toBe('POS:0|GAIN:0|CASH:100|SIG:BUY');
+    expect(highPriceKey).toBe(lowPriceKey);
+  });
+
+  it('replays experiences during single-tournament learning runs', async () => {
+    const replaySpy = jest.spyOn(MarlTradingAgent.prototype, 'replayExperiences');
+    const engine = new MarlCompetitionEngine();
+
+    await engine.runSingleTournament({
+      mode: 'SINGLE',
+      agents: [
+        { id: 'alpha', riskProfile: 'AGGRESSIVE' },
+        { id: 'beta', riskProfile: 'CONSERVATIVE' },
+      ],
+      symbols: ['BTC'],
+      duration: 100,
+      refreshInterval: 1000,
+      learningEnabled: true,
+    });
+
+    expect(replaySpy).toHaveBeenCalled();
+    replaySpy.mockRestore();
+  });
+
+  it('persists learned state between competition runs for the same agent id', () => {
+    const engine = new MarlCompetitionEngine() as unknown as {
+      createAgentState: (
+        spec: { id: string; riskProfile: 'AGGRESSIVE'; initialCapital: number },
+        capital: number
+      ) => { agent: MarlTradingAgent; agentId: string };
+      persistLearningStates: (states: Array<{ agent: MarlTradingAgent; agentId: string }>) => void;
+    };
+
+    const first = engine.createAgentState({ id: 'alpha', riskProfile: 'AGGRESSIVE', initialCapital: 10000 }, 10000);
+    first.agent.qValues.set('POS:0|GAIN:0|CASH:100|SIG:BUY', [0.5, 0, 0, 0, 0]);
+    engine.persistLearningStates([first]);
+
+    const second = engine.createAgentState({ id: 'alpha', riskProfile: 'AGGRESSIVE', initialCapital: 10000 }, 10000);
+
+    expect(second.agent.qValues.get('POS:0|GAIN:0|CASH:100|SIG:BUY')).toEqual([0.5, 0, 0, 0, 0]);
   });
 });

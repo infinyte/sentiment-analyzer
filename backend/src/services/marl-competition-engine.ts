@@ -14,6 +14,7 @@ import { TradingAgent } from './trading-agent.js';
 import type { AgentConfig, AgentMetrics } from './trading-agent.js';
 import type { TradingSignal } from './sentiment-analyzer.js';
 import { CoinGeckoService } from './coingecko.js';
+import { storage } from '../storage.js';
 import logger from '../logger.js';
 
 // ─── Order Book Types ────────────────────────────────────────────────────────
@@ -291,6 +292,7 @@ export class MarlTradingAgent extends TradingAgent {
   private rewardHistory: number[] = [];
   private marlTradesExecuted: number = 0;
   private marlWinningTrades: number = 0;
+  private learningIterations: number = 0;
 
   constructor(config: AgentConfig) {
     super(config);
@@ -397,6 +399,11 @@ export class MarlTradingAgent extends TradingAgent {
     this.totalReward += reward;
     this.rewardHistory.push(reward);
     if (this.rewardHistory.length > 200) this.rewardHistory.shift();
+
+    this.learningIterations++;
+    if (this.replayBuffer.length >= 32 && this.learningIterations % 8 === 0) {
+      this.replayExperiences(8);
+    }
   }
 
   /** Replay N random experiences from buffer */
@@ -555,13 +562,37 @@ export class MarlTradingAgent extends TradingAgent {
   }
 
   // ── State Discretization ──────────────────────────────────────────────────
+  //
+  // Old approach bucketed absolute dollar price (P:73900, P:74000 …).
+  // With BTC at $70k+ that produces thousands of unique states visited only
+  // once per simulation, so Q-values never converge.
+  //
+  // New: scale-invariant features that recur across steps and competitions:
+  //   POS  – holding this symbol right now? (0/1)
+  //   GAIN – unrealised % gain from avg entry, 1 %-step buckets, capped ±10 %
+  //          (zero when flat, which is the most common actionable state)
+  //   CASH – cash as % of total equity, 10 %-step buckets (0…100)
+  //   SIG  – sentiment direction (BUY / SELL / HOLD)
+  //
+  // State space: 2 × 21 × 11 × 3 = ~1 386 states.
+  // A 100-step / 2-symbol run generates ~400 observations → ~0.3 visits per
+  // bucket — far more reuse than the previous thousands-of-unique-keys approach.
+  // EVOLUTIONARY / CONTINUOUS modes reinforce the same buckets across rounds.
 
   private discretizeState(obs: AgentObservation): string {
-    const price = Math.round(obs.currentPrice / 100) * 100;
-    const spread = Math.round(obs.spreadBps / 5) * 5;
-    const equity = Math.round(obs.equity / 1000) * 1000;
-    const signal = obs.sentimentSignal.signal;
-    return `P:${price}|S:${spread}|E:${equity}|SIG:${signal}`;
+    const symbol = obs.sentimentSignal.symbol;
+    const pos = obs.portfolio.find(p => p.symbol === symbol);
+
+    // Unrealised % gain from avg entry price, capped ±10 %, rounded to 1 %
+    const gainPct = pos && pos.avgPrice > 0
+      ? (obs.currentPrice - pos.avgPrice) / pos.avgPrice * 100
+      : 0;
+    const gainBucket = Math.max(-10, Math.min(10, Math.round(gainPct)));
+
+    // Cash ratio in 10 % buckets (0, 10, 20 … 100)
+    const cashPct = Math.round((obs.cash / Math.max(obs.equity, 1)) * 10) * 10;
+
+    return `POS:${pos ? 1 : 0}|GAIN:${gainBucket}|CASH:${cashPct}|SIG:${obs.sentimentSignal.signal}`;
   }
 
   private getLastActionIdx(): number {
@@ -786,6 +817,12 @@ interface MarlAgentState {
 interface ActionExecutionResult {
   reward: number;
   tradeExecuted: boolean;
+  realizedPnl: number;
+}
+
+interface MarketRegimeState {
+  drift: number;
+  volatility: number;
 }
 
 function computeEquity(state: MarlAgentState, prices: Map<string, number>): number {
@@ -836,11 +873,35 @@ function buildObservation(
 // ─── MarlCompetitionEngine ────────────────────────────────────────────────────
 
 export class MarlCompetitionEngine {
+  private static readonly BASE_PRICE_CACHE_TTL_MS = 5 * 60 * 1000;
+  private static basePriceCache: { fetchedAt: number; prices: Map<string, number> } | null = null;
+  private static learningStateCache: Map<string, LearningStateSnapshot> = new Map();
+
   private results: Map<string, CompetitionRecord> = new Map();
   private coinGecko: CoinGeckoService;
 
   constructor() {
     this.coinGecko = new CoinGeckoService();
+    this.loadLearningStatesFromDb();
+  }
+
+  /**
+   * Warm the in-process learningStateCache from SQLite on startup.
+   * Silently skips if the DB isn't connected yet (e.g. in unit tests that
+   * reset the cache manually via beforeEach).
+   */
+  private loadLearningStatesFromDb(): void {
+    try {
+      const rows = storage.getAllAgentLearningStates();
+      for (const { cacheKey, snapshot } of rows) {
+        MarlCompetitionEngine.learningStateCache.set(cacheKey, snapshot as LearningStateSnapshot);
+      }
+      if (rows.length > 0) {
+        logger.info('marl learning states loaded from db', { count: rows.length });
+      }
+    } catch {
+      // DB not yet connected (e.g. tests) — start with empty cache, no problem.
+    }
   }
 
   /**
@@ -848,6 +909,15 @@ export class MarlCompetitionEngine {
    * Falls back to 1000 per symbol on any error.
    */
   private async fetchBasePrices(symbols: string[]): Promise<Map<string, number>> {
+    const freshCache = this.getCachedBasePrices(symbols);
+    if (freshCache) {
+      logger.info('marl base prices seeded from cache', {
+        symbols,
+        prices: Object.fromEntries(freshCache),
+      });
+      return freshCache;
+    }
+
     try {
       const coins = await this.coinGecko.getTopCoins(250);
       const priceMap = new Map(coins.map(c => [c.symbol.toUpperCase(), c.price_usd]));
@@ -855,15 +925,45 @@ export class MarlCompetitionEngine {
       for (const sym of symbols) {
         result.set(sym, priceMap.get(sym.toUpperCase()) ?? 1000);
       }
+      MarlCompetitionEngine.basePriceCache = {
+        fetchedAt: Date.now(),
+        prices: new Map(result),
+      };
       logger.info('marl base prices seeded from coingecko', {
         symbols,
         prices: Object.fromEntries(result),
       });
       return result;
     } catch (err) {
+      const staleCache = this.getCachedBasePrices(symbols, true);
+      if (staleCache) {
+        logger.warn('marl base price fetch rate limited, using cached prices', {
+          error: String(err),
+          age_ms: Date.now() - (MarlCompetitionEngine.basePriceCache?.fetchedAt ?? Date.now()),
+        });
+        return staleCache;
+      }
       logger.warn('marl base price fetch failed, using fallback', { error: String(err) });
       return new Map(symbols.map(sym => [sym, 1000]));
     }
+  }
+
+  private getCachedBasePrices(symbols: string[], allowStale = false): Map<string, number> | null {
+    const cache = MarlCompetitionEngine.basePriceCache;
+    if (!cache) return null;
+
+    const ageMs = Date.now() - cache.fetchedAt;
+    if (!allowStale && ageMs > MarlCompetitionEngine.BASE_PRICE_CACHE_TTL_MS) {
+      return null;
+    }
+
+    const result = new Map<string, number>();
+    for (const symbol of symbols) {
+      const cachedPrice = cache.prices.get(symbol);
+      if (cachedPrice == null) return null;
+      result.set(symbol, cachedPrice);
+    }
+    return result;
   }
 
   // ── Factory ───────────────────────────────────────────────────────────────
@@ -881,8 +981,9 @@ export class MarlCompetitionEngine {
       initialCapital: capital,
     };
     const agent = new MarlTradingAgent(config);
-    if (learningSnapshot) {
-      agent.importLearningState(learningSnapshot);
+    const seedSnapshot = learningSnapshot ?? MarlCompetitionEngine.learningStateCache.get(this.getLearningCacheKey(spec));
+    if (seedSnapshot) {
+      agent.importLearningState(seedSnapshot);
       if (mutationRate && mutationRate > 0) {
         agent.mutateLearningState(mutationRate);
       }
@@ -908,19 +1009,61 @@ export class MarlCompetitionEngine {
   ): Map<string, number>[] {
     const series: Map<string, number>[] = [];
     const current = new Map(basePrices);
+    const regimes = new Map<string, MarketRegimeState>(
+      symbols.map(symbol => [symbol, {
+        drift: (Math.random() - 0.5) * 0.004,
+        volatility: 0.0025 + Math.random() * 0.002,
+      }])
+    );
+
     for (let i = 0; i < steps; i++) {
       const next = new Map<string, number>();
       for (const sym of symbols) {
         const prev = current.get(sym) ?? 1000;
-        const drift = 0.0001;
-        const vol = 0.005;
-        const shock = (Math.random() - 0.5) * 2 * vol + drift;
+        const regime = regimes.get(sym) ?? { drift: 0, volatility: 0.003 };
+        const regimeNoise = (Math.random() - 0.5) * regime.volatility;
+        const regimeShift = Math.random() < 0.03 ? (Math.random() - 0.5) * 0.012 : 0;
+        const nextDrift = Math.max(-0.015, Math.min(0.015, regime.drift * 0.92 + regimeNoise + regimeShift));
+        const nextVolatility = Math.max(0.0015, Math.min(0.008, regime.volatility * 0.85 + Math.abs(regimeNoise) * 0.75 + 0.0005));
+        regimes.set(sym, { drift: nextDrift, volatility: nextVolatility });
+
+        const microNoise = (Math.random() - 0.5) * nextVolatility;
+        const shock = nextDrift + microNoise;
         next.set(sym, Math.max(prev * (1 + shock), 1));
       }
       series.push(next);
       for (const [k, v] of next) current.set(k, v);
     }
     return series;
+  }
+
+  private getLearningCacheKey(spec: Pick<CompetitionAgentSpec, 'id' | 'riskProfile'>): string {
+    return `${spec.id}::${spec.riskProfile}`;
+  }
+
+  private persistLearningStates(agentStates: MarlAgentState[]): void {
+    for (const state of agentStates) {
+      const key = this.getLearningCacheKey({ id: state.agentId, riskProfile: state.agent.riskProfile });
+      const snapshot = state.agent.exportLearningState();
+
+      // 1. Always update the in-process cache (fast, survives within the session).
+      MarlCompetitionEngine.learningStateCache.set(key, snapshot);
+
+      // 2. Write through to SQLite so learning survives application restarts.
+      try {
+        storage.saveAgentLearningState(key, snapshot);
+      } catch (err) {
+        // DB unavailable (e.g. unit tests) — in-memory cache is still updated.
+        logger.warn('marl learning state db write failed', { key, error: String(err) });
+      }
+    }
+    logger.info('marl learning states persisted', { count: agentStates.length });
+  }
+
+  private normalizedReward(priceDelta: number, referencePrice: number, quantity: number): number {
+    const notional = Math.max(referencePrice * quantity, 1);
+    const reward = (priceDelta * quantity / notional) * 100;
+    return Math.max(-5, Math.min(5, Number(reward.toFixed(6))));
   }
 
   /** Derive a TradingSignal from the price change between the previous and current step. */
@@ -948,17 +1091,20 @@ export class MarlCompetitionEngine {
     state: MarlAgentState,
     action: AgentAction,
     prices: Map<string, number>,
+    nextPrices: Map<string, number>,
     orderBook: SharedOrderBook,
     _competitorStates: MarlAgentState[]
   ): ActionExecutionResult {
-    if (!action.symbol) return { reward: 0, tradeExecuted: false };
+    if (!action.symbol) return { reward: 0, tradeExecuted: false, realizedPnl: 0 };
     const symbol = action.symbol;
     const price = prices.get(symbol) ?? 0;
-    if (price <= 0) return { reward: 0, tradeExecuted: false };
+    const nextPrice = nextPrices.get(symbol) ?? price;
+    if (price <= 0) return { reward: 0, tradeExecuted: false, realizedPnl: 0 };
 
-    const equityBefore = computeEquity(state, prices);
     const orderId = `${state.agentId}_${++state.orderCounter}`;
     let tradeExecuted = false;
+    let reward = 0;
+    let realizedPnl = 0;
 
     if (action.type === 'BUY' && action.quantity && state.cash >= action.quantity * price) {
       const qty = action.quantity;
@@ -975,6 +1121,7 @@ export class MarlCompetitionEngine {
         } else {
           state.portfolio.set(symbol, { symbol, quantity: result.filled, avgPrice: result.avgFillPrice });
         }
+        reward = this.normalizedReward(nextPrice - result.avgFillPrice, result.avgFillPrice, result.filled);
         const compOrders = orderBook.getCompetitorOrders(symbol, state.agentId);
         if (compOrders.some(c => c.totalBidQuantity > qty)) {
           state.impactStats.timesOutbid++;
@@ -988,11 +1135,14 @@ export class MarlCompetitionEngine {
       const pos = state.portfolio.get(symbol);
       if (pos && pos.quantity > 0) {
         const qty = Math.min(action.quantity ?? pos.quantity, pos.quantity);
+        const avgEntryPrice = pos.avgPrice;
         const result = orderBook.placeOrder(orderId, state.agentId, symbol, 'ASK', price, qty);
         const proceeds = result.filled * result.avgFillPrice;
         if (result.filled > 0) {
           tradeExecuted = true;
           state.cash += proceeds;
+          realizedPnl = result.filled * (result.avgFillPrice - avgEntryPrice);
+          reward = this.normalizedReward(result.avgFillPrice - nextPrice, result.avgFillPrice, result.filled);
           pos.quantity -= result.filled;
           if (pos.quantity <= 0.0001) state.portfolio.delete(symbol);
           const compOrders = orderBook.getCompetitorOrders(symbol, state.agentId);
@@ -1003,14 +1153,18 @@ export class MarlCompetitionEngine {
       }
     } else if (action.type === 'CANCEL' && action.orderId) {
       orderBook.cancelOrder(action.orderId, symbol);
+    } else {
+      reward = this.normalizedReward(
+        computeEquity(state, nextPrices) - computeEquity(state, prices),
+        computeEquity(state, prices),
+        1
+      );
     }
 
-    const equityAfter = computeEquity(state, prices);
-    const reward = equityAfter - equityBefore;
     if (tradeExecuted) {
       state.agent.recordMarlTradeOutcome(reward);
     }
-    return { reward, tradeExecuted };
+    return { reward, tradeExecuted, realizedPnl };
   }
 
   // ── Core tournament step ─────────────────────────────────────────────────
@@ -1059,11 +1213,11 @@ export class MarlCompetitionEngine {
         const competitors = agentStates.filter(s => s.agentId !== state.agentId);
 
         // CHECKPOINT 3 — order execution
-        const { reward, tradeExecuted } = this.executeAction(state, action, prices, orderBook, competitors);
+        const { reward, tradeExecuted, realizedPnl } = this.executeAction(state, action, prices, nextPrices, orderBook, competitors);
 
         // CHECKPOINT 4 — portfolio update
         if (tradeExecuted) {
-          logger.info(`[STEP ${step}] TRADE agent=${state.agentId} ${action.type} ${symbol} qty=${action.quantity?.toFixed(6)} @ ${currentPrice.toFixed(2)} reward=${reward.toFixed(4)} cash=${state.cash.toFixed(2)} positions=${state.portfolio.size}`);
+          logger.info(`[STEP ${step}] TRADE agent=${state.agentId} ${action.type} ${symbol} qty=${action.quantity?.toFixed(6)} @ ${currentPrice.toFixed(2)} reward=${reward.toFixed(4)} realized_pnl=${realizedPnl.toFixed(4)} cash=${state.cash.toFixed(2)} positions=${state.portfolio.size}`);
         }
 
         if (learningEnabled) {
@@ -1192,6 +1346,7 @@ export class MarlCompetitionEngine {
     }
 
     const finalPrices = priceSeries[STEPS - 1];
+    this.persistLearningStates(agentStates);
     return this.buildResult(
       competitionId,
       'SINGLE',
@@ -1286,6 +1441,7 @@ export class MarlCompetitionEngine {
     const finalBasePrices = new Map<string, number>(
       config.symbols.map(sym => [sym, basePrices.get(sym) ?? 1000])
     );
+    this.persistLearningStates(finalRoundStates);
     return this.buildResult(
       competitionId,
       'EVOLUTIONARY',
@@ -1341,6 +1497,7 @@ export class MarlCompetitionEngine {
     }
 
     const finalPrices = priceSeries[totalSteps - 1];
+    this.persistLearningStates(agentStates);
     return this.buildResult(
       competitionId,
       'CONTINUOUS',

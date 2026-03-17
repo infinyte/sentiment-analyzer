@@ -1,9 +1,10 @@
 /**
  * SQLite persistence layer.
  *
- * Persists two things that are otherwise lost on restart:
+ * Persists things that are otherwise lost on restart:
  *   1. Backtest simulation results (SimulationResult → JSON blob)
  *   2. Sentiment analysis cache (so the 24-hr window survives a reboot)
+ *   3. MARL agent learning states (Q-table + policy-network weights + epsilon)
  *
  * better-sqlite3 is synchronous — no async/await needed inside this module.
  * All public methods are safe to call from async Express handlers.
@@ -192,6 +193,48 @@ export class StorageService {
     return row.cnt;
   }
 
+  // ── Agent Learning States ─────────────────────────────────────────────────
+
+  /**
+   * Persist a MARL agent's learning snapshot (Q-table + policy weights + epsilon).
+   * `cacheKey` is `"{agentId}::{riskProfile}"`.
+   * Upserts by key so repeated competitions accumulate learning, not duplicate rows.
+   */
+  saveAgentLearningState(cacheKey: string, snapshot: unknown): void {
+    const db = this.requireDb();
+    db.prepare(`
+      INSERT INTO agent_learning_states (cache_key, payload, updated_at)
+      VALUES (@cacheKey, @payload, @updatedAt)
+      ON CONFLICT(cache_key) DO UPDATE SET
+        payload    = excluded.payload,
+        updated_at = excluded.updated_at
+    `).run({
+      cacheKey,
+      payload: JSON.stringify(snapshot),
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Load all persisted agent learning snapshots.
+   * Called once at engine startup to warm `learningStateCache`.
+   */
+  getAllAgentLearningStates(): Array<{ cacheKey: string; snapshot: unknown }> {
+    const db = this.requireDb();
+    const rows = db
+      .prepare('SELECT cache_key AS cacheKey, payload FROM agent_learning_states ORDER BY updated_at DESC')
+      .all() as Array<{ cacheKey: string; payload: string }>;
+    return rows.map(r => ({ cacheKey: r.cacheKey, snapshot: JSON.parse(r.payload) }));
+  }
+
+  /**
+   * Delete the learning state for a specific agent (e.g. to reset learning).
+   */
+  deleteAgentLearningState(cacheKey: string): boolean {
+    const db = this.requireDb();
+    return db.prepare('DELETE FROM agent_learning_states WHERE cache_key = ?').run(cacheKey).changes > 0;
+  }
+
   // ── Health ────────────────────────────────────────────────────────────────
 
   /** Quick connectivity check — returns true if the DB responds. */
@@ -228,6 +271,12 @@ export class StorageService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_sentiment_expires ON sentiment_cache (expires_at);
+
+      CREATE TABLE IF NOT EXISTS agent_learning_states (
+        cache_key  TEXT PRIMARY KEY,
+        payload    TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
     `);
   }
 

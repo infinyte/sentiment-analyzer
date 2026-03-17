@@ -59,7 +59,12 @@ export class CoinGeckoService {
         };
       });
     } catch (error) {
-      logger.error('coingecko fetch error', { error: String(error) });
+      const message = String(error);
+      if (message.includes('429')) {
+        logger.warn('coingecko rate limited', { error: message });
+      } else {
+        logger.error('coingecko fetch error', { error: message });
+      }
       throw error;
     }
   }
