@@ -5,6 +5,8 @@
 Real-time cryptocurrency sentiment analysis platform combining:
 - Market data polling on demand (CoinGecko, cached 5 min)
 - Daily sentiment analysis batch using Claude AI (cached 24 hr)
+- Normalized content scoring across news and social sources
+- Social scraping and trending-topic discovery APIs
 - Interactive React dashboard with price history charts
 - Deployed on Azure Free Tier (~$6–15/month)
 
@@ -23,14 +25,14 @@ EXPRESS BACKEND (localhost:3000)
 CoinGecko   NewsAPI   Claude API
     |          |          |
     v          v          v
-     In-Memory Cache (node-cache)
+     Cache + SQLite persistence
        ├── coins: 5-min TTL
        ├── sentiment: 24-hr TTL
        ├── price history: 15-min TTL per coin
        └── headlines: 15-min TTL per coin
 ```
 
-> **Note:** Azure Table Storage is listed as a dependency but is not yet integrated. All data is held in-memory and lost on server restart.
+> **Note:** Azure Table Storage packages exist in the backend dependency graph, but the active runtime persistence layer is SQLite (`better-sqlite3`) plus in-memory caches.
 
 ---
 
@@ -43,12 +45,23 @@ All backend logic lives in a single file. Key classes:
 - `getCoinHistory(coinId, days)` — fetches OHLCV data from `/coins/:id/ohlc`
 
 ### NewsAPIService
-- `getHeadlines(topic, days)` — queries NewsAPI `/everything` for recent articles, returns array of headline strings (max 20)
+- `getArticles(topic, days)` — queries NewsAPI `/everything` for recent structured articles (max 20)
+- `getHeadlines(topic, days)` — headline helper built on top of `getArticles`
+
+### ContentSignalService
+- Collects normalized items from NewsAPI, Reddit, and an X-ready adapter
+- Scores each item using keyword polarity, recency, relevance, engagement, and source weights
+- Produces `scored_items`, `source_breakdown`, and `collection_stats`
+
+### SocialScraperService + TrendingTopicsEngine
+- `GET /api/scrape/social` and `POST /api/scrape/batch` collect normalized posts from Reddit, Stocktwits, and X (when bearer token is configured)
+- `GET /api/trending` ranks topics by volume, velocity, source diversity, and aggregate sentiment
+- A scheduled trending scrape job ingests social posts every 30 minutes for the top cached symbols
 
 ### SentimentService
-- `analyzeSentiment(symbol, headlines, priceChange7d, volatility)` — calls Claude API, requests JSON with `sentiment_score`, `confidence`, `summary`, `key_catalysts`, `risk_factors`, `short_term_outlook`, `volatility_warning`
+- `analyzeSentiment(symbol, headlines, priceChange7d, volatility, context)` — calls Claude API, requests JSON with `sentiment_score`, `confidence`, `summary`, `key_catalysts`, `risk_factors`, `short_term_outlook`, `volatility_warning`
 - Model: `CLAUDE_MODEL` env var (default: `claude-sonnet-4-6`)
-- Falls back to `NEUTRAL` / confidence `0` on any error
+- Falls back to local heuristics using the scored content context on any Claude/API parse failure
 
 ### Cache
 - Simple `Map`-based TTL cache with `get`, `set`, `delete` methods
@@ -56,8 +69,8 @@ All backend logic lives in a single file. Key classes:
 
 ### fetchAndCacheSentiment (helper)
 - Checks `sentimentCache` for a coin; if hit, merges fields onto the coin object
-- If miss: calls `NewsAPIService` → `SentimentService`, stores in `sentimentCache` with 24-hr TTL
-- Also sets `trending_score = headlines.length` on the coin
+- If miss: calls `ContentSignalService` → `SentimentService`, stores the enriched sentiment in `sentimentCache` with 24-hr TTL and persists it to SQLite
+- Sets `trending_score` from weighted frequency, recency, and source diversity rather than raw headline count
 
 ---
 
@@ -80,7 +93,7 @@ interface Coin {
   sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
   sentiment_confidence: number;            // 0–1
   sentiment_summary: string;
-  trending_score: number;                  // headline count from NewsAPI
+  trending_score: number;                  // weighted trend score derived from content volume/recency/source mix
   timestamp: Date;
   market_rank: number;
 }
@@ -99,7 +112,10 @@ interface Sentiment {
   risk_factors: string[];
   short_term_outlook: string;
   volatility_warning: boolean;
-  trending_score: number;                  // cached alongside sentiment
+  trending_score: number;
+  scored_items?: ScoredSentimentItem[];
+  source_breakdown?: SentimentSourceBreakdown[];
+  collection_stats?: SentimentCollectionStats;
 }
 ```
 
@@ -123,7 +139,7 @@ Query params: `limit` (default 50, max 200), `sort_by` (`market_cap` | `volatili
       "sentiment_confidence": 0.87,
       "sentiment_summary": "Positive momentum from institutional adoption...",
       "volatility_24h": 2.1,
-      "trending_score": 14,
+      "trending_score": 44.5,
       "price_change_24h_percent": 2.34,
       "price_change_7d_percent": 5.67,
       "market_rank": 1
@@ -146,10 +162,21 @@ Detailed report for one coin. Query param: `days` (default 7, max 30).
   "sentiment_today": {
     "sentiment_score": "BULL",
     "confidence": 0.87,
-    "summary": "..."
+    "summary": "...",
+    "trending_score": 44.5,
+    "source_breakdown": [],
+    "collection_stats": {
+      "total_items": 8,
+      "source_count": 2,
+      "weighted_frequency": 5.8,
+      "average_recency_score": 0.71,
+      "trending_score": 44.5,
+      "collected_at": "2026-03-17T08:00:00.000Z"
+    }
   },
+  "scored_items": [],
   "headlines": ["Headline 1", "Headline 2"],
-  "news_count": 14
+  "news_count": 8
 }
 ```
 
@@ -221,7 +248,7 @@ All UI lives in a single file.
 - `PercentChange` — price change with ▲/▼ indicator
 - `CoinCard` — card with price, sentiment, volatility, volume, summary; opens modal on click
 - `Dashboard` — responsive auto-fill grid, sort dropdown (market cap / volatility / sentiment)
-- `DetailModal` — full-screen overlay with Chart.js line chart, sentiment summary, headlines. Closes on ESC or backdrop click.
+- `DetailModal` — full-screen overlay with Chart.js line chart, sentiment summary, source breakdown, scored market signals, and headlines. Closes on ESC or backdrop click.
 
 **Chart:** `react-chartjs-2` `<Line>` component rendering 7-day OHLCV close prices. Registered components: `CategoryScale`, `LinearScale`, `PointElement`, `LineElement`, `Tooltip`.
 
@@ -256,10 +283,13 @@ SENTIMENT_JOB_CRON="0 2 * * *"
 ALLOWED_ORIGINS=http://localhost:5173
 FRONTEND_URL=http://localhost:5173
 
-# Not yet implemented
+# Optional / future-facing
 AZURE_STORAGE_CONNECTION_STRING=
 APPINSIGHTS_INSTRUMENTATION_KEY=
 LOG_LEVEL=info
+TRENDING_JOB_CRON="*/30 * * * *"
+X_BEARER_TOKEN=
+TWITTER_BEARER_TOKEN=
 ```
 
 ---
@@ -285,8 +315,8 @@ sentiment-analyzer/
 │   └── tsconfig.json
 │
 ├── postman/                  ← API test collection
-├── .github/workflows/        ← empty (CI/CD not yet configured)
-└── docs/                     ← empty
+├── .github/workflows/        ← CI workflows
+└── docs/                     ← architecture, phase, and reference docs
 ```
 
 ---

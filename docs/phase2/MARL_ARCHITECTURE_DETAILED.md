@@ -73,7 +73,7 @@ Key Components:
 
 3. Agent Population
    - Each agent has own:
-     * Starting capital ($10,000)
+   * Starting capital (default $10,000, configurable per agent)
      * Portfolio (positions, cash)
      * Q-values (state→action→reward mapping)
      * Policy network (neural network for action selection)

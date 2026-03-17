@@ -71,9 +71,11 @@ Test `/api/coins/:symbol` for detailed coin information.
 - `GET /api/coins/INVALID123` - Error handling (404)
 
 **Validations:**
-- ✓ Response has coin, price_history, headlines, sentiment data
+- ✓ Response has coin, price_history, headlines, `sentiment_today`, and scored signal data
 - ✓ Price history contains OHLCV (Open, High, Low, Close, timestamp)
 - ✓ Headlines is array of strings
+- ✓ `scored_items` is an array of normalized scored content items
+- ✓ `source_breakdown` and `collection_stats` are present inside `sentiment_today`
 - ✓ Sentiment consistency with list endpoint
 - ✓ Proper 404 for invalid symbols
 
@@ -102,7 +104,17 @@ Test read-only `/api/sentiment/:symbol` endpoint.
     "risk_factors": [...],
     "short_term_outlook": "...",
     "volatility_warning": false,
-    "trending_score": 12
+    "trending_score": 44.5,
+    "scored_items": [],
+    "source_breakdown": [],
+    "collection_stats": {
+      "total_items": 8,
+      "source_count": 2,
+      "weighted_frequency": 5.8,
+      "average_recency_score": 0.71,
+      "trending_score": 44.5,
+      "collected_at": "2026-03-17T08:00:00.000Z"
+    }
   }
   ```
 - **404**: If not yet analyzed (run `/api/coins` first)

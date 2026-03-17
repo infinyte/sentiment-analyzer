@@ -1,6 +1,16 @@
 SENTIMENT ANALYZER SYSTEM - COMPLETE FILE INDEX
 ===============================================
 
+CURRENT REPOSITORY NOTE
+=======================
+
+This index documents the original Phase 1 deliverable layout. The current repository has since consolidated several planned files:
+- sentiment/trading routes are now integrated directly in `backend/src/index.ts`
+- the dashboard/detail UI is primarily implemented in `frontend/src/App.tsx`
+- MARL-specific UI lives in `frontend/src/components/MarlCompetitionViewer.tsx`
+
+Treat the file list below as a historical planning index, not a literal current filesystem map.
+
 Your Project Has Three Main Components:
 
 1. REPOSITORY INFRASTRUCTURE (from earlier session)

@@ -1,5 +1,7 @@
 # Sentiment Analyzer - AI-Powered Altcoin Trading Intelligence Platform
 
+> Historical reference snapshot: this file preserves an earlier README draft and does not fully reflect the current repository layout or runtime behavior. Use the root `README.md` as the current source of truth.
+
 [![Sentiment Analysis](https://img.shields.io/badge/sentiment-analysis-blue)](https://github.com)
 [![Cryptocurrency](https://img.shields.io/badge/crypto-trading-green)](https://github.com)
 [![Claude API](https://img.shields.io/badge/Claude-API-ff69b4)](https://console.anthropic.com)

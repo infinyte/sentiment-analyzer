@@ -121,7 +121,7 @@ Fields:
 - sentiment_score (BULL/NEUTRAL/BEAR)
 - sentiment_confidence (0-1)
 - sentiment_summary (text)
-- trending_score (headline count)
+- trending_score (weighted trend score from content frequency, recency, and source mix)
 - timestamp
 
 Storage: Azure Table Storage, partitioned by SYMBOL

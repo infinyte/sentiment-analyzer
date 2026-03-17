@@ -9,7 +9,7 @@ EXECUTIVE SUMMARY
 =================
 
 You now have a complete **multi-agent reinforcement learning (MARL) competitive trading 
-system** where N agents with identical starting capital compete in a shared market environment 
+system** where N agents with configurable starting capital (defaulting to the same initial bankroll unless overridden) compete in a shared market environment 
 and learn from each other's actions.
 
 Key capabilities:

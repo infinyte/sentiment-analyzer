@@ -5,7 +5,7 @@ What You're Getting
 ===================
 
 A complete **Multi-Agent Reinforcement Learning (MARL) competitive trading framework** 
-where multiple agents with identical starting capital compete in a shared cryptocurrency 
+where multiple agents with configurable starting capital compete in a shared cryptocurrency 
 market and learn from each other through adversarial interaction.
 
 Key Innovation: Agents compete on a SHARED ORDER BOOK with realistic market friction 

@@ -1,8 +1,14 @@
 /**
- * Structured logger (Winston).
+ * Structured logger (Winston + Application Insights).
  *
- * Development  → human-readable coloured output with timestamps
- * Production   → JSON (one object per line, compatible with Application Insights / Datadog)
+ * Transports:
+ *   Console — always active
+ *     Dev  → human-readable coloured output with timestamps
+ *     Prod → JSON (one object per line)
+ *
+ *   Application Insights — active when APPLICATIONINSIGHTS_CONNECTION_STRING is set
+ *     Sends traces, warnings, and errors to Azure Monitor.
+ *     Unhandled exceptions/rejections are automatically captured.
  *
  * Usage:
  *   import logger from './logger.js';
@@ -15,6 +21,7 @@
  */
 
 import winston from 'winston';
+import { AppInsightsTransport } from './telemetry/app-insights-transport.js';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
@@ -35,10 +42,26 @@ const prodFormat = winston.format.combine(
   winston.format.json(),
 );
 
+// ── Transports ────────────────────────────────────────────────────────────────
+
+const transports: winston.transport[] = [
+  new winston.transports.Console(),
+];
+
+// Add Application Insights transport when connection string is configured.
+// The transport self-disables silently if the env var is absent or malformed.
+const aiTransport = new AppInsightsTransport({ level: 'debug' });
+transports.push(aiTransport);
+
+// ── Logger ────────────────────────────────────────────────────────────────────
+
 const logger = winston.createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: isDev ? devFormat : prodFormat,
-  transports: [new winston.transports.Console()],
+  transports,
 });
+
+// Flush App Insights queue before process exits
+process.on('beforeExit', () => { aiTransport.close(); });
 
 export default logger;

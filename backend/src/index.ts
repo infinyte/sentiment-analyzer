@@ -19,10 +19,14 @@ import type { AgentConfig } from './services/trading-agent.js';
 import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
 import { storage } from './storage.js';
+import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
+import socialMediaRoutes from './routes/social-media.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
+import { SocialMediaScraperManager } from './services/social-media/scraper/scraper-manager.js';
+import { TrendingTopicDiscoveryEngine } from './services/social-media/trending/trending-discovery-engine.js';
 import logger from './logger.js';
 
 dotenv.config();
@@ -62,6 +66,8 @@ const analyzer = new SentimentAnalyzerEngine();
 const backtestEngine = new BacktestingEngine();
 const socialScraper = new SocialScraperService();
 const trendingEngine = new TrendingTopicsEngine();
+const socialScraperManager = new SocialMediaScraperManager();
+const socialDiscoveryEngine = new TrendingTopicDiscoveryEngine();
 
 // In-memory agent registry (cleared on restart)
 const configuredAgents: Map<string, AgentConfig> = new Map();
@@ -75,9 +81,16 @@ try {
   logger.warn('storage unavailable, using in-memory only', { error: String(err) });
 }
 
-// Graceful shutdown — close DB before process exits
-process.on('SIGTERM', () => { storage.close(); process.exit(0); });
-process.on('SIGINT',  () => { storage.close(); process.exit(0); });
+// Connect social media SQLite store (shares same DB file; non-fatal)
+try {
+  socialStore.connect();
+} catch (err) {
+  logger.warn('social-store unavailable', { error: String(err) });
+}
+
+// Graceful shutdown — close DBs before process exits
+process.on('SIGTERM', () => { storage.close(); socialStore.close(); process.exit(0); });
+process.on('SIGINT',  () => { storage.close(); socialStore.close(); process.exit(0); });
 
 
 // ============================================================================
@@ -795,6 +808,7 @@ app.post('/api/trending/ingest', (req, res) => {
 // ============================================================================
 
 app.use(marlRoutes);
+app.use(socialMediaRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -842,8 +856,7 @@ cron.schedule(cronSchedule, async () => {
 });
 
 // ============================================================================
-// SCHEDULED TRENDING SCRAPE JOB (every 30 minutes)
-// Pulls social posts for the top coins and feeds them into the trending engine.
+// SCHEDULED TRENDING SCRAPE JOB (every 30 minutes) — lightweight in-memory
 // ============================================================================
 
 const trendingCronSchedule = process.env.TRENDING_JOB_CRON || '*/30 * * * *';
@@ -851,13 +864,55 @@ const trendingCronSchedule = process.env.TRENDING_JOB_CRON || '*/30 * * * *';
 cron.schedule(trendingCronSchedule, async () => {
   try {
     const coins = cache.get<{ symbol: string }[]>('coins');
-    if (!coins || coins.length === 0) return; // wait until coins are loaded
+    if (!coins || coins.length === 0) return;
 
     const symbols = coins.slice(0, 20).map(c => c.symbol);
     const { ingested } = await trendingEngine.scrapeAndIngest(symbols, socialScraper);
     logger.info('trending cron completed', { symbols: symbols.length, ingested });
   } catch (error) {
     logger.error('trending cron failed', { error: String(error) });
+  }
+});
+
+// ============================================================================
+// SOCIAL MEDIA SCRAPING CRON (every 1 hour) — full pipeline with SQLite
+// Fetches Twitter + Reddit + RSS for top coins, scores items, persists to DB,
+// then recomputes trending topics.
+// ============================================================================
+
+const socialCronSchedule = process.env.SOCIAL_SCRAPE_CRON || '0 * * * *';
+
+cron.schedule(socialCronSchedule, async () => {
+  try {
+    const coins = cache.get<{ symbol: string }[]>('coins');
+
+    // RSS, Discord, and Telegram are always available (no per-coin filtering needed)
+    const [rssCount, discordCount, telegramCount] = await Promise.all([
+      socialScraperManager.refreshRssAll(),
+      socialScraperManager.refreshDiscordAll(),
+      socialScraperManager.refreshTelegramAll(),
+    ]);
+    logger.info('social cron: bulk refresh', { rss: rssCount, discord: discordCount, telegram: telegramCount });
+
+    // Per-coin scraping for top 10 coins (Twitter + Reddit)
+    if (coins && coins.length > 0) {
+      const top = coins.slice(0, 10).map(c => c.symbol);
+      const results = await socialScraperManager.fetchBatch(top);
+      const total = results.reduce((s, r) => s + r.items_scraped, 0);
+      logger.info('social cron: per-coin scrape', { symbols: top.length, total });
+    }
+
+    // Recompute trending topics in DB
+    const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
+    const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
+    logger.info('social cron: trending topics updated', { count: topics.length });
+
+    // Prune old items (keep last 30 days by default)
+    const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
+    const pruned = socialStore.pruneOldItems(retainDays);
+    if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+  } catch (error) {
+    logger.error('social cron failed', { error: String(error) });
   }
 });
 

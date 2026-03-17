@@ -2,12 +2,13 @@
 
 This guide walks through setting up the Sentiment Analyzer project on Microsoft Azure using only free tier resources.
 
-> **Current Status:** This guide documents the target deployment architecture. The following are **not yet implemented** in the codebase and will need to be built before following the relevant sections:
-> - Azure Table Storage integration (app currently uses in-memory cache only)
-> - GitHub Actions CI/CD pipeline (`.github/workflows/` is empty)
+> **Current Status:** This guide mixes current deployment steps with optional future Azure services. The current codebase already includes SQLite persistence and GitHub Actions CI at `.github/workflows/ci.yml`.
+> 
+> The following are still **not active runtime dependencies** in the app today:
+> - Azure Table Storage integration as the primary persistence layer (the app currently uses SQLite plus in-memory caches)
 > - Application Insights structured logging
 >
-> Sections covering local development, environment variables, and Azure App Service deployment are fully applicable today.
+> Sections covering local development, environment variables, GitHub Actions, and Azure App Service deployment are applicable today. Storage-account / table-creation steps are optional unless you plan to build the future Azure Table Storage integration.
 
 ---
 
@@ -33,7 +34,7 @@ az group create \
   --location eastus
 ```
 
-### 1.2 Create Storage Account (Table Storage + File Storage)
+### 1.2 Optional: Create Storage Account (Future Azure Table Storage Path)
 
 ```bash
 # Create storage account
@@ -52,7 +53,7 @@ az storage account show-connection-string \
   --query connectionString -o tsv
 ```
 
-**Create Tables:**
+**Create Tables (future integration only):**
 
 ```bash
 # You can create tables via Azure Portal or CLI:

@@ -1,6 +1,6 @@
 # Sentiment Analyzer
 
-Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news headlines from NewsAPI, and uses Claude AI to generate daily Bull/Neutral/Bear sentiment scores for the top 50 coins. Displayed through an interactive React dashboard.
+Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local scoring heuristics to generate Bull/Neutral/Bear sentiment for the top coins. Displayed through an interactive React dashboard with MARL tournament tooling.
 
 ## Quick Start
 
@@ -51,12 +51,15 @@ React Dashboard (polling every 10 min)
     ↓ /api/*
 Express Backend (port 3000)
     ├── CoinGeckoService        → market data, OHLCV history
-    ├── NewsAPIService          → headlines per coin
-    ├── SentimentService        → Claude API (BULL/NEUTRAL/BEAR + summary)
+    ├── ContentSignalService    → normalized NewsAPI + Reddit + X-ready scoring pipeline
+    ├── NewsAPIService          → structured news articles
+    ├── SocialScraperService    → Reddit / Stocktwits / X scraping
+    ├── TrendingTopicsEngine    → cross-source topic ranking and trending endpoints
+    ├── SentimentService        → Claude API (BULL/NEUTRAL/BEAR + summary) with local fallback
     ├── SentimentAnalyzerEngine → 4-mode local analysis engine
     ├── TradingAgent (×3)       → RuleBased / MLBased / Hybrid agents
     ├── BacktestingEngine       → historical simulation + metrics
-    └── Cache                   → 5-min coins TTL, 24-hr sentiment TTL
+    └── Cache + SQLite          → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
 ```
 
 **Scheduled job:** Daily at 2 AM UTC (`SENTIMENT_JOB_CRON`), the backend re-analyzes the top `SENTIMENT_BATCH_SIZE` coins (default 50) and refreshes the sentiment cache.
@@ -68,10 +71,14 @@ Express Backend (port 3000)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/coins` | Top coins with sentiment. Params: `limit`, `sort_by` |
-| GET | `/api/coins/:symbol` | Detail view — price history, headlines, sentiment |
-| GET | `/api/sentiment/:symbol` | Cached sentiment only (404 if not yet analyzed) |
+| GET | `/api/coins/:symbol` | Detail view — price history, headlines, scored items, source breakdown, sentiment |
+| GET | `/api/sentiment/:symbol` | Cached sentiment object including `scored_items`, `source_breakdown`, and `collection_stats` |
 | POST | `/api/refresh-sentiment` | Force re-analysis. Requires `x-api-key` header |
 | GET | `/api/health` | Service status — reports `misconfigured` if API keys are missing |
+| GET | `/api/scrape/social` | Scrape one symbol from social sources and ingest posts into the trending engine |
+| POST | `/api/scrape/batch` | Batch scrape up to 20 symbols from social sources |
+| GET | `/api/trending` | Ranked trending topics from ingested social posts |
+| POST | `/api/trending/ingest` | Manually ingest scraped posts into the trending engine |
 
 ### Phase 1 — Advanced Analysis & Backtesting
 
@@ -104,6 +111,7 @@ Express Backend (port 3000)
 - `POST /api/marl/competition/start` defaults to 5 requests per 60 seconds per client IP
 - `POST /api/marl/agents/compare` defaults to 10 requests per 60 seconds per client IP
 - MARL read endpoints default to 120 requests per 60 seconds per client IP
+- Rate-limited responses include `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`
 - Override these with `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, and `MARL_READ_RATE_LIMIT_MAX`
 
 **Example cURL:**
@@ -220,9 +228,12 @@ sentiment-analyzer/
 │   │   ├── services/
 │   │   │   ├── cache.ts                      # TTL Map cache
 │   │   │   ├── coingecko.ts                  # CoinGecko API client
+│   │   │   ├── content-signals.ts            # Normalized content scoring pipeline
 │   │   │   ├── newsapi.ts                    # NewsAPI client
+│   │   │   ├── social-scraper.ts             # Social scraping adapters
 │   │   │   ├── sentiment.ts                  # Claude API sentiment analysis
 │   │   │   ├── sentiment-analyzer.ts         # 4-mode local analysis engine
+│   │   │   ├── trending-topics.ts            # Trending topic discovery engine
 │   │   │   ├── trading-agent.ts              # Agent framework (Rule/ML/Hybrid)
 │   │   │   ├── backtesting-engine.ts         # Historical simulation engine
 │   │   │   └── marl-competition-engine.ts    # Multi-agent competition engine (Phase 2)
@@ -245,7 +256,7 @@ sentiment-analyzer/
 
 ## Deployment
 
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for Azure App Service setup. Note: Azure Table Storage and GitHub Actions CI/CD are documented as future targets but not yet configured.
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for Azure App Service setup. Current deployments use SQLite for persistence and the repo already includes GitHub Actions CI in `.github/workflows/ci.yml`; Azure Table Storage remains a future option rather than the active storage layer.
 
 ## Cost
 

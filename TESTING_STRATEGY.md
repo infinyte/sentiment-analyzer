@@ -7,9 +7,10 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 **Current State:**
 - ✅ Postman integration tests exist (manual/CLI)
 - ✅ Jest configured in backend
-- ✅ Backend unit tests implemented for Cache, CoinGeckoService, NewsAPIService, and SentimentService
-- ❌ No backend integration tests
-- ❌ No frontend component tests
+- ✅ Backend unit tests implemented for Cache, CoinGeckoService, NewsAPIService, SentimentService, content scoring, and MARL engine behavior
+- ✅ Backend API integration tests exist for core and MARL routes
+- ✅ Frontend Vitest + React Testing Library are configured
+- ✅ Frontend component/integration tests exist for `MarlCompetitionViewer` and the enriched detail modal in `App.test.tsx`
 - ❌ No E2E tests
 
 **Testing Stack:**
@@ -263,34 +264,30 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 **Purpose:** Configure a frontend unit-test harness for React components and hooks.
 
-**Location:** Planned `frontend/vitest.config.ts`, planned `frontend/src/__tests__/setup.ts`
+**Location:** `frontend/src/__tests__/setup.ts`
 
-**Current Status:** Not implemented
+**Current Status:** Implemented
 
 **Repository Reality:**
-- No `vitest.config.ts` exists under `frontend/`.
-- No `frontend/src/__tests__/setup.ts` file exists.
-- No frontend `.test.tsx` or `.spec.tsx` files exist in the repository.
-- `frontend/package.json` does not contain `test`, `test:watch`, or `test:ui` scripts.
-- The current frontend dev dependencies do not include Vitest, React Testing Library, `jsdom`, or MSW.
+- Frontend tests run through package scripts in `frontend/package.json` (`test`, `test:watch`, `test:coverage`).
+- `frontend/src/__tests__/setup.ts` configures `@testing-library/jest-dom`.
+- Existing frontend coverage includes `frontend/src/__tests__/MarlCompetitionViewer.test.tsx`, `frontend/src/__tests__/useMarlCompetition.test.ts`, and `frontend/src/__tests__/App.test.tsx`.
+- The repo does not use a standalone `vitest.config.ts`; the default Vite/Vitest setup is sufficient for the current suite.
 
 **Configuration Tasks Still Required:**
 
 | Task | Details | Acceptance Criteria |
 |------|---------|-------------------|
-| 3.1.1 | Install Vitest | Add `vitest` and optionally `@vitest/ui` to frontend dev dependencies | `npm run test` can invoke Vitest |
-| 3.1.2 | Install testing libraries | Add `@testing-library/react`, `@testing-library/jest-dom`, and `jsdom` | React components can render in tests |
-| 3.1.3 | Configure `vitest.config.ts` | Set `jsdom` environment and React plugin integration | Config loads and test files are discovered |
-| 3.1.4 | Create test setup file | Import `jest-dom` and any shared mocks | Test files do not need repeated setup boilerplate |
-| 3.1.5 | Add npm scripts | Add `test`, `test:watch`, and optional `test:ui` scripts to `frontend/package.json` | Test commands are runnable from the frontend package |
-| 3.1.6 | Decide API mocking strategy | Use simple `fetch` mocks or add MSW if broader integration-style UI tests are needed | Frontend tests can control `/api` responses deterministically |
+| 3.1.1 | Expand dashboard coverage | Add more dashboard sorting/filtering tests beyond the current modal and MARL coverage | Core dashboard behaviors are regression-protected |
+| 3.1.2 | Add hook-specific tests for `useCoins` / `useCoinDetail` | Extract or explicitly test the in-file hooks if they continue to grow | Hook behavior is independently regression-protected |
+| 3.1.3 | Decide API mocking strategy for broader UI flows | Current tests use direct `fetch` mocks; MSW remains optional for larger suites | Frontend tests can scale cleanly as coverage grows |
 
 **Estimated Effort:** 2-3 hours
 
 **Success Criteria:**
-- ❌ `npm run test` does not exist for the frontend today
-- ❌ No frontend test runner is configured yet
-- ⚠️ Frontend test infrastructure must be created before hook or component tests can be added
+- ✅ `npm run test` exists for the frontend today
+- ✅ Frontend test runner is configured and in use
+- ⚠️ Coverage is still selective rather than exhaustive
 
 ---
 

@@ -1,6 +1,11 @@
 THE BRAINS OF YOUR APP - EXECUTIVE SUMMARY
 ==========================================
 
+CURRENT REPOSITORY NOTE
+=======================
+
+This Phase 1 summary describes the original deliverable packaging. In the live repository, the planned `sentiment-trading.ts` route layer was folded into `backend/src/index.ts`, and the frontend implementation is consolidated around `frontend/src/App.tsx` plus `frontend/src/components/MarlCompetitionViewer.tsx`.
+
 What You Have: A Complete, Production-Grade Trading Intelligence System
 
 Kurt, here's what I've built for you:

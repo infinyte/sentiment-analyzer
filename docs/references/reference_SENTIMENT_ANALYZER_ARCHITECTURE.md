@@ -1,5 +1,7 @@
 # Sentiment Analyzer - Altcoin Trading Intelligence Platform
 
+> Historical reference snapshot: this file preserves an earlier architecture draft and is not the authoritative description of the current runtime. For current behavior, use `README.md`, `SENTIMENT_ANALYZER_ARCHITECTURE.md`, and `CLAUDE.md`.
+
 ## Executive Summary
 
 A full-stack sentiment analysis and market intelligence platform that aggregates crypto market data, performs web-based sentiment analysis using Claude AI, and surfaces actionable trading insights through an interactive dashboard. Deployed on Azure Free Tier with hybrid refresh strategy: **real-time market data (5-15 min) + daily sentiment analysis + server-side orchestration**.

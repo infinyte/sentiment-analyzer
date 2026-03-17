@@ -6,7 +6,8 @@
       "Bash(wc:*)",
       "Bash(npm test:*)",
       "Bash(grep:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(find C:/work/sentiment-analyzer/backend/src/services/social-media C:/work/sentiment-analyzer/backend/src/database C:/work/sentiment-analyzer/backend/src/types C:/work/sentiment-analyzer/backend/src/routes -name *.ts)"
     ]
   }
 }

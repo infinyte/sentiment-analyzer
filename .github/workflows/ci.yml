@@ -7,6 +7,21 @@ on:
     branches: [main]
 
 jobs:
+  docs:
+    name: Docs — validate markdown consistency
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Validate docs
+        run: node scripts/validate-docs.mjs
+
   backend:
     name: Backend — lint, type-check, test, build
     runs-on: ubuntu-latest

@@ -1,5 +1,7 @@
 # Sentiment Analyzer - Quick Start Guide
 
+> Historical reference snapshot: this guide preserves an earlier scaffold-first setup flow and is not the authoritative description of the current repository layout. Use `README.md` for the current quick-start path.
+
 This guide walks you through setting up the project structure and getting started with development.
 
 ---

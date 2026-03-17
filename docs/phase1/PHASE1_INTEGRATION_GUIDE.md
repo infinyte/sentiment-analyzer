@@ -1,6 +1,17 @@
 INTEGRATION GUIDE - THE BRAINS OF YOUR APP
 ===========================================
 
+CURRENT REPOSITORY NOTE
+=======================
+
+This document is a Phase 1 integration blueprint, not a file-exact map of the current repository.
+
+Current implementation differences:
+- Core coin, sentiment, scraping, and trending routes are integrated in `backend/src/index.ts` rather than split across `routes/coins.ts` and `routes/sentiment-trading.ts`.
+- The primary dashboard and detail modal live in `frontend/src/App.tsx`.
+- MARL UI is implemented in `frontend/src/components/MarlCompetitionViewer.tsx`.
+- Use `README.md`, `SENTIMENT_ANALYZER_ARCHITECTURE.md`, and `docs/phase2/MARL_INTEGRATION_GUIDE.md` for the current runtime layout.
+
 Quick reference for integrating all components:
 - Sentiment analyzer
 - Trading agents

@@ -10,7 +10,7 @@ A full-stack crypto sentiment analysis platform. The backend fetches live market
 
 ### Backend (`cd backend`)
 ```bash
-npm run dev          # Start with hot-reload (nodemon + ts-node)
+npm run dev          # Start with hot-reload (nodemon + tsx)
 npm run build        # Compile TypeScript → dist/
 npm start            # Run compiled dist/index.js
 npm test             # Run Jest tests
@@ -45,8 +45,11 @@ React (localhost:5173)
 ### Backend (`backend/src/index.ts` + `backend/src/services/`)
 Routes and cron job live in `index.ts`; logic is split into service files:
 - **CoinGeckoService** (`services/coingecko.ts`) — top coins + OHLCV history
-- **NewsAPIService** (`services/newsapi.ts`) — headlines per coin
-- **SentimentService** (`services/sentiment.ts`) — Claude API, returns BULL/NEUTRAL/BEAR + summary; falls back to NEUTRAL on error
+- **NewsAPIService** (`services/newsapi.ts`) — structured news articles + headline helper
+- **ContentSignalService** (`services/content-signals.ts`) — normalized per-item scoring for NewsAPI, Reddit, and X-ready content
+- **SocialScraperService** (`services/social-scraper.ts`) — Reddit / Stocktwits / X scraping with dedupe and rate limiting
+- **TrendingTopicsEngine** (`services/trending-topics.ts`) — cross-source topic ranking with trending scores
+- **SentimentService** (`services/sentiment.ts`) — Claude API, returns BULL/NEUTRAL/BEAR + summary; falls back to local scored-signal heuristics on error
 - **SentimentAnalyzerEngine** (`services/sentiment-analyzer.ts`) — 4-mode local engine (BASIC/ADVANCED/TRADING_SIGNALS/SMART); no external API calls
 - **TradingAgent** (`services/trading-agent.ts`) — abstract base + RuleBasedAgent, MLBasedAgent, HybridAgent; AgentFactory for instantiation
 - **BacktestingEngine** (`services/backtesting-engine.ts`) — day-by-day simulation using CoinGecko OHLCV; stores results in memory
@@ -54,10 +57,14 @@ Routes and cron job live in `index.ts`; logic is split into service files:
 
 API endpoints (core):
 - `GET /api/coins` — top coins with sentiment
-- `GET /api/coins/:symbol` — detailed report
-- `GET /api/sentiment/:symbol` — cached sentiment only
+- `GET /api/coins/:symbol` — detailed report with `sentiment_today`, `scored_items`, and `source_breakdown`
+- `GET /api/sentiment/:symbol` — cached sentiment object including scored content metadata
 - `POST /api/refresh-sentiment` — admin trigger (requires `x-api-key` header matching `API_SECRET_KEY`)
 - `GET /api/health`
+- `GET /api/scrape/social` — scrape one symbol from social sources and auto-ingest posts into trending analysis
+- `POST /api/scrape/batch` — batch social scrape for up to 20 symbols
+- `GET /api/trending` — ranked trending topics across ingested social posts
+- `POST /api/trending/ingest` — manual ingestion endpoint for scraped posts/tests
 
 API endpoints (Phase 1):
 - `POST /api/sentiment/analyze` — 4-mode analysis; BASIC works without `marketData`, others require it
@@ -80,6 +87,7 @@ Multi-view app with Dashboard + MARL Competition tabs:
 - Polls `/api/coins` every 10 minutes on Dashboard view
 - `useCoins()` / `useCoinDetail()` custom hooks
 - Components: `SentimentBadge`, `PercentChange`, `CoinCard`, `Dashboard`, `DetailModal`, `MarlCompetitionViewer`
+- Detail modal renders `sentiment_today`, `source_breakdown`, and `scored_items` from the enriched coin detail payload
 - MARL hook: `useMarlCompetition()` in `frontend/src/hooks/useMarlCompetition.ts`
 - MARL types: `frontend/src/types/marl.ts`
 - All styles are inline (no CSS files)
@@ -99,7 +107,7 @@ Frontend `.env` only needs `VITE_API_BASE_URL=http://localhost:3000` for non-pro
 
 ## Implementation Status
 
-**Implemented:** All 5 core API endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, sentiment analysis pipeline (Claude API), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, daily cron job (`node-cron`), Chart.js price chart in detail modal, ESC/backdrop modal close, volatility calculation from CoinGecko high/low, `trending_score` from headline count, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table).
+**Implemented:** All 5 core API endpoints, social scraping endpoints, trending-topic endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, normalized content scoring pipeline (NewsAPI + Reddit + X-ready), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, SQLite sentiment/backtest persistence, daily sentiment cron job, scheduled trending scrape cron job, Chart.js price chart in detail modal, scored signal rendering in the detail modal, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table).
 
 ## Docker
 
@@ -126,6 +134,6 @@ Both jobs use Node 20 with npm cache enabled.
 
 ## Implementation Status
 
-**Implemented:** All 5 core API endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, sentiment analysis pipeline (Claude API), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, daily cron job (`node-cron`), Chart.js price chart in detail modal, ESC/backdrop modal close, volatility calculation from CoinGecko high/low, `trending_score` from headline count, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table), Winston structured logging, GitHub Actions CI/CD, Docker + docker-compose, frontend tests (Vitest + RTL — `frontend/src/__tests__/`).
+**Implemented:** All 5 core API endpoints, social scraping endpoints, trending-topic endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, normalized content scoring pipeline, SQLite persistence, Winston structured logging, GitHub Actions CI/CD, Docker + docker-compose, backend Jest coverage, frontend Vitest + RTL coverage, and detail-modal rendering for scored items and source breakdown.
 
-**Not yet implemented:** Azure Table Storage (SQLite via `better-sqlite3` is used instead), Application Insights structured logging.
+**Not yet implemented:** Azure Table Storage as the active persistence layer, Application Insights structured logging.
