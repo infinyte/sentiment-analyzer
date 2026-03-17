@@ -1,3 +1,13 @@
+jest.mock('../../services/coingecko', () => ({
+  CoinGeckoService: jest.fn().mockImplementation(() => ({
+    getTopCoins: jest.fn().mockResolvedValue([
+      { symbol: 'BTC', current_price: 50000 },
+      { symbol: 'ETH', current_price: 3000 },
+    ]),
+    getCoinHistory: jest.fn().mockResolvedValue([]),
+  })),
+}));
+
 import {
   MarlCompetitionEngine,
   MarlTradingAgent,

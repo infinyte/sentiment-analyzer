@@ -31,6 +31,39 @@ interface ContentSourceAdapter {
   collect(topic: string, symbol: string, days: number): Promise<NormalizedSourceItem[]>;
 }
 
+interface RedditSearchPost {
+  id?: string;
+  title?: string;
+  selftext?: string;
+  permalink?: string;
+  author?: string;
+  created_utc?: number;
+  score?: number;
+  num_comments?: number;
+}
+
+interface RedditSearchResponse {
+  data?: {
+    children?: Array<{ data?: RedditSearchPost }>;
+  };
+}
+
+interface XSearchTweet {
+  id?: string;
+  text?: string;
+  author_id?: string;
+  created_at?: string;
+  public_metrics?: {
+    like_count?: number;
+    retweet_count?: number;
+    reply_count?: number;
+  };
+}
+
+interface XSearchResponse {
+  data?: XSearchTweet[];
+}
+
 const POSITIVE_TERMS = [
   'surge', 'rally', 'gain', 'bull', 'bullish', 'breakout', 'approval', 'adoption', 'record', 'high',
   'partnership', 'upgrade', 'inflow', 'accumulation', 'launch', 'growth',
@@ -73,9 +106,9 @@ class RedditContentAdapter implements ContentSourceAdapter {
         return [];
       }
 
-      const data = (await response.json()) as any;
+      const data = (await response.json()) as RedditSearchResponse;
       const posts = data?.data?.children ?? [];
-      return posts.map((entry: any, index: number) => {
+      return posts.map((entry, index: number) => {
         const post = entry.data ?? {};
         return {
           id: `reddit-${post.id ?? index}`,
@@ -120,9 +153,9 @@ class XContentAdapter implements ContentSourceAdapter {
         return [];
       }
 
-      const data = (await response.json()) as any;
+      const data = (await response.json()) as XSearchResponse;
       const tweets = data?.data ?? [];
-      return tweets.map((tweet: any, index: number) => ({
+      return tweets.map((tweet, index: number) => ({
         id: `x-${tweet.id ?? index}`,
         source: 'x',
         sourceLabel: 'X',

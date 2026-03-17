@@ -13,6 +13,20 @@ interface SentimentAnalysisContext {
   collectionStats?: SentimentCollectionStats;
 }
 
+interface ClaudeMessageResponse {
+  content?: Array<{ text?: string }>;
+}
+
+interface ClaudeAnalysisPayload {
+  sentiment_score: Sentiment['sentiment_score'];
+  confidence: number;
+  summary: string;
+  key_catalysts: string[];
+  risk_factors: string[];
+  short_term_outlook: string;
+  volatility_warning: boolean;
+}
+
 export class SentimentService {
   private apiKey: string;
   private apiUrl = 'https://api.anthropic.com/v1/messages';
@@ -74,22 +88,6 @@ export class SentimentService {
       };
     };
 
-    const neutralDefault = (summary: string): Sentiment => ({
-      symbol,
-      analysis_date: new Date().toISOString().split('T')[0],
-      sentiment_score: 'NEUTRAL',
-      confidence: 0,
-      summary,
-      key_catalysts: [],
-      risk_factors: [],
-      short_term_outlook: '',
-      volatility_warning: false,
-      trending_score: 0,
-      scored_items: context?.scoredItems ?? [],
-      source_breakdown: context?.sourceBreakdown ?? [],
-      collection_stats: context?.collectionStats,
-    });
-
     try {
       const prompt = `You are a crypto market analyst. Analyze sentiment for ${symbol}.
 
@@ -127,11 +125,12 @@ Respond with ONLY this JSON (no markdown, no explanation):
 
       if (!response.ok) throw new Error(`Claude API error: ${response.status}`);
 
-      const data = (await response.json()) as any;
-      const content = data.content[0].text;
+      const data = (await response.json()) as ClaudeMessageResponse;
+      const content = data.content?.[0]?.text;
+      if (!content) throw new Error('Claude API returned no content');
 
       try {
-        const analysis = JSON.parse(content);
+        const analysis = JSON.parse(content) as ClaudeAnalysisPayload;
         return {
           symbol,
           analysis_date: new Date().toISOString().split('T')[0],

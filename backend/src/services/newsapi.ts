@@ -8,6 +8,18 @@ export interface NewsArticle {
   publishedAt?: string;
 }
 
+interface NewsApiResponseArticle {
+  title?: string;
+  description?: string;
+  url?: string;
+  source?: { name?: string };
+  publishedAt?: string;
+}
+
+interface NewsApiResponse {
+  articles?: NewsApiResponseArticle[];
+}
+
 export class NewsAPIService {
   private apiKey: string;
   private apiUrl = 'https://newsapi.org/v2';
@@ -31,8 +43,8 @@ export class NewsAPIService {
         return [];
       }
 
-      const data = (await response.json()) as any;
-      return (data.articles || []).slice(0, 20).map((article: any) => ({
+      const data = (await response.json()) as NewsApiResponse;
+      return (data.articles || []).slice(0, 20).map((article) => ({
         title: article.title || '',
         description: article.description || '',
         url: article.url || '',

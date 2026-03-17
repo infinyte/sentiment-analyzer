@@ -17,10 +17,31 @@ const BASE_URL = 'https://api.twitter.com/2';
 
 // Per-symbol query strategies
 const QUERY_TEMPLATES = [
-  (symbol: string, name: string) => `($${symbol} OR #${symbol}) lang:en -is:retweet`,
+  (symbol: string, _name: string) => `($${symbol} OR #${symbol}) lang:en -is:retweet`,
   (symbol: string, name: string) => `${name} crypto lang:en -is:retweet`,
   (symbol: string, _name: string) => `${symbol} price OR ${symbol} market lang:en -is:retweet`,
 ];
+
+interface TwitterSearchResponse {
+  data?: Array<{
+    id: string;
+    text?: string;
+    author_id?: string;
+    created_at?: string;
+    public_metrics?: {
+      like_count?: number;
+      retweet_count?: number;
+      reply_count?: number;
+      impression_count?: number;
+    };
+  }>;
+  includes?: {
+    users?: Array<{
+      id: string;
+      public_metrics?: { followers_count?: number };
+    }>;
+  };
+}
 
 // Simple 1 req/s rate limiter
 let lastCallTs = 0;
@@ -65,7 +86,7 @@ export class TwitterScraper {
           continue;
         }
 
-        const data = (await response.json()) as any;
+        const data = (await response.json()) as TwitterSearchResponse;
 
         // Build author follower lookup
         const userMap = new Map<string, number>();
@@ -80,7 +101,7 @@ export class TwitterScraper {
             source_id: tweet.id,
             content: tweet.text ?? '',
             author: tweet.author_id,
-            author_followers: userMap.get(tweet.author_id),
+            author_followers: tweet.author_id ? userMap.get(tweet.author_id) : undefined,
             engagement_likes: tweet.public_metrics?.like_count ?? 0,
             engagement_shares: tweet.public_metrics?.retweet_count ?? 0,
             engagement_comments: tweet.public_metrics?.reply_count ?? 0,

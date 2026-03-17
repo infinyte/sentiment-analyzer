@@ -722,12 +722,81 @@
           ]
         }
       ]
+    },
+    {
+      "name": "09 - Social Media Intelligence",
+      "description": "Test clustered trending topics and cursor-based item pagination",
+      "item": [
+        {
+          "name": "GET /api/social-media/trending-topics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/trending-topics?timeWindow=24&limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "trending-topics"],
+              "query": [
+                {"key": "timeWindow", "value": "24"},
+                {"key": "limit", "value": "10"}
+              ]
+            },
+            "description": "Fetch clustered trending topics across social sources. Topics that share a coin_symbol may be grouped into one response entry."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has topics array', function () { var data = pm.response.json(); pm.expect(data).to.have.property('topics'); pm.expect(Array.isArray(data.topics)).to.be.true; });",
+                  "pm.test('Clustered topic shape is present when topics exist', function () { var topics = pm.response.json().topics; if (topics.length > 0) { var topic = topics[0]; pm.expect(topic).to.have.property('primary_topic'); pm.expect(topic).to.have.property('cluster_size'); pm.expect(topic).to.have.property('clustered_topics'); pm.expect(Array.isArray(topic.clustered_topics)).to.be.true; } });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/social-media/items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/items?limit=25&sort=recency&since_hours=24",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "items"],
+              "query": [
+                {"key": "limit", "value": "25"},
+                {"key": "sort", "value": "recency"},
+                {"key": "since_hours", "value": "24"}
+              ]
+            },
+            "description": "Fetch scored social items. If more rows exist, the response may include next_cursor for keyset pagination."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response contains pagination metadata', function () { var data = pm.response.json(); pm.expect(data).to.have.property('limit'); pm.expect(data).to.have.property('offset'); pm.expect(data).to.have.property('items'); pm.expect(Array.isArray(data.items)).to.be.true; });",
+                  "pm.test('next_cursor is nullable or string', function () { var nextCursor = pm.response.json().next_cursor; pm.expect(nextCursor === undefined || nextCursor === null || typeof nextCursor === 'string').to.be.true; });",
+                  "if (pm.response.json().next_cursor) { pm.environment.set('social_items_cursor', pm.response.json().next_cursor); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
     {"key": "base_url", "value": "http://localhost:3000", "type": "string"},
     {"key": "api_secret_key", "value": "", "type": "string"},
     {"key": "test_symbol", "value": "", "type": "string"},
-    {"key": "marl_competition_id", "value": "", "type": "string"}
+    {"key": "marl_competition_id", "value": "", "type": "string"},
+    {"key": "social_items_cursor", "value": "", "type": "string"}
   ]
 }

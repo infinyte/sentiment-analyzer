@@ -949,7 +949,7 @@ export class MarlCompetitionEngine {
     action: AgentAction,
     prices: Map<string, number>,
     orderBook: SharedOrderBook,
-    competitorStates: MarlAgentState[]
+    _competitorStates: MarlAgentState[]
   ): ActionExecutionResult {
     if (!action.symbol) return { reward: 0, tradeExecuted: false };
     const symbol = action.symbol;

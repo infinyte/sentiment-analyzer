@@ -14,7 +14,7 @@ import { socialStore } from '../database/sqlite-social-store.js';
 import { SocialMediaScraperManager } from '../services/social-media/scraper/scraper-manager.js';
 import { TrendingTopicDiscoveryEngine } from '../services/social-media/trending/trending-discovery-engine.js';
 import { MultiSourceTrendingScoreCalculator } from '../services/social-media/trending/multi-source-calculator.js';
-import type { SocialSource } from '../types/social-media.js';
+import type { SocialSource, TopicType, TrendingTopicRecord } from '../types/social-media.js';
 import logger from '../logger.js';
 
 const router = Router();
@@ -22,6 +22,66 @@ const router = Router();
 const scraperManager = new SocialMediaScraperManager();
 const discoveryEngine = new TrendingTopicDiscoveryEngine();
 const trendCalculator = new MultiSourceTrendingScoreCalculator();
+
+export interface ClusteredTrendingTopicResponse {
+  rank: number;
+  topic: string;
+  primary_topic: string;
+  topic_type: TopicType;
+  coin_symbol?: string;
+  mention_count: number;
+  unique_sources: number;
+  signal_composite: number;
+  signal_sentiment: number;
+  velocity: number;
+  trend_direction: 'BULLISH' | 'NEUTRAL' | 'BEARISH';
+  last_updated: string;
+  cluster_size: number;
+  clustered_topics: string[];
+}
+
+export function clusterTrendingTopicsForResponse(topics: TrendingTopicRecord[]): ClusteredTrendingTopicResponse[] {
+  const groups = new Map<string, TrendingTopicRecord[]>();
+
+  for (const topic of topics) {
+    const key = topic.coin_symbol?.toUpperCase() ?? `${topic.topic_type}:${topic.topic.toLowerCase()}`;
+    const group = groups.get(key) ?? [];
+    group.push(topic);
+    groups.set(key, group);
+  }
+
+  const clustered = Array.from(groups.values()).map((records) => {
+    const sorted = [...records].sort((left, right) => right.signal_composite - left.signal_composite);
+    const primary = sorted[0];
+    const mentionCount = sorted.reduce((sum, record) => sum + record.mention_count, 0);
+    const weightedAverage = (selector: (record: TrendingTopicRecord) => number) => {
+      const numerator = sorted.reduce((sum, record) => sum + selector(record) * record.mention_count, 0);
+      return mentionCount > 0 ? Number((numerator / mentionCount).toFixed(2)) : 0;
+    };
+
+    const signalSentiment = weightedAverage(record => record.signal_sentiment);
+    return {
+      rank: 0,
+      topic: primary.coin_symbol ?? primary.topic,
+      primary_topic: primary.topic,
+      topic_type: primary.coin_symbol ? 'coin' : primary.topic_type,
+      coin_symbol: primary.coin_symbol,
+      mention_count: mentionCount,
+      unique_sources: Math.max(...sorted.map(record => record.unique_sources)),
+      signal_composite: weightedAverage(record => record.signal_composite),
+      signal_sentiment: signalSentiment,
+      velocity: Number(sorted.reduce((sum, record) => sum + record.velocity, 0).toFixed(3)),
+      trend_direction: signalSentiment > 65 ? 'BULLISH' : signalSentiment < 40 ? 'BEARISH' : 'NEUTRAL',
+      last_updated: sorted.reduce((latest, record) => latest > record.last_updated ? latest : record.last_updated, sorted[0].last_updated),
+      cluster_size: sorted.length,
+      clustered_topics: Array.from(new Set(sorted.map(record => record.topic))).sort(),
+    } satisfies ClusteredTrendingTopicResponse;
+  });
+
+  return clustered
+    .sort((left, right) => right.signal_composite - left.signal_composite)
+    .map((topic, index) => ({ ...topic, rank: index + 1 }));
+}
 
 // ── GET /api/social-media/trending-topics ─────────────────────────────────────
 
@@ -46,24 +106,12 @@ router.get('/api/social-media/trending-topics', async (req, res) => {
       topics = await discoveryEngine.discoverTrends(timeWindow, limit);
     }
 
+    const clustered = clusterTrendingTopicsForResponse(topics);
+
     res.json({
       timeWindow: `${timeWindow}h`,
-      count: topics.length,
-      topics: topics.map((t, i) => ({
-        rank: i + 1,
-        topic: t.topic,
-        topic_type: t.topic_type,
-        coin_symbol: t.coin_symbol,
-        mention_count: t.mention_count,
-        unique_sources: t.unique_sources,
-        signal_composite: t.signal_composite,
-        signal_sentiment: t.signal_sentiment,
-        velocity: t.velocity,
-        trend_direction:
-          t.signal_sentiment > 65 ? 'BULLISH'
-          : t.signal_sentiment < 40 ? 'BEARISH' : 'NEUTRAL',
-        last_updated: t.last_updated,
-      })),
+      count: clustered.length,
+      topics: clustered,
     });
   } catch (err) {
     logger.error('route error', { endpoint: '/api/social-media/trending-topics', error: String(err) });
@@ -81,16 +129,18 @@ router.get('/api/social-media/items', (req, res) => {
                        (req.query.sort as string) === 'engagement' ? 'engagement' : 'score';
     const limit      = Math.min(parseInt(req.query.limit as string) || 50, 200);
     const offset     = Math.max(parseInt(req.query.offset as string) || 0, 0);
+    const cursor     = req.query.cursor as string | undefined;
     const minScore   = req.query.min_score ? parseFloat(req.query.min_score as string) : undefined;
     const sinceHours = req.query.since_hours ? parseInt(req.query.since_hours as string) : 24;
 
-    const result = socialStore.queryItems({ coin, source, sort, limit, offset, minScore, sinceHours });
+    const result = socialStore.queryItems({ coin, source, sort, limit, offset, cursor, minScore, sinceHours });
 
     res.json({
       coin: coin?.toUpperCase(),
       total: result.total,
       limit: result.limit,
       offset: result.offset,
+      next_cursor: result.nextCursor,
       items: result.items,
     });
   } catch (err) {

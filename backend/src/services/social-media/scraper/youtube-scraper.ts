@@ -28,8 +28,29 @@ function publishedAfterParam(): string {
   return d.toISOString();
 }
 
-interface YtSearchItem { id: { videoId: string }; snippet: any }
-interface YtVideoStats { id: string; statistics: any; snippet: any }
+interface YtSearchItem {
+  id?: { videoId?: string };
+}
+
+interface YtVideoStats {
+  id: string;
+  statistics?: {
+    likeCount?: string;
+    commentCount?: string;
+    viewCount?: string;
+  };
+  snippet?: {
+    title?: string;
+    description?: string;
+    channelTitle?: string;
+    channelId?: string;
+    categoryId?: string;
+    publishedAt?: string;
+    thumbnails?: {
+      medium?: { url?: string };
+    };
+  };
+}
 
 export class YouTubeScraper {
   readonly source = 'youtube' as const;
@@ -105,7 +126,7 @@ export class YouTubeScraper {
     const snippet = video.snippet ?? {};
     const stats   = video.statistics ?? {};
 
-    const description = (snippet.description as string ?? '').slice(0, 500);
+    const description = (snippet.description ?? '').slice(0, 500);
     const content = [snippet.title, description].filter(Boolean).join('\n');
 
     return {

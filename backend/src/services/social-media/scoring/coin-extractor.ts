@@ -101,7 +101,7 @@ export interface ExtractionResult {
 export function extractCoins(text: string): string[] {
   const found = new Set<string>();
   const lower = text.toLowerCase();
-  const words = text.split(/[\s,.:;!?()\[\]"']+/);
+  const words = text.split(/[\s,.:;!?()[\]"']+/);
 
   // 1. Explicit $TICKER and #TICKER patterns
   for (const word of words) {

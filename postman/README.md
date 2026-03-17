@@ -246,6 +246,25 @@ newman run postman/sentiment-analyzer.postman_collection.json \
 
 ---
 
+### 08 - Social Media Intelligence 🧠
+Test the SQLite-backed social-media endpoints.
+
+**Tests:**
+- `GET /api/social-media/trending-topics` - clustered topic view
+- `GET /api/social-media/items` - scored items with cursor pagination
+
+**Validations:**
+- ✓ Related topics that share a `coin_symbol` can be returned as one clustered topic entry
+- ✓ Clustered topic payload includes `primary_topic`, `cluster_size`, and `clustered_topics`
+- ✓ Item feed returns `next_cursor` for keyset pagination
+- ✓ `offset` remains available for backward compatibility
+
+**Response Notes:**
+- Trending topics are clustered at the API layer, so entries like `BTC` and `#bitcoin` may appear as a single topic with `clustered_topics: ["#bitcoin", "BTC"]`
+- `/api/social-media/items` now supports `cursor=<opaque_token>` and returns `next_cursor` when another page is available
+
+---
+
 ## Test Execution Flow
 
 ### Recommended Order
@@ -258,6 +277,7 @@ newman run postman/sentiment-analyzer.postman_collection.json \
 6. **Sentiment Refresh** → Trigger analysis (costs Claude API)
 7. **Sentiment Cache** → Verify stored results
 8. **Data Consistency** → Final validation
+9. **Social Media Intelligence** → Validate clustered topics and cursor paging
 
 ---
 
@@ -405,6 +425,6 @@ To add new tests:
 
 ---
 
-**Last Updated:** 2026-03-16  
+**Last Updated:** 2026-03-17  
 **Version:** 1.0  
-**Test Coverage:** 40+ test cases across 7 functional areas
+**Test Coverage:** 40+ test cases across 8 functional areas

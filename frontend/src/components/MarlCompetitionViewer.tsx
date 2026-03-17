@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, type CSSProperties, type FormEvent } from 'react';
 import { Line } from 'react-chartjs-2';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
 import type { CompetitionConfig, CompetitionAgent as CompetitionAgentSpec } from '../types/marl';
@@ -8,7 +8,7 @@ type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 
 // ─── Style constants ─────────────────────────────────────────────────────────
 
-const card: React.CSSProperties = {
+const card: CSSProperties = {
   backgroundColor: '#fff',
   borderRadius: '0.75rem',
   padding: '1.25rem',
@@ -16,7 +16,7 @@ const card: React.CSSProperties = {
   marginBottom: '1rem',
 };
 
-const label: React.CSSProperties = {
+const label: CSSProperties = {
   display: 'block',
   fontSize: '0.75rem',
   fontWeight: '600',
@@ -26,7 +26,7 @@ const label: React.CSSProperties = {
   letterSpacing: '0.05em',
 };
 
-const input: React.CSSProperties = {
+const input: CSSProperties = {
   width: '100%',
   padding: '0.5rem 0.75rem',
   border: '1px solid #d1d5db',
@@ -35,7 +35,7 @@ const input: React.CSSProperties = {
   boxSizing: 'border-box',
 };
 
-const btn = (color = '#2563eb'): React.CSSProperties => ({
+const btn = (color = '#2563eb'): CSSProperties => ({
   padding: '0.5rem 1.25rem',
   backgroundColor: color,
   color: '#fff',
@@ -173,7 +173,7 @@ export function MarlCompetitionViewer() {
 
   useEffect(() => { loadList(); }, [loadList]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const symbols = symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     const config: CompetitionConfig = {
@@ -188,7 +188,7 @@ export function MarlCompetitionViewer() {
     startCompetition(config);
   };
 
-  const handleCompare = (e: React.FormEvent) => {
+  const handleCompare = (e: FormEvent) => {
     e.preventDefault();
     const symbols = symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     compareAgents(cmpA, cmpB, symbols, cmpRounds, cmpDuration);

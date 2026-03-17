@@ -10,11 +10,9 @@ import type { Coin, Sentiment } from './types.js';
 import { Cache } from './services/cache.js';
 import { CoinGeckoService } from './services/coingecko.js';
 import { ContentSignalService } from './services/content-signals.js';
-import { NewsAPIService } from './services/newsapi.js';
 import { SentimentService } from './services/sentiment.js';
 import { SentimentAnalyzerEngine } from './services/sentiment-analyzer.js';
 import type { MarketData, NewsData } from './services/sentiment-analyzer.js';
-import { AgentFactory } from './services/trading-agent.js';
 import type { AgentConfig } from './services/trading-agent.js';
 import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
@@ -23,7 +21,7 @@ import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { SocialScraperService } from './services/social-scraper.js';
-import type { SocialPlatform } from './services/social-scraper.js';
+import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
 import { SocialMediaScraperManager } from './services/social-media/scraper/scraper-manager.js';
 import { TrendingTopicDiscoveryEngine } from './services/social-media/trending/trending-discovery-engine.js';
@@ -58,7 +56,6 @@ app.use((req, res, next) => {
 // Initialize services
 const coingecko = new CoinGeckoService();
 const contentSignals = new ContentSignalService();
-const newsapi = new NewsAPIService();
 const sentiment = new SentimentService();
 const cache = new Cache();
 const sentimentCache = new Cache();
@@ -795,7 +792,7 @@ app.post('/api/trending/ingest', (req, res) => {
     if (!posts || !Array.isArray(posts) || posts.length === 0) {
       return res.status(400).json({ error: '"posts" array is required' });
     }
-    trendingEngine.ingestPosts(posts as any);
+    trendingEngine.ingestPosts(posts as ScrapedPost[]);
     res.json({ ingested: posts.length, stored_total: trendingEngine.storedPostCount });
   } catch (error) {
     logger.error('route error', { endpoint: '/api/trending/ingest', error: String(error) });
@@ -913,6 +910,19 @@ cron.schedule(socialCronSchedule, async () => {
     if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
   } catch (error) {
     logger.error('social cron failed', { error: String(error) });
+  }
+});
+
+// ============================================================================
+// MIDNIGHT CRON — reset daily source fetch counters
+// ============================================================================
+
+cron.schedule('0 0 * * *', () => {
+  try {
+    socialStore.resetDailyCounters();
+    logger.info('midnight cron: daily source counters reset');
+  } catch (error) {
+    logger.error('midnight cron failed', { error: String(error) });
   }
 });
 

@@ -1,7 +1,7 @@
 export class Cache {
-  private data = new Map<string, { value: any; expires: number }>();
+  private data = new Map<string, { value: unknown; expires: number }>();
 
-  set(key: string, value: any, ttlMs: number = 10 * 60 * 1000): void {
+  set(key: string, value: unknown, ttlMs: number = 10 * 60 * 1000): void {
     this.data.set(key, { value, expires: Date.now() + ttlMs });
   }
 

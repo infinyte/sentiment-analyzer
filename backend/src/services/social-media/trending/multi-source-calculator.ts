@@ -112,7 +112,7 @@ function compositeSignal(params: {
   velocity: number;
   unique_sources: number;
 }): number {
-  let { signal_sentiment, signal_engagement, signal_authority, signal_recency, velocity, unique_sources } = params;
+  const { signal_sentiment, signal_engagement, signal_authority, signal_recency, velocity, unique_sources } = params;
 
   // Base weights per spec
   let w_sent = 0.35, w_eng = 0.30, w_auth = 0.20, w_rec = 0.15;
@@ -225,7 +225,7 @@ export class MultiSourceTrendingScoreCalculator {
     };
   }
 
-  private emptyReport(symbol: string, intervalHours: number): MultiSourceTrendReport {
+  private emptyReport(symbol: string, _intervalHours: number): MultiSourceTrendReport {
     return {
       symbol,
       signal_sentiment: 50, signal_engagement: 0,

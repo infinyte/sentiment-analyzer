@@ -71,7 +71,6 @@ function upsert(
 function computeVelocity(currentCount: number, priorCount: number, windowHours: number): number {
   // Mentions per hour in current window
   const currentRate = currentCount / Math.max(windowHours, 1);
-  const priorRate   = priorCount   / Math.max(windowHours, 1);
   // Return absolute rate; caller can compare to prior rate for acceleration
   return parseFloat(currentRate.toFixed(3));
 }
@@ -126,7 +125,11 @@ export class TrendingTopicDiscoveryEngine {
    * Discover trending topics from the DB.
    * Persists results back to `trending_topics` table and returns them.
    */
-  async discoverTrends(timeWindowHours = 24, topN = 30, minMentions = 3): Promise<TrendingTopicRecord[]> {
+  async discoverTrends(
+    timeWindowHours = 24,
+    topN = 30,
+    minMentions = parseInt(process.env.TRENDING_MIN_MENTIONS ?? '3')
+  ): Promise<TrendingTopicRecord[]> {
     const start = Date.now();
 
     // Pull items for both current and prior windows
@@ -206,7 +209,7 @@ export class TrendingTopicDiscoveryEngine {
 
     for (const item of items) {
       const fullText = [item.title, item.content].filter(Boolean).join(' ');
-      const { coins, hashtags } = extractAll(fullText);
+      const { coins, hashtags, keywords } = extractAll(fullText);
 
       // Coins already extracted during scraping
       const effectiveCoins = item.coins_mentioned.length ? item.coins_mentioned : coins;
@@ -216,7 +219,13 @@ export class TrendingTopicDiscoveryEngine {
       }
       for (const tag of hashtags.slice(0, 3)) {
         // Only store crypto-relevant hashtags (skip generic ones like #news)
-        if (tag.length >= 3) upsert(map, `#${tag}`, 'hashtag', undefined, item);
+        if (tag.length >= 3) {
+          const hashtagCoinSymbol = extractAll(tag).coins[0];
+          upsert(map, `#${tag}`, 'hashtag', hashtagCoinSymbol, item);
+        }
+      }
+      for (const keyword of keywords.slice(0, 5)) {
+        upsert(map, keyword, 'keyword', undefined, item);
       }
     }
 

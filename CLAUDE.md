@@ -82,14 +82,36 @@ API endpoints (Phase 2 — MARL Competition):
 - `GET /api/marl/competitions` — list all competitions (in-memory)
 - `GET /api/marl/info` — static documentation for modes/config
 
+API endpoints (Phase 3 — Social Media Intelligence):
+- `GET /api/social-media/trending-topics` — top trending topics (clustered by coin); query: `timeWindow`, `limit`, `type`
+- `GET /api/social-media/items` — paginated scored social items; query: `coin`, `source`, `sort`, `limit`, `offset`, `cursor`, `min_score`, `since_hours`
+- `GET /api/social-media/item/:id` — single item with `scoring_breakdown` and signal weights
+- `GET /api/social-media/stats` — source health counters and item totals
+- `GET /api/trending-score/:symbol` — multi-source `MultiSourceTrendReport`; query: `interval`
+- `POST /api/social-media/refresh` — fire-and-forget scrape; body: `{ symbols?, rss_only? }`; returns 202
+
+Social media services (`backend/src/services/social-media/`):
+- **Scrapers** (`scraper/`): `twitter-scraper.ts`, `reddit-scraper.ts`, `rss-scraper.ts`, `discord-scraper.ts`, `telegram-scraper.ts`, `youtube-scraper.ts`, `tiktok-scraper.ts`; orchestrated by `scraper-manager.ts`
+- **Scoring** (`scoring/`): `coin-extractor.ts` (55-coin dictionary, `$BTC`/`#BTC`/name detection), `item-scorer.ts` (4-signal pipeline: sentiment 30%, engagement 25%, authority 25%, recency 20%)
+- **Trending** (`trending/`): `trending-discovery-engine.ts` (cross-source entity aggregation, velocity vs prior window, persists to DB), `multi-source-calculator.ts` (per-symbol trend report with historical comparison)
+- **SQLite store** (`database/sqlite-social-store.ts`): tables `social_media_items`, `trending_topics`, `trending_topic_history`, `source_metadata`; cursor-based pagination; bulk upsert via transactions
+
+Cron jobs (in `index.ts`):
+- Hourly (`SOCIAL_SCRAPE_CRON`, default `0 * * * *`): RSS + Discord + Telegram bulk refresh, Twitter + Reddit for top 10 coins, `discoverTrends()`, prune old items
+- Midnight (`0 0 * * *`): `socialStore.resetDailyCounters()`
+
+Telemetry:
+- **AppInsightsTransport** (`telemetry/app-insights-transport.ts`): Winston transport that POSTs batched `MessageData`/`ExceptionData` envelopes to Azure Application Insights REST API; enabled when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set
+
 ### Frontend (`frontend/src/App.tsx`)
-Multi-view app with Dashboard + MARL Competition tabs:
+Multi-view app with Dashboard, MARL Competition, and Social Intel tabs:
 - Polls `/api/coins` every 10 minutes on Dashboard view
-- `useCoins()` / `useCoinDetail()` custom hooks
-- Components: `SentimentBadge`, `PercentChange`, `CoinCard`, `Dashboard`, `DetailModal`, `MarlCompetitionViewer`
+- `useCoins()` / `useCoinDetail()` custom hooks in `App.tsx`
+- Components: `SentimentBadge`, `PercentChange`, `CoinCard`, `Dashboard`, `DetailModal`, `MarlCompetitionViewer`, `SocialDashboard`
 - Detail modal renders `sentiment_today`, `source_breakdown`, and `scored_items` from the enriched coin detail payload
-- MARL hook: `useMarlCompetition()` in `frontend/src/hooks/useMarlCompetition.ts`
-- MARL types: `frontend/src/types/marl.ts`
+- MARL hook: `useMarlCompetition()` in `frontend/src/hooks/useMarlCompetition.ts`; types: `frontend/src/types/marl.ts`
+- Social hooks: `useTrendingTopics`, `useSocialItems`, `useSocialStats`, `useTrendScore` in `frontend/src/hooks/useSocialMedia.ts`; types: `frontend/src/types/social-media.ts`
+- `SocialDashboard` (`frontend/src/components/SocialDashboard.tsx`): trending topics ranked table, per-symbol trend score panel (composite/sentiment/engagement signals, sentiment distribution, acceleration), social items feed (filterable by coin/source/sort), source health table
 - All styles are inline (no CSS files)
 - Vite proxies `/api` to `http://localhost:3000`
 
@@ -104,10 +126,6 @@ API_SECRET_KEY=       # any string for admin endpoint auth
 `COINGECKO_API_KEY` is optional (free tier works without it).
 
 Frontend `.env` only needs `VITE_API_BASE_URL=http://localhost:3000` for non-proxied use; defaults work for dev.
-
-## Implementation Status
-
-**Implemented:** All 5 core API endpoints, social scraping endpoints, trending-topic endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, normalized content scoring pipeline (NewsAPI + Reddit + X-ready), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, SQLite sentiment/backtest persistence, daily sentiment cron job, scheduled trending scrape cron job, Chart.js price chart in detail modal, scored signal rendering in the detail modal, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table).
 
 ## Docker
 
@@ -134,6 +152,6 @@ Both jobs use Node 20 with npm cache enabled.
 
 ## Implementation Status
 
-**Implemented:** All 5 core API endpoints, social scraping endpoints, trending-topic endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, normalized content scoring pipeline, SQLite persistence, Winston structured logging, GitHub Actions CI/CD, Docker + docker-compose, backend Jest coverage, frontend Vitest + RTL coverage, and detail-modal rendering for scored items and source breakdown.
+**Implemented:** All 5 core API endpoints, social scraping endpoints, trending-topic endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, 6 Phase 3 social-media intelligence endpoints, normalized content scoring pipeline (NewsAPI + Reddit + X-ready), 4-signal social item scoring pipeline, 7-source scraper suite (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok), trending topic discovery with velocity + entity clustering, multi-source coin trend report with historical comparison, SQLite social persistence (3 new tables + cursor pagination), Application Insights Winston transport, hourly social scrape cron, midnight counter-reset cron, Winston structured logging, GitHub Actions CI/CD, Docker + docker-compose, ESLint configs (backend + frontend), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, SQLite sentiment/backtest persistence, daily sentiment cron job, Chart.js price chart in detail modal, scored signal rendering in the detail modal, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table), **Social Intel React UI** (`SocialDashboard` with trending topics table, trend score panel, items feed with filters, source health table), backend Jest 200 tests, frontend Vitest 35 tests.
 
-**Not yet implemented:** Azure Table Storage as the active persistence layer, Application Insights structured logging.
+**Not yet implemented:** Azure Table Storage as active persistence layer.

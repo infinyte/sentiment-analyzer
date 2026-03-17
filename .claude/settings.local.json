@@ -7,7 +7,14 @@
       "Bash(npm test:*)",
       "Bash(grep:*)",
       "Bash(npm run:*)",
-      "Bash(find C:/work/sentiment-analyzer/backend/src/services/social-media C:/work/sentiment-analyzer/backend/src/database C:/work/sentiment-analyzer/backend/src/types C:/work/sentiment-analyzer/backend/src/routes -name *.ts)"
+      "Bash(find C:/work/sentiment-analyzer/backend/src/services/social-media C:/work/sentiment-analyzer/backend/src/database C:/work/sentiment-analyzer/backend/src/types C:/work/sentiment-analyzer/backend/src/routes -name *.ts)",
+      "Bash(find C:/work/sentiment-analyzer/backend/src -name *.test.ts -o -name *.spec.ts)",
+      "Bash(find C:/work/sentiment-analyzer/backend/src/__tests__ -name *.ts)",
+      "Bash(find C:/work/sentiment-analyzer/frontend/src/__tests__ -name *.tsx -o -name *.ts)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\(''''devDependencies'''', {}\\).keys\\(\\)\\)\\)\")",
+      "Bash(npm install:*)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); pkg=d.get\\(''''packages'''',{}\\).get\\(''''node_modules/@vitejs/plugin-react'''',{}\\); print\\(pkg.get\\(''''version'''',''''missing''''\\)\\)\")",
+      "Bash(npm ci:*)"
     ]
   }
 }

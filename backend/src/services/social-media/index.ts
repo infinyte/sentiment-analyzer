@@ -13,3 +13,4 @@ export { RssScraper, DEFAULT_FEEDS }   from './scraper/rss-scraper.js';
 export { DiscordScraper }              from './scraper/discord-scraper.js';
 export { TelegramScraper }             from './scraper/telegram-scraper.js';
 export { YouTubeScraper }              from './scraper/youtube-scraper.js';
+export { TikTokScraper }               from './scraper/tiktok-scraper.js';

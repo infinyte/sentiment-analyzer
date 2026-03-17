@@ -38,6 +38,30 @@ const COIN_SUBREDDITS: Record<string, string> = {
 let oauthToken: string | null = null;
 let oauthExpiry = 0;
 
+interface RedditOAuthResponse {
+  access_token?: string;
+  expires_in?: number;
+}
+
+interface RedditPost {
+  id?: string;
+  title?: string;
+  selftext?: string;
+  author?: string;
+  score?: number;
+  num_comments?: number;
+  created_utc?: number;
+  permalink?: string;
+  subreddit?: string;
+  upvote_ratio?: number;
+}
+
+interface RedditListingResponse {
+  data?: {
+    children?: Array<{ data?: RedditPost }>;
+  };
+}
+
 async function getOAuthToken(): Promise<string | null> {
   if (!CLIENT_ID || !CLIENT_SECRET) return null;
   if (oauthToken && Date.now() < oauthExpiry) return oauthToken;
@@ -55,7 +79,7 @@ async function getOAuthToken(): Promise<string | null> {
       body,
     });
     if (!res.ok) return null;
-    const data = (await res.json()) as any;
+    const data = (await res.json()) as RedditOAuthResponse;
     oauthToken  = data.access_token ?? null;
     oauthExpiry = Date.now() + (data.expires_in ?? 3600) * 1000 - 60_000;
     return oauthToken;
@@ -77,7 +101,7 @@ function baseUrl(token: string | null): string {
   return token ? 'https://oauth.reddit.com' : 'https://www.reddit.com';
 }
 
-function parsePost(p: any): SocialMediaItem | null {
+function parsePost(p?: RedditPost): SocialMediaItem | null {
   if (!p?.id) return null;
   return {
     id: randomUUID(),
@@ -120,7 +144,7 @@ export class RedditScraper {
         return items;
       }
       if (res.ok) {
-        const data = (await res.json()) as any;
+        const data = (await res.json()) as RedditListingResponse;
         for (const entry of data?.data?.children ?? []) {
           const item = parsePost(entry.data);
           if (item) items.push(item);
@@ -136,7 +160,7 @@ export class RedditScraper {
         const url = `${base}/r/${COIN_SUBREDDITS[symbol]}/hot.json?limit=10`;
         const res = await fetch(url, { headers: hdrs });
         if (res.ok) {
-          const data = (await res.json()) as any;
+          const data = (await res.json()) as RedditListingResponse;
           for (const entry of data?.data?.children ?? []) {
             const item = parsePost(entry.data);
             if (item) items.push(item);

@@ -36,6 +36,35 @@ const DEFAULT_PUBLIC_CHANNELS = [
 
 const BOT_API = 'https://api.telegram.org';
 
+interface TelegramBotChat {
+  id: number;
+  username?: string;
+  title?: string;
+}
+
+interface TelegramBotUser {
+  username?: string;
+  first_name?: string;
+}
+
+interface TelegramBotMessage {
+  message_id: number;
+  text?: string;
+  views?: number;
+  date: number;
+  from?: TelegramBotUser;
+  chat: TelegramBotChat;
+}
+
+interface TelegramBotUpdate {
+  message?: TelegramBotMessage;
+  channel_post?: TelegramBotMessage;
+}
+
+interface TelegramBotApiResponse {
+  result?: TelegramBotUpdate[];
+}
+
 // ── HTML parser for t.me/s/{channel} ─────────────────────────────────────────
 
 interface TgPublicMessage {
@@ -199,8 +228,8 @@ export class TelegramScraper {
         return items;
       }
 
-      const data = (await response.json()) as any;
-      const updates: any[] = data?.result ?? [];
+      const data = (await response.json()) as TelegramBotApiResponse;
+      const updates = data?.result ?? [];
 
       for (const update of updates) {
         const msg = update.message ?? update.channel_post;

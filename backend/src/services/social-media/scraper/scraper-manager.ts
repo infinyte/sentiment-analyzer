@@ -17,6 +17,7 @@ import { RssScraper }      from './rss-scraper.js';
 import { DiscordScraper }  from './discord-scraper.js';
 import { TelegramScraper } from './telegram-scraper.js';
 import { YouTubeScraper }  from './youtube-scraper.js';
+import { TikTokScraper }   from './tiktok-scraper.js';
 import { scoreItems }      from '../scoring/item-scorer.js';
 import { extractCoins }    from '../scoring/coin-extractor.js';
 import { socialStore }     from '../../../database/sqlite-social-store.js';
@@ -58,6 +59,7 @@ export class SocialMediaScraperManager {
   private readonly discord  = new DiscordScraper();
   private readonly telegram = new TelegramScraper();
   private readonly youtube  = new YouTubeScraper();
+  private readonly tiktok   = new TikTokScraper();
 
   // ── Per-coin fetch ─────────────────────────────────────────────────────────
 
@@ -94,6 +96,10 @@ export class SocialMediaScraperManager {
       this.youtube.fetch(upper, name).then(items => {
         bySource.youtube = items.length; allRaw.push(...items);
       }).catch(err => errors.push(`youtube: ${String(err)}`)),
+
+      this.tiktok.fetch(upper, name).then(items => {
+        bySource.tiktok = items.length; allRaw.push(...items);
+      }).catch(err => errors.push(`tiktok: ${String(err)}`)),
     ]);
 
     this.populateCoins(allRaw, upper);

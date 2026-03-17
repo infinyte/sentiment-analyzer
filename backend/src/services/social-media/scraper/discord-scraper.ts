@@ -26,10 +26,30 @@ const CHANNEL_IDS = (process.env.DISCORD_CHANNEL_IDS ?? '')
 
 const API_BASE = 'https://discord.com/api/v10';
 
+interface DiscordReaction {
+  count?: number;
+}
+
+interface DiscordAuthor {
+  id?: string;
+  username?: string;
+}
+
+interface DiscordMessage {
+  id?: string;
+  content?: string;
+  timestamp?: string;
+  guild_id?: string;
+  type?: number;
+  author?: DiscordAuthor;
+  reactions?: DiscordReaction[];
+  referenced_message?: unknown;
+}
+
 // Reaction-to-engagement: total unique emoji reactions across a message
-function countReactions(reactions: any[]): number {
+function countReactions(reactions: DiscordReaction[]): number {
   if (!Array.isArray(reactions)) return 0;
-  return reactions.reduce((sum: number, r: any) => sum + (r.count ?? 0), 0);
+  return reactions.reduce((sum: number, reaction) => sum + (reaction.count ?? 0), 0);
 }
 
 // Resolve Discord snowflake → approximate UTC timestamp
@@ -75,7 +95,7 @@ export class DiscordScraper {
           continue;
         }
 
-        const messages = (await response.json()) as any[];
+        const messages = (await response.json()) as DiscordMessage[];
 
         for (const msg of messages) {
           if (!msg.id || !msg.content) continue;
@@ -131,7 +151,7 @@ export class DiscordScraper {
           { headers: { Authorization: `Bot ${BOT_TOKEN}`, Accept: 'application/json' } }
         );
         if (!response.ok) continue;
-        const messages = (await response.json()) as any[];
+        const messages = (await response.json()) as DiscordMessage[];
         for (const msg of messages) {
           if (!msg.id || !msg.content?.trim()) continue;
           all.push({

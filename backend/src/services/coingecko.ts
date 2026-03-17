@@ -1,6 +1,22 @@
 import type { Coin } from '../types.js';
 import logger from '../logger.js';
 
+interface CoinGeckoMarketCoin {
+  id: string;
+  symbol: string;
+  name: string;
+  current_price: number;
+  market_cap?: number;
+  total_volume?: number;
+  price_change_percentage_24h?: number;
+  price_change_percentage_7d?: number;
+  high_24h?: number;
+  low_24h?: number;
+  market_cap_rank?: number;
+}
+
+type CoinGeckoOhlcPoint = [number, number, number, number, number];
+
 export class CoinGeckoService {
   private apiUrl = 'https://api.coingecko.com/api/v3';
 
@@ -13,9 +29,9 @@ export class CoinGeckoService {
 
       if (!response.ok) throw new Error(`CoinGecko API error: ${response.status}`);
 
-      const data = (await response.json()) as any[];
+      const data = (await response.json()) as CoinGeckoMarketCoin[];
 
-      return data.map((coin: any) => {
+      return data.map((coin) => {
         // Calculate volatility_24h from high/low range
         const high24h = coin.high_24h || coin.current_price;
         const low24h = coin.low_24h || coin.current_price;
@@ -57,9 +73,9 @@ export class CoinGeckoService {
 
       if (!response.ok) throw new Error(`Failed to fetch history for ${coinId}`);
 
-      const data = (await response.json()) as any[];
+      const data = (await response.json()) as CoinGeckoOhlcPoint[];
 
-      return data.map((point: any[]) => ({
+      return data.map((point) => ({
         timestamp: new Date(point[0]),
         open: point[1],
         high: point[2],

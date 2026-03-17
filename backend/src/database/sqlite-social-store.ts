@@ -17,7 +17,6 @@ import type {
   ScoredSocialItem,
   SocialSource,
   SourceMetadata,
-  SourceStatus,
   TrendingTopicRecord,
   TopicType,
 } from '../types/social-media.js';
@@ -30,6 +29,7 @@ export interface SocialItemsQuery {
   source?: SocialSource;
   limit?: number;
   offset?: number;
+  cursor?: string;
   sort?: 'score' | 'recency' | 'engagement';
   minScore?: number;
   sinceHours?: number;
@@ -40,6 +40,14 @@ export interface PaginatedItems {
   total: number;
   limit: number;
   offset: number;
+  nextCursor?: string;
+}
+
+interface CursorPayload {
+  sort: 'score' | 'recency' | 'engagement';
+  primary: number | string;
+  fetched_at: string;
+  id: string;
 }
 
 // ── SocialStorageService ──────────────────────────────────────────────────────
@@ -49,9 +57,8 @@ export class SocialStorageService {
   private readonly dbPath: string;
 
   constructor(dbPath?: string) {
-    this.dbPath = path.resolve(
-      dbPath ?? process.env.DATABASE_PATH ?? './sentiment_analyzer.db'
-    );
+    const raw = dbPath ?? process.env.DATABASE_PATH ?? './sentiment_analyzer.db';
+    this.dbPath = raw === ':memory:' ? ':memory:' : path.resolve(raw);
   }
 
   // ── Lifecycle ──────────────────────────────────────────────────────────────
@@ -161,7 +168,7 @@ export class SocialStorageService {
 
   queryItems(query: SocialItemsQuery = {}): PaginatedItems {
     const db = this.requireDb();
-    const { coin, source, limit = 50, offset = 0, sort = 'score', minScore, sinceHours } = query;
+    const { coin, source, limit = 50, offset = 0, cursor, sort = 'score', minScore, sinceHours } = query;
 
     const conditions: string[] = [];
     const params: Record<string, unknown> = {};
@@ -183,15 +190,52 @@ export class SocialStorageService {
       params.since = `-${sinceHours} hours`;
     }
 
+    const orderCol = sort === 'score'
+      ? 'score_composite'
+      : sort === 'engagement'
+        ? 'score_engagement'
+        : 'fetched_at';
+
+    const parsedCursor = cursor ? decodeCursor(cursor) : undefined;
+    if (parsedCursor && parsedCursor.sort === sort) {
+      if (sort === 'recency') {
+        conditions.push(`(fetched_at < @cursorFetchedAt OR (fetched_at = @cursorFetchedAt AND id < @cursorId))`);
+      } else {
+        conditions.push(`(
+          ${orderCol} < @cursorPrimary OR
+          (${orderCol} = @cursorPrimary AND fetched_at < @cursorFetchedAt) OR
+          (${orderCol} = @cursorPrimary AND fetched_at = @cursorFetchedAt AND id < @cursorId)
+        )`);
+        params.cursorPrimary = parsedCursor.primary;
+      }
+      params.cursorFetchedAt = parsedCursor.fetched_at;
+      params.cursorId = parsedCursor.id;
+    }
+
     const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
-    const orderCol = sort === 'score' ? 'score_composite' : sort === 'engagement' ? 'score_engagement' : 'content_created_at';
 
     const countRow = db.prepare(`SELECT COUNT(*) AS cnt FROM social_media_items ${where}`).get(params) as { cnt: number };
-    const rows = db.prepare(
-      `SELECT * FROM social_media_items ${where} ORDER BY ${orderCol} DESC LIMIT @limit OFFSET @offset`
-    ).all({ ...params, limit, offset }) as RawItemRow[];
+    const orderClause = `ORDER BY ${orderCol} DESC, fetched_at DESC, id DESC`;
+    const sql = parsedCursor && parsedCursor.sort === sort
+      ? `SELECT * FROM social_media_items ${where} ${orderClause} LIMIT @limit`
+      : `SELECT * FROM social_media_items ${where} ${orderClause} LIMIT @limit OFFSET @offset`;
 
-    return { items: rows.map(parseItemRow), total: countRow.cnt, limit, offset };
+    const rows = db.prepare(sql).all({ ...params, limit, offset }) as RawItemRow[];
+    const lastRow = rows.at(-1);
+    const nextCursor = rows.length === limit && lastRow
+      ? encodeCursor({
+          sort,
+          primary: sort === 'score'
+            ? lastRow.score_composite
+            : sort === 'engagement'
+              ? lastRow.score_engagement
+              : lastRow.fetched_at,
+          fetched_at: lastRow.fetched_at,
+          id: lastRow.id,
+        })
+      : undefined;
+
+    return { items: rows.map(parseItemRow), total: countRow.cnt, limit, offset, nextCursor };
   }
 
   /** Items mentioning a coin, within the last N hours — for trend aggregation. */
@@ -505,3 +549,17 @@ function parseItemRow(row: RawItemRow): ScoredSocialItem {
 // ── Singleton ─────────────────────────────────────────────────────────────────
 
 export const socialStore = new SocialStorageService();
+
+function encodeCursor(payload: CursorPayload): string {
+  return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+}
+
+function decodeCursor(cursor: string): CursorPayload | undefined {
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as CursorPayload;
+    if (!parsed || !parsed.sort || !parsed.fetched_at || !parsed.id) return undefined;
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}

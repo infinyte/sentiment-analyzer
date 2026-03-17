@@ -45,6 +45,53 @@ export interface SocialScrapeResult {
   scraped_at: string;
 }
 
+interface RedditScrapePost {
+  id?: string;
+  subreddit?: string;
+  title?: string;
+  selftext?: string;
+  permalink?: string;
+  author?: string;
+  created_utc?: number;
+  score?: number;
+  num_comments?: number;
+}
+
+interface RedditScrapeResponse {
+  data?: {
+    children?: Array<{ data?: RedditScrapePost }>;
+  };
+}
+
+interface StocktwitsMessage {
+  id?: number | string;
+  body?: string;
+  created_at?: string;
+  user?: { username?: string };
+  likes?: { total?: number };
+  reshares?: { reshared_count?: number };
+}
+
+interface StocktwitsResponse {
+  messages?: StocktwitsMessage[];
+}
+
+interface XScrapeTweet {
+  id?: string;
+  text?: string;
+  author_id?: string;
+  created_at?: string;
+  public_metrics?: {
+    like_count?: number;
+    reply_count?: number;
+    retweet_count?: number;
+  };
+}
+
+interface XScrapeResponse {
+  data?: XScrapeTweet[];
+}
+
 // ── Rate limiter ───────────────────────────────────────────────────────────────
 
 class RateLimiter {
@@ -121,8 +168,8 @@ class RedditAdapter implements PlatformAdapter {
         return [];
       }
 
-      const data = (await response.json()) as any;
-      return (data?.data?.children ?? []).map((entry: any): ScrapedPost | null => {
+      const data = (await response.json()) as RedditScrapeResponse;
+      return (data?.data?.children ?? []).map((entry): ScrapedPost | null => {
         const p = entry.data ?? {};
         if (!p.id) return null;
         return {
@@ -167,8 +214,8 @@ class StocktwitsAdapter implements PlatformAdapter {
         return [];
       }
 
-      const data = (await response.json()) as any;
-      return (data?.messages ?? []).map((msg: any): ScrapedPost => ({
+      const data = (await response.json()) as StocktwitsResponse;
+      return (data?.messages ?? []).map((msg): ScrapedPost => ({
         id: `stocktwits-${msg.id}`,
         platform: 'stocktwits',
         platform_label: 'Stocktwits',
@@ -217,8 +264,8 @@ class XAdapter implements PlatformAdapter {
         return [];
       }
 
-      const data = (await response.json()) as any;
-      return (data?.data ?? []).map((tweet: any): ScrapedPost => ({
+      const data = (await response.json()) as XScrapeResponse;
+      return (data?.data ?? []).map((tweet): ScrapedPost => ({
         id: `x-${tweet.id}`,
         platform: 'x',
         platform_label: 'X (Twitter)',

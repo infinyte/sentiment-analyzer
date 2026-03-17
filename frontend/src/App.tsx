@@ -1,8 +1,9 @@
 // FRONTEND - App.tsx
 // Main React component with dashboard, detail modal, and MARL competition view
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
+import { SocialDashboard } from './components/SocialDashboard';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -806,7 +807,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'marl';
+type ActiveView = 'dashboard' | 'marl' | 'social';
 
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
@@ -852,6 +853,9 @@ export default function App() {
           <button style={navTabStyle('marl')} onClick={() => setActiveView('marl')}>
             MARL Competition
           </button>
+          <button style={navTabStyle('social')} onClick={() => setActiveView('social')}>
+            Social Intel
+          </button>
         </div>
       </nav>
 
@@ -862,6 +866,9 @@ export default function App() {
         )}
         {activeView === 'marl' && (
           <MarlCompetitionViewer />
+        )}
+        {activeView === 'social' && (
+          <SocialDashboard />
         )}
       </main>
 
