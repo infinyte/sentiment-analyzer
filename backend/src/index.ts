@@ -6,7 +6,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
-import type { Coin, Sentiment } from './types.js';
+import type { Coin, Sentiment, TrendingSentiment } from './types.js';
+import type { TrendingTopicRecord } from './types/social-media.js';
 import { Cache } from './services/cache.js';
 import { CoinGeckoService } from './services/coingecko.js';
 import { ContentSignalService } from './services/content-signals.js';
@@ -223,6 +224,45 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<Sentiment> {
 }
 
 // ============================================================================
+// TRENDING SENTIMENT HELPERS
+// ============================================================================
+
+function trendRecordToSentiment(record: TrendingTopicRecord): TrendingSentiment {
+  const composite = record.signal_composite;
+  return {
+    sentiment: composite > 65 ? 'BULL' : composite < 40 ? 'BEAR' : 'NEUTRAL',
+    composite_score: composite,
+    velocity: record.velocity,
+    mention_count: record.mention_count,
+    unique_sources: record.unique_sources,
+    signals: {
+      sentiment: record.signal_sentiment,
+      engagement: record.signal_engagement,
+      authority: record.signal_authority,
+      recency: record.signal_recency,
+    },
+  };
+}
+
+function buildTrendingMap(): Map<string, TrendingTopicRecord> {
+  try {
+    const topics = socialStore.getTrendingTopics(200, 'coin');
+    const map = new Map<string, TrendingTopicRecord>();
+    for (const topic of topics) {
+      if (!topic.coin_symbol) continue;
+      const sym = topic.coin_symbol.toUpperCase();
+      const existing = map.get(sym);
+      if (!existing || topic.signal_composite > existing.signal_composite) {
+        map.set(sym, topic);
+      }
+    }
+    return map;
+  } catch {
+    return new Map();
+  }
+}
+
+// ============================================================================
 // API ROUTES
 // ============================================================================
 
@@ -242,12 +282,26 @@ app.get('/api/coins', async (req, res) => {
     // Fetch sentiment for each coin (cached separately with 24-hour TTL)
     await Promise.all(coins.map(coin => fetchAndCacheSentiment(coin)));
 
-    // Apply sorting
+    // Augment with Phase 3 social trending data (single fast sync read)
+    const trendingMap = buildTrendingMap();
+    const responseCoins = coins.map(coin => {
+      const trendRecord = trendingMap.get(coin.symbol);
+      if (!trendRecord) return coin;
+      const trending = trendRecordToSentiment(trendRecord);
+      return {
+        ...coin,
+        sentiment_score: trending.sentiment,
+        sentiment_confidence: trending.composite_score / 100,
+        trending_sentiment: trending,
+      };
+    });
+
+    // Apply sorting (on augmented data)
     if (sortBy === 'volatility') {
-      coins.sort((a, b) => b.volatility_24h - a.volatility_24h);
+      responseCoins.sort((a, b) => b.volatility_24h - a.volatility_24h);
     } else if (sortBy === 'sentiment') {
       const order = { BULL: 0, NEUTRAL: 1, BEAR: 2 };
-      coins.sort(
+      responseCoins.sort(
         (a, b) =>
           order[a.sentiment_score] - order[b.sentiment_score] ||
           b.sentiment_confidence - a.sentiment_confidence
@@ -255,9 +309,9 @@ app.get('/api/coins', async (req, res) => {
     }
 
     res.json({
-      data: coins,
+      data: responseCoins,
       last_updated: new Date(),
-      count: coins.length,
+      count: responseCoins.length,
     });
   } catch (error) {
     logger.error('route error', { endpoint: '/api/coins', error: String(error) });
@@ -296,12 +350,17 @@ app.get('/api/coins/:symbol', async (req, res) => {
       return data;
     })();
 
+    const trendRecord = buildTrendingMap().get(symbol.toUpperCase());
+    const trendingSentiment = trendRecord ? trendRecordToSentiment(trendRecord) : undefined;
+
     res.json({
-      coin,
+      coin: trendingSentiment
+        ? { ...coin, sentiment_score: trendingSentiment.sentiment, sentiment_confidence: trendingSentiment.composite_score / 100, trending_sentiment: trendingSentiment }
+        : coin,
       price_history: priceHistory,
       sentiment_today: {
-        sentiment_score: coin.sentiment_score,
-        confidence: coin.sentiment_confidence,
+        sentiment_score: trendingSentiment?.sentiment ?? coin.sentiment_score,
+        confidence: trendingSentiment ? trendingSentiment.composite_score / 100 : coin.sentiment_confidence,
         summary: coin.sentiment_summary,
         key_catalysts: sentimentData.key_catalysts,
         risk_factors: sentimentData.risk_factors,
@@ -310,6 +369,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
         trending_score: sentimentData.trending_score,
         source_breakdown: sentimentData.source_breakdown ?? [],
         collection_stats: sentimentData.collection_stats,
+        trending_sentiment: trendingSentiment,
       },
       scored_items: sentimentData.scored_items ?? [],
       headlines: headlines.slice(0, 10),

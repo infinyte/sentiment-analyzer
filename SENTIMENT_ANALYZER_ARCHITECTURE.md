@@ -20,16 +20,16 @@ REACT FRONTEND (localhost:5173)
          | HTTP API calls — polled every 10 min
          v
 EXPRESS BACKEND (localhost:3000)
-    |          |          |
-    v          v          v
-CoinGecko   NewsAPI   Claude API
-    |          |          |
-    v          v          v
-     Cache + SQLite persistence
-       ├── coins: 5-min TTL
-       ├── sentiment: 24-hr TTL
-       ├── price history: 15-min TTL per coin
-       └── headlines: 15-min TTL per coin
+    |          |          |              |
+    v          v          v              v
+CoinGecko   NewsAPI   Claude API    Social Scrapers
+    |          |          |         (7 sources)
+    v          v          v              v
+     Cache + SQLite persistence    SQLite Social Store
+       ├── coins: 5-min TTL        ├── social_media_items
+       ├── sentiment: 24-hr TTL   ├── trending_topics
+       ├── price history: 15-min  ├── trending_topic_history
+       └── headlines: 15-min      └── source_metadata
 ```
 
 > **Note:** Azure Table Storage packages exist in the backend dependency graph, but the active runtime persistence layer is SQLite (`better-sqlite3`) plus in-memory caches.
@@ -57,6 +57,36 @@ All backend logic lives in a single file. Key classes:
 - `GET /api/scrape/social` and `POST /api/scrape/batch` collect normalized posts from Reddit, Stocktwits, and X (when bearer token is configured)
 - `GET /api/trending` ranks topics by volume, velocity, source diversity, and aggregate sentiment
 - A scheduled trending scrape job ingests social posts every 30 minutes for the top cached symbols
+
+### SocialMediaScraperManager (Phase 3)
+- Orchestrates 7 source adapters: `TwitterScraper`, `RedditScraper`, `RssScraper`, `DiscordScraper`, `TelegramScraper`, `YouTubeScraper`, `TikTokScraper`
+- `fetchForCoin(symbol)` — coin-filtered scrape from all sources in parallel
+- `fetchBatch(symbols[])` — sequential per-coin scraping
+- `refreshRssAll()`, `refreshDiscordAll()`, `refreshTelegramAll()` — bulk background refresh
+
+### ItemScorer (Phase 3)
+- 4-signal pipeline per item: `score_sentiment (30%) + score_engagement (25%) + score_authority (25%) + score_recency (20%)`
+- Platform-specific engagement weights; source authority baselines (rss=75, youtube=65, twitter=45, discord=40, reddit=35, telegram=30, tiktok=25)
+
+### TrendingDiscoveryEngine (Phase 3)
+- Extracts coins, hashtags, and keywords from all items in the time window
+- Velocity = `mentions/hour` vs prior window; composite rank: `velocity×0.25 + engagement×0.20 + mentions×0.20 + sources×0.15 + authority×0.10 + sentiment_strength×0.10`
+- Persists results to `trending_topics` table; saves historical snapshots for coin topics
+
+### MultiSourceTrendCalculator (Phase 3)
+- Per-symbol `MultiSourceTrendReport` with direction (BULLISH/NEUTRAL/BEARISH), strength (STRONG/MODERATE/WEAK), velocity, sentiment distribution, top sources, keywords, recent items
+- Historical comparison: `score_24h_ago`, `score_7d_ago`, `trend_acceleration` (accelerating/decelerating/stable)
+
+### SocialStore (Phase 3)
+- `better-sqlite3` synchronous SQLite; 4 tables: `social_media_items`, `trending_topics`, `trending_topic_history`, `source_metadata`
+- Cursor-based pagination via base64url-encoded `{sort, primary, fetched_at, id}` payloads
+- Bulk upsert via transactions; `pruneOldItems`, `resetDailyCounters`, `getStats`
+
+### AppInsightsTransport (Telemetry)
+- Extends Winston's `Transport`; batches events and flushes every 5s or at 50 events
+- Severity mapping: debug→0, info→1, warn→2, error→3
+- Error logs with `stack` → `ExceptionData` envelope; others → `MessageData`
+- Enabled only when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set
 
 ### SentimentService
 - `analyzeSentiment(symbol, headlines, priceChange7d, volatility, context)` — calls Claude API, requests JSON with `sentiment_score`, `confidence`, `summary`, `key_catalysts`, `risk_factors`, `short_term_outlook`, `volatility_warning`
@@ -254,8 +284,9 @@ All UI lives in a single file.
 
 ---
 
-## 7. Scheduled Job
+## 7. Scheduled Jobs
 
+**Daily sentiment batch** (`SENTIMENT_JOB_CRON`, default `0 2 * * *`):
 ```typescript
 cron.schedule(process.env.SENTIMENT_JOB_CRON || '0 2 * * *', async () => {
   // 1. Fetch top SENTIMENT_BATCH_SIZE coins from CoinGecko
@@ -264,6 +295,15 @@ cron.schedule(process.env.SENTIMENT_JOB_CRON || '0 2 * * *', async () => {
   // Logs: start, per-coin result, elapsed time
 });
 ```
+
+**Hourly social scrape** (`SOCIAL_SCRAPE_CRON`, default `0 * * * *`):
+- RSS + Discord + Telegram bulk refresh for all configured sources
+- Twitter + Reddit per-coin scrape for the top 10 cached coins
+- `discoverTrends()` — rebuild trending topic rankings from fresh data
+- Prune `social_media_items` older than the configured retention window
+
+**Midnight counter reset** (`0 0 * * *`):
+- `socialStore.resetDailyCounters()` — resets per-source daily rate-limit counters
 
 ---
 

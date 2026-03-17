@@ -6,12 +6,13 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 **Current State:**
 - ✅ Postman integration tests exist (manual/CLI)
-- ✅ Jest configured in backend
-- ✅ Backend unit tests implemented for Cache, CoinGeckoService, NewsAPIService, SentimentService, content scoring, and MARL engine behavior
-- ✅ Backend API integration tests exist for core and MARL routes
-- ✅ Frontend Vitest + React Testing Library are configured
-- ✅ Frontend component/integration tests exist for `MarlCompetitionViewer` and the enriched detail modal in `App.test.tsx`
-- ❌ No E2E tests
+- ✅ Jest configured in backend (17 suites, 200 tests total)
+- ✅ Backend unit tests: Cache, CoinGeckoService, NewsAPIService, SentimentService, content scoring, MARL engine, coin extractor, item scorer, SQLite social store, trending discovery, multi-source calculator
+- ✅ Backend API integration tests: core routes, MARL routes, social media routes (all 6 Phase 3 endpoints)
+- ✅ ESLint + TypeScript type-check pass clean on both backend and frontend
+- ✅ Frontend Vitest + React Testing Library configured (3 suites, 35 tests total)
+- ✅ Frontend component/integration tests: `MarlCompetitionViewer`, `App.test.tsx` (detail modal), `useMarlCompetition` hook
+- ❌ No E2E tests (Playwright not yet configured)
 
 **Testing Stack:**
 - **Backend Unit/Integration:** Jest + ts-jest + supertest

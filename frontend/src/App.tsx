@@ -20,6 +20,20 @@ ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip)
 // TYPES
 // ============================================================================
 
+interface TrendingSentiment {
+  sentiment: 'BULL' | 'NEUTRAL' | 'BEAR';
+  composite_score: number;
+  velocity: number;
+  mention_count: number;
+  unique_sources: number;
+  signals: {
+    sentiment: number;
+    engagement: number;
+    authority: number;
+    recency: number;
+  };
+}
+
 interface Coin {
   id: string;
   symbol: string;
@@ -34,6 +48,7 @@ interface Coin {
   sentiment_confidence: number;
   sentiment_summary: string;
   trending_score: number;
+  trending_sentiment?: TrendingSentiment;
   market_rank: number;
 }
 
@@ -84,6 +99,7 @@ interface CoinSentimentDetail {
   trending_score: number;
   source_breakdown: SentimentSourceBreakdown[];
   collection_stats?: SentimentCollectionStats;
+  trending_sentiment?: TrendingSentiment;
 }
 
 interface CoinDetail extends Coin {
@@ -308,6 +324,13 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
           score={coin.sentiment_score}
           confidence={coin.sentiment_confidence}
         />
+        {coin.trending_sentiment && (
+          <div style={{ marginTop: '0.4rem', display: 'flex', gap: '0.75rem', fontSize: '0.7rem', color: '#6b7280' }}>
+            <span>&#128293; {coin.trending_sentiment.velocity.toFixed(1)}/hr</span>
+            <span>{coin.trending_sentiment.mention_count} mentions</span>
+            <span>{coin.trending_sentiment.unique_sources} sources</span>
+          </div>
+        )}
       </div>
 
       {/* Metrics */}
@@ -587,6 +610,46 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                   </p>
                 )}
               </div>
+
+              {/* Multi-Source Trending Signal */}
+              {detail.sentiment_today?.trending_sentiment && (() => {
+                const ts = detail.sentiment_today!.trending_sentiment!;
+                const dirColor = ts.sentiment === 'BULL' ? '#10b981' : ts.sentiment === 'BEAR' ? '#ef4444' : '#f59e0b';
+                const signals = [
+                  { label: 'Sentiment', value: ts.signals.sentiment },
+                  { label: 'Engagement', value: ts.signals.engagement },
+                  { label: 'Authority', value: ts.signals.authority },
+                  { label: 'Recency', value: ts.signals.recency },
+                ];
+                return (
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', borderLeft: '4px solid #3b82f6' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.875rem', flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700' }}>Multi-Source Trending Signal</h3>
+                      <span style={{ padding: '0.2rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '700', backgroundColor: `${dirColor}18`, color: dirColor }}>
+                        {ts.sentiment}
+                      </span>
+                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{ts.composite_score.toFixed(0)}/100 composite</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.625rem', marginBottom: '0.875rem' }}>
+                      {signals.map(({ label, value }) => (
+                        <div key={label}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.2rem' }}>
+                            <span>{label}</span><span style={{ fontWeight: '700' }}>{value.toFixed(0)}</span>
+                          </div>
+                          <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${Math.min(value, 100)}%`, backgroundColor: '#3b82f6', borderRadius: '3px' }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                      <span>&#128293; {ts.velocity.toFixed(1)} mentions/hr</span>
+                      <span>{ts.mention_count} mentions (24h)</span>
+                      <span>{ts.unique_sources} sources</span>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {(detail.sentiment_today?.collection_stats || detail.sentiment_today?.source_breakdown?.length) && (
                 <div style={{ marginBottom: '1.5rem' }}>

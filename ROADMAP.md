@@ -6,8 +6,8 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** Phase 2 Complete / Phase 3 Planned
-**Latest Release:** v2.0.0
+**Phase:** Phase 3 Complete / Phase 4 Planned
+**Latest Release:** v3.0.0
 **Last Updated:** March 2026
 
 ---
@@ -86,7 +86,56 @@ See [`docs/phase2/`](./docs/phase2/) for full specification and game theory anal
 
 ---
 
-## 📋 Phase 3: Enhanced Analytics
+## 📡 Phase 3: Social Media Intelligence (Completed ✅)
+
+Multi-source social scraping, normalized scoring, trending topic discovery, and a dedicated Social Intel frontend tab.
+
+### ✅ Completed Features
+
+**Scraper Suite** (`services/social-media/scraper/`):
+- [x] 7-source scraper suite: `TwitterScraper`, `RedditScraper`, `RssScraper`, `DiscordScraper`, `TelegramScraper`, `YouTubeScraper`, `TikTokScraper`
+- [x] `ScrapeManager` orchestrates parallel coin-filtered fetches and bulk background refresh
+- [x] Deduplication and per-source rate limiting
+
+**Scoring Pipeline** (`services/social-media/scoring/`):
+- [x] `CoinExtractor` — 55-coin dictionary with `$BTC`/`#BTC`/name detection
+- [x] `ItemScorer` — 4-signal pipeline: sentiment 30%, engagement 25%, authority 25%, recency 20%
+- [x] Platform-specific engagement weights; source authority baselines (rss=75, youtube=65, twitter=45, discord=40, reddit=35, telegram=30, tiktok=25)
+
+**Trending & Discovery** (`services/social-media/trending/`):
+- [x] `TrendingDiscoveryEngine` — cross-source entity aggregation, velocity vs prior window, composite rank weighting
+- [x] `MultiSourceTrendCalculator` — per-symbol `MultiSourceTrendReport` with direction, strength, velocity, sentiment distribution, historical comparison, and acceleration detection
+
+**SQLite Social Store** (`services/social-media/database/sqlite-social-store.ts`):
+- [x] 4 tables: `social_media_items`, `trending_topics`, `trending_topic_history`, `source_metadata`
+- [x] Cursor-based pagination via base64url-encoded payloads
+- [x] Bulk upsert via transactions; `pruneOldItems`, `resetDailyCounters`, `getStats`
+
+**Social Media API** (6 Phase 3 endpoints):
+- [x] `GET /api/social-media/trending-topics`
+- [x] `GET /api/social-media/items`
+- [x] `GET /api/social-media/item/:id`
+- [x] `GET /api/social-media/stats`
+- [x] `GET /api/trending-score/:symbol`
+- [x] `POST /api/social-media/refresh`
+
+**Telemetry:**
+- [x] `AppInsightsTransport` — Winston transport batching events to Azure Application Insights REST API; no extra npm deps; enabled via `APPLICATIONINSIGHTS_CONNECTION_STRING`
+
+**Scheduled Jobs:**
+- [x] Hourly social scrape cron: RSS + Discord + Telegram bulk, Twitter + Reddit per-coin for top 10, `discoverTrends()`, prune old items
+- [x] Midnight cron: `socialStore.resetDailyCounters()`
+
+**Frontend Social Intel Tab:**
+- [x] `SocialDashboard` component: trending topics table, trend score panel, items feed with filters, source health table
+
+**Tests:**
+- [x] 200 backend Jest tests across 17 suites (unit: coin extractor, item scorer, SQLite store, trending discovery, multi-source calculator; integration: all 6 Phase 3 endpoints)
+- [x] 35 frontend Vitest tests across 3 suites
+
+---
+
+## 📋 Phase 4: Enhanced Analytics
 
 Add interactive charting, user accounts, and advanced analysis features.
 
@@ -156,7 +205,7 @@ Requires:
 
 ---
 
-## 🔗 Phase 3: Exchange Integration (Q4 2024 - Q1 2025)
+## 🔗 Phase 5: Exchange Integration
 
 Enable live trading and portfolio tracking.
 
@@ -205,7 +254,7 @@ Enable live trading and portfolio tracking.
 
 ---
 
-## 🧠 Phase 4: Machine Learning (Q2-Q3 2025)
+## 🧠 Phase 6: Machine Learning
 
 Advanced ML-based sentiment scoring and prediction models.
 
@@ -252,7 +301,7 @@ Advanced ML-based sentiment scoring and prediction models.
 
 ---
 
-## 🌍 Phase 5: Community & Scaling (Q4 2025+)
+## 🌍 Phase 7: Community & Scaling
 
 Community features, mobile apps, and global expansion.
 
@@ -338,18 +387,18 @@ Community features, mobile apps, and global expansion.
 
 **Want to contribute?** Here are ways you can help:
 
-1. **Pick a Phase 2 Task**
+1. **Pick a Phase 4 Task**
    - Charts: TradingView integration
    - Auth: User accounts and authentication
    - Notifications: Price alerts system
 
-2. **Improve Phase 1**
+2. **Improve Earlier Phases**
    - Write unit tests (low effort, high value)
    - Improve error handling
    - Enhance documentation
    - Add new data sources
 
-3. **Research Phase 4**
+3. **Research Phase 6**
    - Evaluate ML frameworks
    - Collect training data
    - Prototype models
@@ -386,19 +435,35 @@ React with 👍 on feature requests to indicate interest. Roadmap priorities con
 - ✅ 6 MARL API endpoints
 - ✅ Full MARL React UI with real-time polling and equity charts
 
-### Phase 3 (Planned)
+### Phase 3 (Completed)
+- ✅ 7-source scraper suite
+- ✅ 4-signal social scoring pipeline
+- ✅ SQLite social store (4 tables, cursor pagination)
+- ✅ Trending topic discovery with velocity
+- ✅ Multi-source trend report with historical comparison
+- ✅ Application Insights telemetry transport
+- ✅ Frontend Social Intel tab
+- ✅ 200 backend tests, 35 frontend tests
+
+### Phase 4 (Planned)
 - 🎯 Trading volume > $1M/month
 - 🎯 Portfolio value tracked > $100M
 - 🎯 User retention > 40%
 - 🎯 Premium tier adoption > 10%
 
-### Phase 4 (Planned)
+### Phase 5 (Planned)
+- 🎯 100+ active trading users
+- 🎯 Average portfolio size tracked: $50K+
+- 🎯 Trade execution success rate > 99%
+- 🎯 System uptime > 99.5%
+
+### Phase 6 (Planned)
 - 🎯 Model prediction accuracy > 60%
 - 🎯 Backtested ROI > 15% annually
 - 🎯 ML feature adoption > 50%
 - 🎯 Community-contributed models > 5
 
-### Phase 5 (Planned)
+### Phase 7 (Planned)
 - 🎯 Global users > 10K
 - 🎯 Mobile downloads > 50K
 - 🎯 API partners > 20
@@ -411,10 +476,11 @@ React with 👍 on feature requests to indicate interest. Roadmap priorities con
 ```
 2026 Q1 ✅ Phase 1: Foundation + Advanced Intelligence
 2026 Q1 ✅ Phase 2: MARL Competitive Framework
-2026 Q2  → Phase 3: Enhanced Analytics (interactive charts, user accounts, alerts)
-2026 Q4  → Phase 4: Exchange Integration (Binance, Kraken, Coinbase)
-2027 Q2  → Phase 5: Machine Learning (custom sentiment model, price prediction)
-2027+    → Community & Scaling
+2026 Q1 ✅ Phase 3: Social Media Intelligence
+2026 Q2  → Phase 4: Enhanced Analytics (interactive charts, user accounts, alerts)
+2026 Q4  → Phase 5: Exchange Integration (Binance, Kraken, Coinbase)
+2027 Q2  → Phase 6: Machine Learning (custom sentiment model, price prediction)
+2027+    → Phase 7: Community & Scaling
 ```
 
 **Note:** Timeline is flexible and depends on:
@@ -432,7 +498,7 @@ React with 👍 on feature requests to indicate interest. Roadmap priorities con
 - ✅ Minimal cloud costs (~$15/month)
 - ✅ No external dependencies
 
-### If Phase 3+ Proceeds
+### If Phase 4+ Proceeds
 May require:
 - Infrastructure scaling ($1K-5K/month)
 - ML compute resources ($2K-10K/month)
@@ -456,7 +522,7 @@ May require:
 
 ## 📞 Get Involved
 
-- **Code:** Pick an item from Phase 2-4
+- **Code:** Pick an item from Phase 4-6
 - **Design:** Improve UI/UX
 - **Data:** Contribute training datasets
 - **Research:** Help with ML models

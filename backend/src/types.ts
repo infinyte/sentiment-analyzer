@@ -1,5 +1,19 @@
 // Shared type definitions
 
+export interface TrendingSentiment {
+  sentiment: 'BULL' | 'NEUTRAL' | 'BEAR';
+  composite_score: number;
+  velocity: number;
+  mention_count: number;
+  unique_sources: number;
+  signals: {
+    sentiment: number;
+    engagement: number;
+    authority: number;
+    recency: number;
+  };
+}
+
 export interface Coin {
   id: string;
   symbol: string;
@@ -15,6 +29,7 @@ export interface Coin {
   sentiment_confidence: number;
   sentiment_summary: string;
   trending_score: number;
+  trending_sentiment?: TrendingSentiment;
   timestamp: Date;
   market_rank: number;
 }

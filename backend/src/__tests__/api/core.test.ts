@@ -24,6 +24,26 @@ jest.mock('../../storage.js', () => ({
   },
 }));
 
+jest.mock('../../database/sqlite-social-store.js', () => ({
+  socialStore: {
+    connect: jest.fn(),
+    close: jest.fn(),
+    isHealthy: jest.fn().mockReturnValue(true),
+    getTrendingTopics: jest.fn().mockReturnValue([]),
+    queryItems: jest.fn().mockReturnValue({ items: [], total: 0, limit: 50, offset: 0 }),
+    getItem: jest.fn().mockReturnValue(undefined),
+    getStats: jest.fn().mockReturnValue({ total_items: 0, items_24h: 0, trending_topics: 0, sources: [] }),
+    getItemsForCoin: jest.fn().mockReturnValue([]),
+    getHistoricalSignal: jest.fn().mockReturnValue([]),
+    upsertItems: jest.fn().mockReturnValue(0),
+    upsertTrendingTopic: jest.fn(),
+    saveTrendingSnapshot: jest.fn(),
+    incrementFetchCount: jest.fn(),
+    pruneOldItems: jest.fn().mockReturnValue(0),
+    resetDailyCounters: jest.fn(),
+  },
+}));
+
 jest.mock('../../services/coingecko.js', () => ({
   CoinGeckoService: jest.fn().mockImplementation(() => ({
     getTopCoins: jest.fn().mockResolvedValue([
