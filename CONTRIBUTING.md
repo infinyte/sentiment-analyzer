@@ -460,6 +460,43 @@ TypeError: Cannot read property 'symbol' of undefined
 
 ---
 
+---
+
+## 🧠 Phase 1 Service Development
+
+### Adding a New Sentiment Analysis Mode
+
+`SentimentAnalyzerEngine` (`backend/src/services/sentiment-analyzer.ts`) has a fixed set of modes. To add a new one:
+
+1. Add the mode name to the `AnalysisMode` type
+2. Add a method following the existing pattern — return a typed result object, no `any`
+3. Handle it in the `POST /api/sentiment/analyze` route in `index.ts`
+4. Update `GET /api/info/modes` to document it
+
+Mode methods must be **pure** (no external API calls) — all Claude API interaction stays in `SentimentService`.
+
+### Adding a New Agent Type
+
+`TradingAgent` (`backend/src/services/trading-agent.ts`) is an abstract class. To add a type:
+
+1. Extend `TradingAgent`
+2. Implement `makeDecision(context: DecisionContext): 'BUY' | 'SELL' | 'HOLD'`
+3. Do not override `executeOrder`, `closePosition`, or `recordDailyEquity` — these handle position sizing, P&L, and metrics universally
+4. Register the type in `AgentFactory.create()` and add it to the `AgentType` union
+5. Add a `riskProfile` entry in `RISK_PARAMS` if the new type needs different parameters
+
+### Extending the BacktestingEngine
+
+`BacktestingEngine` (`backend/src/services/backtesting-engine.ts`) uses CoinGecko OHLCV as a price source. Key extension points:
+
+- `barToMarketData()` — maps a single OHLCV bar to `MarketData`; add fields here if you have richer data
+- `syntheticNews()` — currently derived from price action; replace with real news if you cache it per-bar
+- `applySlippage()` — add new `SlippageModel` variants here
+
+### SQLite Storage
+
+`StorageService` (`backend/src/storage.ts`) persists backtest results and sentiment. It is **non-fatal** — if the `.db` file is unavailable the server falls back to in-memory. Treat all `storage.*` calls as optional and wrap them in try/catch.
+
 ## 🙏 Thank You!
 
 Your contributions help make Sentiment Analyzer better for everyone. We truly appreciate your time and effort!

@@ -74,6 +74,58 @@ Express Backend (port 3000)
 | GET | `/api/rankings/top-coins` | Coins ranked by SMART composite score. Params: `limit` |
 | GET | `/api/info/modes` | Documentation — modes, agent types, risk profiles |
 
+### Phase 2 — MARL Competitive Trading
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/marl/competition/start` | Start tournament (fire-and-forget, returns 202 + `competitionId`) |
+| GET | `/api/marl/competition/:id/status` | Poll progress, top performer, and status |
+| GET | `/api/marl/competition/:id/results` | Full results — rankings, H2H, equity curve, market impact |
+| POST | `/api/marl/agents/compare` | N-round head-to-head comparison between two agents |
+| GET | `/api/marl/competitions` | List all competitions (in-memory) |
+| GET | `/api/marl/info` | Documentation for modes, agent configs, and order book |
+
+**Tournament Modes:**
+- `SINGLE` — one-shot tournament; all agents compete simultaneously on a shared order book
+- `EVOLUTIONARY` — multi-round tournament where underperformers are mutated/replaced each round
+- `CONTINUOUS` — ongoing learning loop; agents update Q-tables and policy weights in real time
+
+**Example cURL:**
+```bash
+# Start a SINGLE tournament with 3 agents
+curl -s -X POST http://localhost:3000/api/marl/competition/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "mode": "SINGLE",
+    "agents": [
+      { "id": "alpha", "riskProfile": "AGGRESSIVE" },
+      { "id": "beta",  "riskProfile": "CONSERVATIVE" },
+      { "id": "gamma", "riskProfile": "SCALPING" }
+    ],
+    "symbols": ["BTC", "ETH"],
+    "duration": 200,
+    "refreshInterval": 1000,
+    "learningEnabled": true
+  }' | jq '{id: .competitionId, status: .status}'
+
+# Poll until COMPLETED
+curl -s http://localhost:3000/api/marl/competition/<id>/status | jq '{status, progress, topPerformer}'
+
+# Fetch full results
+curl -s http://localhost:3000/api/marl/competition/<id>/results | jq '{rankings: .finalRankings[0:3]}'
+
+# Head-to-head comparison (5 rounds)
+curl -s -X POST http://localhost:3000/api/marl/agents/compare \
+  -H "Content-Type: application/json" \
+  -d '{
+    "agent1": { "id": "alpha", "riskProfile": "AGGRESSIVE" },
+    "agent2": { "id": "beta",  "riskProfile": "CONSERVATIVE" },
+    "symbols": ["BTC"],
+    "rounds": 5,
+    "duration": 100
+  }' | jq '{winner: .overallWinner, a1WinRate: .agent1WinRate, a2WinRate: .agent2WinRate}'
+```
+
 ### Example cURL Commands
 
 ```bash

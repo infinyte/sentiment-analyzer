@@ -788,6 +788,162 @@ test.describe('Dashboard User Workflows', () => {
 
 ---
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-03-16  
+**Document Version:** 1.1
+**Last Updated:** 2026-03-17
 **Author:** Architecture Review
+
+---
+
+## Phase 1 Testing — Advanced Services
+
+### SentimentAnalyzerEngine
+
+File: `backend/src/__tests__/services/sentiment-analyzer.test.ts`
+
+```typescript
+describe('SentimentAnalyzerEngine', () => {
+  const engine = new SentimentAnalyzerEngine();
+
+  it('BASIC mode: bull keywords → BULL sentiment', () => {
+    const result = engine.analyzeBasicSentiment('BTC', ['Bitcoin surges to record high', 'ETF adoption rally']);
+    expect(result.sentiment).toBe('BULL');
+    expect(result.confidence).toBeGreaterThan(0);
+  });
+
+  it('BASIC mode: no headlines → NEUTRAL with 0 confidence', () => {
+    const result = engine.analyzeBasicSentiment('ETH', []);
+    expect(result.sentiment).toBe('NEUTRAL');
+    expect(result.confidence).toBe(0);
+  });
+
+  it('calcRSI: returns 50 when insufficient data', () => {
+    expect(engine.calcRSI([100, 101, 99], 14)).toBe(50);
+  });
+
+  it('calcRSI: returns > 70 in strong uptrend', () => {
+    const rising = Array.from({ length: 20 }, (_, i) => 100 + i * 2);
+    expect(engine.calcRSI(rising)).toBeGreaterThan(70);
+  });
+
+  it('SMART mode: high-momentum market weights momentum factor highest', () => {
+    const market = { symbol: 'SOL', price_usd: 150, price_change_24h_percent: 8,
+      price_change_7d_percent: 25, volatility_24h: 5, volatility_7d: 15,
+      volume_24h_usd: 5e9, market_cap_usd: 60e9, market_rank: 5 };
+    const news = { headlines: [], sentiment_score: 'NEUTRAL' as const,
+      sentiment_confidence: 0, sentiment_summary: '' };
+    const result = engine.analyzeSmartSentiment(market, news);
+    expect(result.factor_weights.momentum).toBeGreaterThan(result.factor_weights.news);
+  });
+
+  it('rankCoinsForTimeframe: returns all coins sorted by composite score desc', () => {
+    const coins = [makeCoin('BTC', 'BULL', 0.9), makeCoin('DOGE', 'BEAR', 0.2)];
+    const ranked = engine.rankCoinsForTimeframe(coins);
+    expect(ranked[0].composite_score).toBeGreaterThanOrEqual(ranked[1].composite_score);
+    expect(ranked[0].rank).toBe(1);
+  });
+});
+```
+
+### TradingAgent Framework
+
+File: `backend/src/__tests__/services/trading-agent.test.ts`
+
+```typescript
+describe('RuleBasedAgent', () => {
+  it('enters BUY when signal strength exceeds threshold', () => {
+    const agent = AgentFactory.create({ type: 'RULE_BASED', riskProfile: 'CONSERVATIVE', initialCapital: 10000 });
+    const signal = makeBuySignal(0.8); // strength > minStrength
+    const decision = agent.makeDecision({ symbol: 'BTC', signal, currentPrice: 50000, date: new Date() });
+    expect(decision).toBe('BUY');
+  });
+
+  it('holds when no position and signal is weak', () => {
+    const agent = AgentFactory.create({ type: 'RULE_BASED', riskProfile: 'CONSERVATIVE', initialCapital: 10000 });
+    const signal = makeBuySignal(0.3); // below minStrength
+    const decision = agent.makeDecision({ symbol: 'BTC', signal, currentPrice: 50000, date: new Date() });
+    expect(decision).toBe('HOLD');
+  });
+
+  it('position sizing respects maxRiskPct', () => {
+    const agent = AgentFactory.create({ type: 'RULE_BASED', riskProfile: 'CONSERVATIVE', initialCapital: 10000 });
+    const signal = makeBuySignalWithStopLoss(50000, 49000); // $1000 risk per unit
+    agent.executeOrder({ symbol: 'BTC', signal, currentPrice: 50000, date: new Date() }, 'BUY');
+    // Risk: 10000 * 0.01 = $100; qty = 100/1000 = 0.1; cost = 0.1 * 50000 = $5000 < $10000 ✓
+  });
+});
+
+describe('HybridAgent', () => {
+  it('holds when rule and ML agents disagree', () => {
+    // Test that disagreement → HOLD
+  });
+});
+```
+
+### BacktestingEngine
+
+File: `backend/src/__tests__/services/backtesting-engine.test.ts`
+
+```typescript
+describe('BacktestingEngine', () => {
+  it('compareAgents: identifies top performer correctly', () => {
+    const engine = new BacktestingEngine();
+    const results = [
+      makeAgentResult('A', { totalReturnPct: 0.15, winRate: 0.65, sharpeRatio: 1.2 }),
+      makeAgentResult('B', { totalReturnPct: 0.08, winRate: 0.70, sharpeRatio: 0.9 }),
+    ];
+    const report = engine.compareAgents(results);
+    expect(report.topPerformerByReturn).toBe('A');
+    expect(report.topPerformerByWinRate).toBe('B');
+  });
+
+  it('applySlippage: FIXED adds ~0.1% to price', () => {
+    // Access via a minimal subclass or make private method testable
+  });
+});
+```
+
+### StorageService
+
+File: `backend/src/__tests__/services/storage.test.ts`
+
+```typescript
+describe('StorageService', () => {
+  let storage: StorageService;
+
+  beforeEach(() => {
+    storage = new StorageService({ dbPath: ':memory:' }); // SQLite in-memory for tests
+    storage.connect();
+  });
+  afterEach(() => storage.close());
+
+  it('saveSentiment / getSentiment round-trip', () => {
+    const s = makeSentiment('BTC', 'BULL');
+    storage.saveSentiment('BTC', s);
+    const retrieved = storage.getSentiment('BTC');
+    expect(retrieved?.sentiment_score).toBe('BULL');
+  });
+
+  it('getSentiment returns undefined for expired entries', () => {
+    const s = makeSentiment('ETH', 'BULL');
+    storage.saveSentiment('ETH', s, -1); // already expired
+    expect(storage.getSentiment('ETH')).toBeUndefined();
+  });
+
+  it('saveBacktestResult / getBacktestResult round-trip preserves Date objects', () => {
+    const result = makeSimulationResult('test_123');
+    storage.saveBacktestResult(result);
+    const retrieved = storage.getBacktestResult('test_123');
+    expect(retrieved?.startedAt).toBeInstanceOf(Date);
+  });
+});
+```
+
+### Backtesting Validation Checklist
+
+When validating backtest results manually:
+
+- **Equity curve monotonicity:** Should never jump by more than `maxRiskPct × initialCapital` in a single day
+- **Win rate sanity:** For random signals, expect ~40–60% win rate; significantly outside this range suggests a bug
+- **Profit factor:** Should be > 1.0 for a profitable strategy; exactly 0 means no trades
+- **Max drawdown:** Should be bounded by `stopLossPct`; larger drawdowns indicate stop-losses aren't triggering
+- **Sharpe ratio:** Values > 1 are good; < 0 means losing money risk-adjusted; Inf means no losing days (check for data issues)

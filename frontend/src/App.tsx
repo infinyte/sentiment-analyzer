@@ -1,7 +1,8 @@
 // FRONTEND - App.tsx
-// Main React component with dashboard and detail modal
+// Main React component with dashboard, detail modal, and MARL competition view
 
 import React, { useEffect, useState } from 'react';
+import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -577,8 +578,23 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
+type ActiveView = 'dashboard' | 'marl';
+
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
+  const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+
+  const navTabStyle = (view: ActiveView): React.CSSProperties => ({
+    padding: '0.5rem 1rem',
+    border: 'none',
+    borderBottom: activeView === view ? '2px solid #3b82f6' : '2px solid transparent',
+    backgroundColor: 'transparent',
+    color: activeView === view ? '#3b82f6' : '#6b7280',
+    fontWeight: activeView === view ? '600' : '400',
+    fontSize: '0.875rem',
+    cursor: 'pointer',
+    transition: 'color 0.15s ease',
+  });
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'system-ui, sans-serif' }}>
@@ -592,21 +608,39 @@ export default function App() {
         style={{
           backgroundColor: '#ffffff',
           borderBottom: '1px solid #e5e7eb',
-          padding: '1rem 1.5rem',
+          padding: '0 1.5rem',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '1.5rem',
         }}
       >
-        <h1 style={{ margin: '0', fontSize: '1.25rem', fontWeight: '700' }}>
+        <h1 style={{ margin: '0', fontSize: '1.25rem', fontWeight: '700', padding: '1rem 0' }}>
           Sentiment Analyzer
         </h1>
+        <div style={{ display: 'flex', gap: '0.25rem', height: '100%' }}>
+          <button style={navTabStyle('dashboard')} onClick={() => setActiveView('dashboard')}>
+            Dashboard
+          </button>
+          <button style={navTabStyle('marl')} onClick={() => setActiveView('marl')}>
+            MARL Competition
+          </button>
+        </div>
       </nav>
 
       {/* Main */}
       <main>
-        <Dashboard onCoinSelect={setSelectedSymbol} />
+        {activeView === 'dashboard' && (
+          <Dashboard onCoinSelect={setSelectedSymbol} />
+        )}
+        {activeView === 'marl' && (
+          <MarlCompetitionViewer />
+        )}
       </main>
 
-      {/* Modal */}
-      <DetailModal symbol={selectedSymbol} onClose={() => setSelectedSymbol(null)} />
+      {/* Modal (only relevant on dashboard view) */}
+      {activeView === 'dashboard' && (
+        <DetailModal symbol={selectedSymbol} onClose={() => setSelectedSymbol(null)} />
+      )}
     </div>
   );
 }
