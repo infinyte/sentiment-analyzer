@@ -282,22 +282,18 @@ Once approved, a maintainer will merge your PR!
 - [ ] Advanced charting (TradingView integration)
 - [ ] User accounts and authentication
 - [ ] Price alerts and notifications
-- [ ] Unit and integration tests
-- [ ] API documentation
+- [ ] Persist MARL competition history to SQLite
 
 ### Medium Priority
 - [ ] Mobile responsiveness improvements
 - [ ] Performance optimization
-- [ ] Additional data sources
+- [ ] Additional data sources (CoinMarketCap, Messari)
 - [ ] Error handling edge cases
-- [ ] Logging improvements
 
 ### Low Priority
 - [ ] UI/UX improvements
 - [ ] Documentation enhancements
-- [ ] Code refactoring
-- [ ] Type safety improvements
-- [ ] Example notebooks
+- [ ] Example notebooks / Jupyter tutorials
 
 ---
 
@@ -306,17 +302,15 @@ Once approved, a maintainer will merge your PR!
 ### Running Tests
 
 ```bash
-# Backend
+# Backend (Jest + supertest integration tests)
 cd backend
 npm test
 
-# Frontend verification
+# Frontend (Vitest + React Testing Library)
 cd frontend
-npm run type-check
-npm run build
+npm test           # run once
+npm run test:watch # watch mode
 ```
-
-Frontend component tests are not wired up yet. If you add Phase 3 frontend tests, update `frontend/package.json` with the required test scripts and document the runner in the same PR.
 
 ### Writing Tests
 
@@ -348,7 +342,6 @@ describe('CoinGeckoService', () => {
 - Verify on multiple devices/browsers
 - Test error scenarios
 - Check API rate limits
-- Verify Azure deployment
 
 ---
 
@@ -534,26 +527,36 @@ If you change MARL endpoints or response contracts:
 3. Re-run `cd backend && npm run build`
 4. Update `postman/sentiment-analyzer.postman_collection.json` if request or response shapes changed
 
-## 🧠 Phase 3 Frontend and QA Contributions
+## 🧠 Frontend Contributions
 
 ### Frontend Changes
 
-Phase 3 frontend work should keep the React app type-safe and aligned with backend contracts.
+Keep the React app type-safe and aligned with backend contracts.
 
 When changing frontend code:
 
-1. Update shared API-facing types first
-2. Keep dashboard and MARL views aligned with the actual backend payloads
-3. Verify with `cd frontend && npm run type-check`
-4. Run `cd frontend && npm run build` before opening a PR
+1. Update shared API-facing types first (`frontend/src/types/`)
+2. Keep dashboard and MARL views aligned with actual backend payloads
+3. Run `cd frontend && npm test` — add or update tests for changed components/hooks
+4. Verify with `cd frontend && npm run type-check`
+5. Run `cd frontend && npm run build` before opening a PR
+
+### Writing Frontend Tests
+
+Frontend tests use **Vitest** + **React Testing Library** (`frontend/src/__tests__/`).
+
+- Mock `useMarlCompetition` (or other hooks) with `vi.mock` when testing components that use them
+- Mock `react-chartjs-2` with `vi.mock('react-chartjs-2', () => ({ Line: () => null }))` if the component renders charts
+- Call `cleanup()` in `afterEach` (imported from `@testing-library/react`) — required because vitest globals are disabled
+- Use `vi.stubGlobal('fetch', vi.fn())` to mock network calls in hook tests
 
 ### Documentation and API Tooling
 
-For Phase 3-quality contributions, update supporting artifacts together:
+Update supporting artifacts together with code changes:
 
 1. `README.md` for user-facing API or feature changes
-2. `CONTRIBUTING.md` when contribution workflow changes
-3. `TESTING_STRATEGY.md` when the implemented test surface changes
+2. `CONTRIBUTING.md` when the contribution workflow changes
+3. `TESTING_STRATEGY.md` when the test surface changes
 4. `postman/sentiment-analyzer.postman_collection.json` when API endpoints are added or modified
 
 ## 🙏 Thank You!
