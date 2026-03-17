@@ -234,7 +234,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
     engine
       .runCompetition(config, (progress) => {
         engine.updateRecord(competitionId, { progress });
-      })
+      }, competitionId)
       .then(result => {
         engine.updateRecord(competitionId, {
           status: 'COMPLETED',

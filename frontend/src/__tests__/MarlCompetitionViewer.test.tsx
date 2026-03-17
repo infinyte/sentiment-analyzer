@@ -135,7 +135,16 @@ describe('MarlCompetitionViewer — running state', () => {
       ...defaultHook,
       loading: true,
       competitionId: 'cid-123',
-      status: { status: 'RUNNING', progress: 42, competitionId: 'cid-123', config: {} as any },
+      status: {
+        competitionId: 'cid-123',
+        status: 'RUNNING',
+        progress: 42,
+        mode: 'SINGLE',
+        agentCount: 2,
+        symbols: ['BTC'],
+        startedAt: new Date().toISOString(),
+        topPerformer: null,
+      },
     });
     render(<MarlCompetitionViewer />);
     expect(screen.getByText(/competition running/i)).toBeInTheDocument();

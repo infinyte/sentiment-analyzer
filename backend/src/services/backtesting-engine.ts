@@ -1,4 +1,5 @@
 import { CoinGeckoService } from './coingecko.js';
+import { NewsAPIService } from './newsapi.js';
 import { SentimentAnalyzerEngine } from './sentiment-analyzer.js';
 import type { MarketData, NewsData } from './sentiment-analyzer.js';
 import {
@@ -67,6 +68,7 @@ export interface ComparisonReport {
 
 export class BacktestingEngine {
   private coinGecko: CoinGeckoService;
+  private newsAPI: NewsAPIService;
   private analyzer: SentimentAnalyzerEngine;
 
   // In-memory store of completed simulations
@@ -77,6 +79,7 @@ export class BacktestingEngine {
 
   constructor() {
     this.coinGecko = new CoinGeckoService();
+    this.newsAPI = new NewsAPIService();
     this.analyzer = new SentimentAnalyzerEngine();
   }
 
@@ -128,6 +131,18 @@ export class BacktestingEngine {
       })
     );
 
+    // ── Pre-fetch recent headlines for all symbols (best-effort) ──────────
+    const symbolHeadlines = new Map<string, string[]>();
+    await Promise.all(
+      config.symbols.map(async (sym) => {
+        try {
+          symbolHeadlines.set(sym, await this.newsAPI.getHeadlines(sym, 7));
+        } catch {
+          symbolHeadlines.set(sym, []);
+        }
+      })
+    );
+
     // ── Instantiate agents ────────────────────────────────────────────────
     const agents: TradingAgent[] = AgentFactory.createAll(config.agentConfigs);
 
@@ -146,9 +161,9 @@ export class BacktestingEngine {
 
         prices.set(sym, bar.close);
 
-        // Build lightweight market / news snapshots from OHLCV
+        // Build lightweight market / news snapshots from OHLCV + real headlines
         const market = this.barToMarketData(sym, bar);
-        const news = this.syntheticNews(bar);
+        const news = this.syntheticNews(bar, symbolHeadlines.get(sym) ?? []);
         const sentiment = this.analyzer.analyzeAdvancedSentiment(market, news);
 
         // Generate trading signal (uses our analyzer, no live API call)
@@ -326,17 +341,19 @@ export class BacktestingEngine {
   }
 
   /**
-   * Create synthetic NewsData from price action — direction and magnitude
-   * act as a proxy for news sentiment when real headlines aren't available.
+   * Build NewsData for a simulation bar.
+   * Real headlines (fetched once per simulation run) are passed in; price action
+   * is still used to derive sentiment_score and confidence when no headlines are
+   * available, but the headlines array is now populated with actual news.
    */
-  private syntheticNews(bar: OHLCVBar): NewsData {
+  private syntheticNews(bar: OHLCVBar, headlines: string[]): NewsData {
     const priceChange = bar.open > 0 ? (bar.close - bar.open) / bar.open : 0;
     const sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR' =
       priceChange > 0.02 ? 'BULL' : priceChange < -0.02 ? 'BEAR' : 'NEUTRAL';
     const sentiment_confidence = Math.min(Math.abs(priceChange) * 10, 1);
 
     return {
-      headlines: [],
+      headlines,
       sentiment_score,
       sentiment_confidence,
       sentiment_summary: `Price ${priceChange >= 0 ? 'up' : 'down'} ${(Math.abs(priceChange) * 100).toFixed(1)}%`,
