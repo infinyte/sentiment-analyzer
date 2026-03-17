@@ -24,10 +24,22 @@ type RateLimitEntry = {
   resetAt: number;
 };
 
+export type MarlRateLimitConfig = {
+  windowMs: number;
+  startMax: number;
+  compareMax: number;
+  readMax: number;
+};
+
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-function readPositiveIntEnv(name: string, fallback: number, minimum = 1): number {
-  const raw = process.env[name];
+function readPositiveIntEnv(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+  minimum = 1
+): number {
+  const raw = env[name];
   if (!raw) return fallback;
 
   const parsed = Number.parseInt(raw, 10);
@@ -39,17 +51,44 @@ function readPositiveIntEnv(name: string, fallback: number, minimum = 1): number
   return parsed;
 }
 
+export function resolveMarlRateLimitConfig(env: NodeJS.ProcessEnv = process.env): MarlRateLimitConfig {
+  return {
+    windowMs: readPositiveIntEnv(env, 'MARL_RATE_LIMIT_WINDOW_MS', 60_000, 1_000),
+    startMax: readPositiveIntEnv(env, 'MARL_START_RATE_LIMIT_MAX', 5),
+    compareMax: readPositiveIntEnv(env, 'MARL_COMPARE_RATE_LIMIT_MAX', 10),
+    readMax: readPositiveIntEnv(env, 'MARL_READ_RATE_LIMIT_MAX', 120),
+  };
+}
+
+function getClientId(req: Request): string {
+  const forwarded = req.headers['x-forwarded-for'];
+
+  if (typeof forwarded === 'string') {
+    const firstForwarded = forwarded.split(',')[0]?.trim();
+    if (firstForwarded) return firstForwarded;
+  }
+
+  if (Array.isArray(forwarded) && forwarded.length > 0) {
+    const firstForwarded = forwarded[0]?.split(',')[0]?.trim();
+    if (firstForwarded) return firstForwarded;
+  }
+
+  return req.ip || 'unknown';
+}
+
 function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs: number) {
   return (req: Request, res: Response, next: NextFunction) => {
     const now = Date.now();
-    const clientId = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const clientId = getClientId(req);
     const key = `${bucket}:${clientId}`;
     const current = rateLimitStore.get(key);
 
     if (!current || current.resetAt <= now) {
-      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      const resetAt = now + windowMs;
+      rateLimitStore.set(key, { count: 1, resetAt });
       res.setHeader('X-RateLimit-Limit', String(maxRequests));
       res.setHeader('X-RateLimit-Remaining', String(maxRequests - 1));
+      res.setHeader('X-RateLimit-Reset', String(resetAt));
       return next();
     }
 
@@ -58,6 +97,7 @@ function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs
       res.setHeader('Retry-After', String(retryAfterSeconds));
       res.setHeader('X-RateLimit-Limit', String(maxRequests));
       res.setHeader('X-RateLimit-Remaining', '0');
+      res.setHeader('X-RateLimit-Reset', String(current.resetAt));
       logger.warn('marl rate limit exceeded', {
         bucket,
         clientId: String(clientId),
@@ -74,26 +114,27 @@ function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs
     current.count += 1;
     res.setHeader('X-RateLimit-Limit', String(maxRequests));
     res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequests - current.count)));
+    res.setHeader('X-RateLimit-Reset', String(current.resetAt));
     return next();
   };
 }
 
-const marlRateLimitWindowMs = readPositiveIntEnv('MARL_RATE_LIMIT_WINDOW_MS', 60_000, 1_000);
+const marlRateLimitConfig = resolveMarlRateLimitConfig();
 
 const competitionWriteRateLimit = createRateLimitMiddleware(
   'marl-competition-start',
-  readPositiveIntEnv('MARL_START_RATE_LIMIT_MAX', 5),
-  marlRateLimitWindowMs
+  marlRateLimitConfig.startMax,
+  marlRateLimitConfig.windowMs
 );
 const compareRateLimit = createRateLimitMiddleware(
   'marl-agents-compare',
-  readPositiveIntEnv('MARL_COMPARE_RATE_LIMIT_MAX', 10),
-  marlRateLimitWindowMs
+  marlRateLimitConfig.compareMax,
+  marlRateLimitConfig.windowMs
 );
 const competitionReadRateLimit = createRateLimitMiddleware(
   'marl-competition-read',
-  readPositiveIntEnv('MARL_READ_RATE_LIMIT_MAX', 120),
-  marlRateLimitWindowMs
+  marlRateLimitConfig.readMax,
+  marlRateLimitConfig.windowMs
 );
 
 export function resetMarlRateLimitersForTests(): void {

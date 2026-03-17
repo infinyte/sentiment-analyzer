@@ -19,6 +19,16 @@ npm run dev
 
 Visit `http://localhost:5173`. The Vite dev server proxies `/api/*` to the backend automatically.
 
+## VS Code Dev Task
+
+If you are running the app from VS Code, use `Terminal: Run Task` and select `dev: restart in vscode`.
+
+That task:
+
+- stops existing repo-local backend and frontend dev processes
+- starts backend and frontend in separate VS Code integrated terminals
+- opens `http://localhost:5173` after the frontend is ready
+
 ## Required Environment Variables
 
 Set these in `backend/.env`:

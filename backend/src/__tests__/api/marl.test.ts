@@ -115,7 +115,7 @@ jest.mock('../../services/marl-competition-engine.js', () => ({
 
 import request from 'supertest';
 import app from '../../index.js';
-import { resetMarlRateLimitersForTests } from '../../routes/marl-competition.js';
+import { resetMarlRateLimitersForTests, resolveMarlRateLimitConfig } from '../../routes/marl-competition.js';
 
 // ── Shared engine instance captured once at module load ───────────────────────
 
@@ -140,6 +140,37 @@ beforeEach(() => {
   engine.getAllRecords.mockReturnValue([]);
   engine.runCompetition.mockResolvedValue(mockCompetitionResult);
   engine.runSingleTournament.mockResolvedValue(mockCompetitionResult);
+});
+
+// ── MARL rate limit config ───────────────────────────────────────────────────
+
+describe('MARL rate limit config', () => {
+  it('uses the documented default values', () => {
+    const config = resolveMarlRateLimitConfig({});
+
+    expect(config).toEqual({
+      windowMs: 60_000,
+      startMax: 5,
+      compareMax: 10,
+      readMax: 120,
+    });
+  });
+
+  it('supports overriding all MARL rate limit values from env', () => {
+    const config = resolveMarlRateLimitConfig({
+      MARL_RATE_LIMIT_WINDOW_MS: '45000',
+      MARL_START_RATE_LIMIT_MAX: '7',
+      MARL_COMPARE_RATE_LIMIT_MAX: '13',
+      MARL_READ_RATE_LIMIT_MAX: '150',
+    });
+
+    expect(config).toEqual({
+      windowMs: 45_000,
+      startMax: 7,
+      compareMax: 13,
+      readMax: 150,
+    });
+  });
 });
 
 // ── POST /api/marl/competition/start — validation ─────────────────────────────
@@ -316,12 +347,14 @@ describe('POST /api/marl/competition/start — success', () => {
     for (let i = 0; i < 5; i++) {
       const allowed = await request(app).post('/api/marl/competition/start').send(payload);
       expect(allowed.status).toBe(202);
+      expect(allowed.headers['x-ratelimit-reset']).toBeDefined();
     }
 
     const blocked = await request(app).post('/api/marl/competition/start').send(payload);
     expect(blocked.status).toBe(429);
     expect(blocked.body.error).toBe('Rate limit exceeded');
     expect(blocked.body.bucket).toBe('marl-competition-start');
+    expect(blocked.headers['x-ratelimit-reset']).toBeDefined();
   });
 });
 
@@ -471,6 +504,25 @@ describe('POST /api/marl/agents/compare', () => {
     expect(res.status).toBe(200);
     expect(res.body.rounds).toBe(10);
   });
+
+  it('returns 429 after too many compare requests from the same client', async () => {
+    for (let i = 0; i < 10; i++) {
+      const allowed = await request(app)
+        .post('/api/marl/agents/compare')
+        .send(validCompare);
+      expect(allowed.status).toBe(200);
+      expect(allowed.headers['x-ratelimit-reset']).toBeDefined();
+    }
+
+    const blocked = await request(app)
+      .post('/api/marl/agents/compare')
+      .send(validCompare);
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe('Rate limit exceeded');
+    expect(blocked.body.bucket).toBe('marl-agents-compare');
+    expect(blocked.headers['x-ratelimit-reset']).toBeDefined();
+  });
 });
 
 // ── GET /api/marl/competitions ────────────────────────────────────────────────
@@ -515,5 +567,31 @@ describe('GET /api/marl/info', () => {
     expect(res.body.tournamentModes).toHaveProperty('SINGLE');
     expect(res.body.tournamentModes).toHaveProperty('EVOLUTIONARY');
     expect(res.body.tournamentModes).toHaveProperty('CONTINUOUS');
+  });
+
+  it('shares the read bucket across MARL read endpoints and blocks the 121st request', async () => {
+    engine.getRecord.mockReturnValue(mockCompletedRecord);
+    engine.getAllRecords.mockReturnValue([mockCompletedRecord]);
+
+    for (let i = 0; i < 40; i++) {
+      const infoResponse = await request(app).get('/api/marl/info');
+      expect(infoResponse.status).toBe(200);
+      expect(infoResponse.headers['x-ratelimit-reset']).toBeDefined();
+
+      const competitionsResponse = await request(app).get('/api/marl/competitions');
+      expect(competitionsResponse.status).toBe(200);
+      expect(competitionsResponse.headers['x-ratelimit-reset']).toBeDefined();
+
+      const statusResponse = await request(app).get('/api/marl/competition/mock-comp-123/status');
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers['x-ratelimit-reset']).toBeDefined();
+    }
+
+    const blocked = await request(app).get('/api/marl/competition/mock-comp-123/results');
+
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe('Rate limit exceeded');
+    expect(blocked.body.bucket).toBe('marl-competition-read');
+    expect(blocked.headers['x-ratelimit-reset']).toBeDefined();
   });
 });
