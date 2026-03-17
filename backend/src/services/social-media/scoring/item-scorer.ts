@@ -252,7 +252,7 @@ export function detectLanguage(text: string): string {
  * Async variant of scoreItem that integrates:
  *   - FinBERT sentiment model when FINBERT_API_URL is configured  (Issue #1)
  *   - Sarcasm/irony heuristic detection                           (Issue #2)
- *   - Language detection via franc-min                            (Issue #4)
+ *   - Language detection via Unicode script heuristic             (Issue #4)
  *
  * Falls back gracefully to the sync keyword scorer when FinBERT is unavailable.
  * The sync scoreItem() is unchanged so existing callers keep working.
