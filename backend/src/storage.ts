@@ -13,6 +13,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import type { SimulationResult } from './services/backtesting-engine.js';
 import type { Sentiment } from './types.js';
+import logger from './logger.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -52,14 +53,14 @@ export class StorageService {
     this.db.pragma('foreign_keys = ON');
 
     this.createTables();
-    console.log(`[storage] Connected to SQLite at ${this.dbPath}`);
+    logger.info('sqlite connected', { path: this.dbPath });
   }
 
   /** Close the database connection gracefully. */
   close(): void {
     this.db?.close();
     this.db = null;
-    console.log('[storage] SQLite connection closed');
+    logger.info('sqlite closed');
   }
 
   // ── Backtest Results ──────────────────────────────────────────────────────

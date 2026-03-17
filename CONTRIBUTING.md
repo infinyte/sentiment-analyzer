@@ -310,10 +310,13 @@ Once approved, a maintainer will merge your PR!
 cd backend
 npm test
 
-# Frontend
+# Frontend verification
 cd frontend
-npm test
+npm run type-check
+npm run build
 ```
+
+Frontend component tests are not wired up yet. If you add Phase 3 frontend tests, update `frontend/package.json` with the required test scripts and document the runner in the same PR.
 
 ### Writing Tests
 
@@ -462,7 +465,7 @@ TypeError: Cannot read property 'symbol' of undefined
 
 ---
 
-## 🧠 Phase 1 Service Development
+## 🧠 Phase 1-3 Development Notes
 
 ### Adding a New Sentiment Analysis Mode
 
@@ -496,6 +499,62 @@ Mode methods must be **pure** (no external API calls) — all Claude API interac
 ### SQLite Storage
 
 `StorageService` (`backend/src/storage.ts`) persists backtest results and sentiment. It is **non-fatal** — if the `.db` file is unavailable the server falls back to in-memory. Treat all `storage.*` calls as optional and wrap them in try/catch.
+
+## 🧠 Phase 2 MARL Development
+
+### Working on MARL Competition Endpoints
+
+Phase 2 MARL HTTP routes live in `backend/src/routes/marl-competition.ts`.
+
+When contributing to these endpoints:
+
+1. Keep request validation explicit in the route layer
+2. Preserve sanitized agent IDs before handing data to the engine
+3. Treat `POST /api/marl/competition/start` and `POST /api/marl/agents/compare` as expensive endpoints
+4. Preserve or update rate limiting when adding new expensive MARL routes
+5. Keep response shapes stable, then update Postman and tests in the same PR if the contract changes
+
+### Working on the MARL Engine
+
+`MarlCompetitionEngine` is intentionally isolated from Express routing concerns.
+
+Keep these boundaries intact:
+
+1. Routing concerns stay in `marl-competition.ts`
+2. Competition orchestration and record updates stay in the engine
+3. Formatting for API responses should happen in the route, not inside the engine
+4. Tests for API contracts belong in `backend/src/__tests__/api/marl.test.ts`
+
+### Testing MARL Changes
+
+If you change MARL endpoints or response contracts:
+
+1. Update `backend/src/__tests__/api/marl.test.ts`
+2. Re-run `cd backend && npm test`
+3. Re-run `cd backend && npm run build`
+4. Update `postman/sentiment-analyzer.postman_collection.json` if request or response shapes changed
+
+## 🧠 Phase 3 Frontend and QA Contributions
+
+### Frontend Changes
+
+Phase 3 frontend work should keep the React app type-safe and aligned with backend contracts.
+
+When changing frontend code:
+
+1. Update shared API-facing types first
+2. Keep dashboard and MARL views aligned with the actual backend payloads
+3. Verify with `cd frontend && npm run type-check`
+4. Run `cd frontend && npm run build` before opening a PR
+
+### Documentation and API Tooling
+
+For Phase 3-quality contributions, update supporting artifacts together:
+
+1. `README.md` for user-facing API or feature changes
+2. `CONTRIBUTING.md` when contribution workflow changes
+3. `TESTING_STRATEGY.md` when the implemented test surface changes
+4. `postman/sentiment-analyzer.postman_collection.json` when API endpoints are added or modified
 
 ## 🙏 Thank You!
 

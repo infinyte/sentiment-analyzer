@@ -1,4 +1,5 @@
 import type { Coin } from '../types.js';
+import logger from '../logger.js';
 
 export class CoinGeckoService {
   private apiUrl = 'https://api.coingecko.com/api/v3';
@@ -42,7 +43,7 @@ export class CoinGeckoService {
         };
       });
     } catch (error) {
-      console.error('CoinGecko error:', error);
+      logger.error('coingecko fetch error', { error: String(error) });
       throw error;
     }
   }
@@ -66,7 +67,7 @@ export class CoinGeckoService {
         close: point[4],
       }));
     } catch (error) {
-      console.error('CoinGecko history error:', error);
+      logger.error('coingecko history error', { coinId, error: String(error) });
       return [];
     }
   }

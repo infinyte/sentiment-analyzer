@@ -551,11 +551,181 @@
           ]
         }
       ]
+    },
+    {
+      "name": "08 - MARL Competition API",
+      "description": "Test the Phase 2 MARL competition endpoints",
+      "item": [
+        {
+          "name": "POST /api/marl/competition/start",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    { \"id\": \"alpha\", \"riskProfile\": \"AGGRESSIVE\" },\n    { \"id\": \"beta\", \"riskProfile\": \"CONSERVATIVE\" }\n  ],\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 100,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/start",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "start"]
+            },
+            "description": "Start a new MARL competition and store the returned competition id for later polling."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 202 Accepted', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Response includes competition metadata', function () { var data = pm.response.json(); pm.expect(data).to.have.property('competitionId'); pm.expect(data).to.have.property('status'); pm.expect(data.status).to.equal('STARTED'); });",
+                  "pm.environment.set('marl_competition_id', pm.response.json().competitionId);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:id/status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{marl_competition_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "{{marl_competition_id}}", "status"]
+            },
+            "description": "Poll the status of a running or completed MARL competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 or 500 depending on competition state', function () { pm.expect([200, 500]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Status payload has competition fields', function () { var data = pm.response.json(); pm.expect(data).to.have.property('competitionId'); pm.expect(data).to.have.property('status'); pm.expect(['RUNNING', 'COMPLETED']).to.include(data.status); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:id/results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{marl_competition_id}}/results",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "{{marl_competition_id}}", "results"]
+            },
+            "description": "Fetch full MARL competition results after completion. A 202 response indicates the competition is still running."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Results request returns 200, 202, 404, or 500', function () { pm.expect([200, 202, 404, 500]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Completed results include rankings and comparisons', function () { var data = pm.response.json(); pm.expect(data).to.have.property('finalRankings'); pm.expect(data).to.have.property('headToHeadMetrics'); pm.expect(data).to.have.property('competitorImpact'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/agents/compare",
+          "request": {
+            "method": "POST",
+            "header": [
+              {"key": "Content-Type", "value": "application/json"}
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent1\": { \"id\": \"alpha\", \"riskProfile\": \"AGGRESSIVE\" },\n  \"agent2\": { \"id\": \"beta\", \"riskProfile\": \"CONSERVATIVE\" },\n  \"symbols\": [\"BTC\"],\n  \"rounds\": 3,\n  \"duration\": 100\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/compare",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "agents", "compare"]
+            },
+            "description": "Run a head-to-head comparison between two MARL agents."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Comparison payload includes summary fields', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agent1'); pm.expect(data).to.have.property('agent2'); pm.expect(data).to.have.property('roundDetails'); pm.expect(Array.isArray(data.roundDetails)).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competitions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competitions",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competitions"]
+            },
+            "description": "List all known MARL competitions and their summary state."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Competition list has total and competitions', function () { var data = pm.response.json(); pm.expect(data).to.have.property('total'); pm.expect(data).to.have.property('competitions'); pm.expect(Array.isArray(data.competitions)).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/info",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "info"]
+            },
+            "description": "Retrieve static MARL API and engine documentation."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Info payload documents MARL concepts', function () { var data = pm.response.json(); pm.expect(data).to.have.property('tournamentModes'); pm.expect(data).to.have.property('riskProfiles'); pm.expect(data).to.have.property('endpoints'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ],
   "variable": [
     {"key": "base_url", "value": "http://localhost:3000", "type": "string"},
     {"key": "api_secret_key", "value": "", "type": "string"},
-    {"key": "test_symbol", "value": "", "type": "string"}
+    {"key": "test_symbol", "value": "", "type": "string"},
+    {"key": "marl_competition_id", "value": "", "type": "string"}
   ]
 }

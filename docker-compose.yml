@@ -1,0 +1,35 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      target: production
+    env_file: ./backend/.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_PATH: /app/data/sentiment_analyzer.db
+    volumes:
+      - sqlite_data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+      args:
+        VITE_API_BASE_URL: ""   # empty — nginx proxies /api/ to backend
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:

@@ -115,6 +115,7 @@ jest.mock('../../services/marl-competition-engine.js', () => ({
 
 import request from 'supertest';
 import app from '../../index.js';
+import { resetMarlRateLimitersForTests } from '../../routes/marl-competition.js';
 
 // ── Shared engine instance captured once at module load ───────────────────────
 
@@ -130,6 +131,7 @@ interface MockEngine {
 const engine = mockEngine as MockEngine;
 
 beforeEach(() => {
+  resetMarlRateLimitersForTests();
   // Restore sensible defaults before each test (clearMocks wipes .calls but
   // NOT mockReturnValue — we reset here to avoid test-order dependencies).
   engine.storeRecord.mockClear();
@@ -296,6 +298,30 @@ describe('POST /api/marl/competition/start — success', () => {
       });
     expect(res.status).toBe(202);
     expect(res.body.duration).toBe(50);
+  });
+
+  it('returns 429 after too many competition start requests from the same client', async () => {
+    const payload = {
+      mode: 'SINGLE',
+      agents: [
+        { id: 'alpha', riskProfile: 'AGGRESSIVE' },
+        { id: 'beta', riskProfile: 'CONSERVATIVE' },
+      ],
+      symbols: ['BTC'],
+      duration: 100,
+      refreshInterval: 1000,
+      learningEnabled: true,
+    };
+
+    for (let i = 0; i < 5; i++) {
+      const allowed = await request(app).post('/api/marl/competition/start').send(payload);
+      expect(allowed.status).toBe(202);
+    }
+
+    const blocked = await request(app).post('/api/marl/competition/start').send(payload);
+    expect(blocked.status).toBe(429);
+    expect(blocked.body.error).toBe('Rate limit exceeded');
+    expect(blocked.body.bucket).toBe('marl-competition-start');
   });
 });
 

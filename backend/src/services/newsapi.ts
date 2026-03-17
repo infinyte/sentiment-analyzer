@@ -1,3 +1,5 @@
+import logger from '../logger.js';
+
 export class NewsAPIService {
   private apiKey: string;
   private apiUrl = 'https://newsapi.org/v2';
@@ -17,14 +19,14 @@ export class NewsAPIService {
       );
 
       if (!response.ok) {
-        console.warn(`NewsAPI responded with ${response.status}`);
+        logger.warn('newsapi non-ok response', { topic, status: response.status });
         return [];
       }
 
       const data = (await response.json()) as any;
       return (data.articles || []).slice(0, 20).map((a: any) => a.title);
     } catch (error) {
-      console.error('NewsAPI error:', error);
+      logger.error('newsapi fetch error', { topic, error: String(error) });
       return [];
     }
   }

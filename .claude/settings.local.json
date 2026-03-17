@@ -3,7 +3,8 @@
     "allow": [
       "Bash(cd:*)",
       "Bash(ls:*)",
-      "Bash(wc:*)"
+      "Bash(wc:*)",
+      "Bash(npm test:*)"
     ]
   }
 }

@@ -99,4 +99,31 @@ Frontend `.env` only needs `VITE_API_BASE_URL=http://localhost:3000` for non-pro
 
 **Implemented:** All 5 core API endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, sentiment analysis pipeline (Claude API), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, daily cron job (`node-cron`), Chart.js price chart in detail modal, ESC/backdrop modal close, volatility calculation from CoinGecko high/low, `trending_score` from headline count, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table).
 
-**Not yet implemented:** Azure Table Storage (SQLite via `better-sqlite3` is used instead — sentiment cache and backtest results survive restarts), GitHub Actions CI/CD (`.github/workflows/` has only a stub), Application Insights structured logging, frontend tests (Vitest/React Testing Library), Docker/container configuration.
+## Docker
+
+```bash
+# Build and run both services (frontend on :80, backend on :3000 internally)
+docker compose up --build
+
+# Backend only
+docker compose up backend
+
+# One-off backend build
+docker build -t sentiment-backend ./backend
+```
+
+`docker-compose.yml` at the repo root wires frontend → nginx → backend. SQLite data is persisted in a named Docker volume (`sqlite_data`). Set secrets in `backend/.env` before `docker compose up`.
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push/PR to `main`:
+- **backend** job: `npm ci` → lint → type-check → test → build
+- **frontend** job: `npm ci` → lint → type-check → build (parallel with backend)
+
+Both jobs use Node 20 with npm cache enabled.
+
+## Implementation Status
+
+**Implemented:** All 5 core API endpoints, 6 Phase 1 endpoints, 6 Phase 2 MARL endpoints, sentiment analysis pipeline (Claude API), 24-hr sentiment cache, 5-min coin cache, 15-min price history/headlines cache, daily cron job (`node-cron`), Chart.js price chart in detail modal, ESC/backdrop modal close, volatility calculation from CoinGecko high/low, `trending_score` from headline count, `SentimentAnalyzerEngine` (4 modes), `TradingAgent` framework (Rule/ML/Hybrid + AgentFactory), `BacktestingEngine` (day-by-day simulation, Sharpe, drawdown, equity curve), **`MarlCompetitionEngine`** (SINGLE/EVOLUTIONARY/CONTINUOUS tournament modes, `SharedOrderBook` with price-time FIFO matching, `PolicyNetwork` feedforward net in pure TypeScript, `MarlTradingAgent` with Q-learning + epsilon-greedy + replay buffer, equity evolution snapshots, competitor impact tracking), **MARL React UI** (config form, progress polling, rankings table, H2H table, equity chart, market impact table), Winston structured logging, GitHub Actions CI/CD, Docker + docker-compose.
+
+**Not yet implemented:** Azure Table Storage (SQLite via `better-sqlite3` is used instead), Application Insights structured logging, frontend tests (Vitest/React Testing Library).

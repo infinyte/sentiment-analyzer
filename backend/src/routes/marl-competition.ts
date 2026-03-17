@@ -11,13 +11,67 @@
  *   GET  /api/marl/info
  */
 
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { CompetitionConfig, CompetitionAgentSpec } from '../services/marl-competition-engine.js';
 import logger from '../logger.js';
 
 const router = Router();
 const engine = new MarlCompetitionEngine();
+
+type RateLimitEntry = {
+  count: number;
+  resetAt: number;
+};
+
+const rateLimitStore = new Map<string, RateLimitEntry>();
+
+function createRateLimitMiddleware(bucket: string, maxRequests: number, windowMs: number) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const now = Date.now();
+    const clientId = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const key = `${bucket}:${clientId}`;
+    const current = rateLimitStore.get(key);
+
+    if (!current || current.resetAt <= now) {
+      rateLimitStore.set(key, { count: 1, resetAt: now + windowMs });
+      res.setHeader('X-RateLimit-Limit', String(maxRequests));
+      res.setHeader('X-RateLimit-Remaining', String(maxRequests - 1));
+      return next();
+    }
+
+    if (current.count >= maxRequests) {
+      const retryAfterSeconds = Math.max(1, Math.ceil((current.resetAt - now) / 1000));
+      res.setHeader('Retry-After', String(retryAfterSeconds));
+      res.setHeader('X-RateLimit-Limit', String(maxRequests));
+      res.setHeader('X-RateLimit-Remaining', '0');
+      logger.warn('marl rate limit exceeded', {
+        bucket,
+        clientId: String(clientId),
+        path: req.path,
+        method: req.method,
+      });
+      return res.status(429).json({
+        error: 'Rate limit exceeded',
+        bucket,
+        retryAfterSeconds,
+      });
+    }
+
+    current.count += 1;
+    res.setHeader('X-RateLimit-Limit', String(maxRequests));
+    res.setHeader('X-RateLimit-Remaining', String(Math.max(0, maxRequests - current.count)));
+    return next();
+  };
+}
+
+const competitionWriteRateLimit = createRateLimitMiddleware('marl-competition-start', 5, 60_000);
+const compareRateLimit = createRateLimitMiddleware('marl-agents-compare', 10, 60_000);
+const competitionReadRateLimit = createRateLimitMiddleware('marl-competition-read', 120, 60_000);
+
+export function resetMarlRateLimitersForTests(): void {
+  rateLimitStore.clear();
+}
 
 // ─── Validation helpers ───────────────────────────────────────────────────────
 
@@ -57,7 +111,7 @@ function sanitizeAgentId(id: string): string {
  *     -H "Content-Type: application/json" \
  *     -d '{"mode":"SINGLE","agents":[{"id":"bull","riskProfile":"AGGRESSIVE"},{"id":"bear","riskProfile":"CONSERVATIVE"}],"symbols":["BTC","ETH"],"duration":100,"refreshInterval":1000,"learningEnabled":true}'
  */
-router.post('/api/marl/competition/start', (req, res) => {
+router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res) => {
   try {
     const body = req.body as {
       mode?: unknown;
@@ -199,7 +253,7 @@ router.post('/api/marl/competition/start', (req, res) => {
  * Example:
  *   curl http://localhost:3000/api/marl/competition/comp_1710644400000/status
  */
-router.get('/api/marl/competition/:competitionId/status', (req, res) => {
+router.get('/api/marl/competition/:competitionId/status', competitionReadRateLimit, (req, res) => {
   const { competitionId } = req.params;
   const record = engine.getRecord(competitionId);
 
@@ -253,7 +307,7 @@ router.get('/api/marl/competition/:competitionId/status', (req, res) => {
  * Example:
  *   curl http://localhost:3000/api/marl/competition/comp_1710644400000/results
  */
-router.get('/api/marl/competition/:competitionId/results', (req, res) => {
+router.get('/api/marl/competition/:competitionId/results', competitionReadRateLimit, (req, res) => {
   const { competitionId } = req.params;
   const record = engine.getRecord(competitionId);
 
@@ -312,7 +366,7 @@ router.get('/api/marl/competition/:competitionId/results', (req, res) => {
  *     -H "Content-Type: application/json" \
  *     -d '{"agent1":{"id":"bull","riskProfile":"AGGRESSIVE"},"agent2":{"id":"bear","riskProfile":"CONSERVATIVE"},"symbols":["BTC"],"duration":100,"rounds":3}'
  */
-router.post('/api/marl/agents/compare', async (req, res) => {
+router.post('/api/marl/agents/compare', compareRateLimit, async (req, res) => {
   try {
     const body = req.body as {
       agent1?: unknown;
@@ -402,7 +456,7 @@ router.post('/api/marl/agents/compare', async (req, res) => {
  * Example:
  *   curl http://localhost:3000/api/marl/competitions
  */
-router.get('/api/marl/competitions', (_req, res) => {
+router.get('/api/marl/competitions', competitionReadRateLimit, (_req, res) => {
   const all = engine.getAllRecords();
   return res.json({
     total: all.length,
@@ -432,7 +486,7 @@ router.get('/api/marl/competitions', (_req, res) => {
  * Example:
  *   curl http://localhost:3000/api/marl/info
  */
-router.get('/api/marl/info', (_req, res) => {
+router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
   return res.json({
     description: 'MARL Competitive Trading Framework — Phase 2',
     tournamentModes: {
