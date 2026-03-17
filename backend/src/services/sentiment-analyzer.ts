@@ -1,4 +1,5 @@
 import type { Coin, Sentiment } from '../types.js';
+import type { FinBertService } from './finbert.js';
 
 // ─── Analysis Mode ────────────────────────────────────────────────────────────
 
@@ -294,6 +295,30 @@ export class SentimentAnalyzerEngine {
 
     scored.sort((a, b) => b.composite_score - a.composite_score);
     return scored.map((s, i) => ({ ...s, rank: i + 1 }));
+  }
+
+  /**
+   * Async text scoring with optional FinBERT fallback.
+   *
+   * When a configured FinBertService is provided and available, uses the model
+   * to derive a score in [-1, 1].  Falls back to keyword-based scoring when
+   * FinBERT is unavailable or returns null.
+   *
+   * This is the async entry point used by scoreItemAsync() in item-scorer.ts.
+   */
+  async scoreTextAsync(text: string, finBert?: FinBertService): Promise<number> {
+    if (finBert?.isAvailable()) {
+      const result = await finBert.analyze(text);
+      if (result !== null) {
+        return finBert.toSentimentScore(result);
+      }
+    }
+    // Fallback: keyword scoring on sentence-split text
+    const sentences = text
+      .split(/[.!?\n]/)
+      .map(s => s.trim())
+      .filter(s => s.length > 5);
+    return this.scoreHeadlinesByKeyword(sentences.length ? sentences : [text]);
   }
 
   // ── Helper: RSI Calculation ─────────────────────────────────────────────────

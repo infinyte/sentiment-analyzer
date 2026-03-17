@@ -68,6 +68,7 @@ export class SocialStorageService {
     this.db.pragma('journal_mode = WAL');
     this.db.pragma('foreign_keys = ON');
     this.createTables();
+    this.runMigrations();
     logger.info('social-store connected', { path: this.dbPath });
   }
 
@@ -97,7 +98,7 @@ export class SocialStorageService {
         coins_mentioned, metadata,
         sentiment_score, sentiment_confidence,
         score_sentiment, score_engagement, score_recency, score_authority, score_composite,
-        last_updated
+        last_updated, language, sarcasm_flagged
       ) VALUES (
         @id, @source, @source_id, @content, @title, @author, @author_followers,
         @engagement_likes, @engagement_shares, @engagement_comments, @engagement_views,
@@ -105,7 +106,7 @@ export class SocialStorageService {
         @coins_mentioned, @metadata,
         @sentiment_score, @sentiment_confidence,
         @score_sentiment, @score_engagement, @score_recency, @score_authority, @score_composite,
-        @last_updated
+        @last_updated, @language, @sarcasm_flagged
       )
       ON CONFLICT(source, source_id) DO UPDATE SET
         engagement_likes    = excluded.engagement_likes,
@@ -120,6 +121,8 @@ export class SocialStorageService {
         score_composite     = excluded.score_composite,
         sentiment_score     = excluded.sentiment_score,
         sentiment_confidence = excluded.sentiment_confidence,
+        language            = excluded.language,
+        sarcasm_flagged     = excluded.sarcasm_flagged,
         last_updated        = excluded.last_updated
     `).run({
       id: item.id || randomUUID(),
@@ -146,6 +149,8 @@ export class SocialStorageService {
       score_authority: item.score_authority,
       score_composite: item.score_composite,
       last_updated: item.last_updated,
+      language: item.language ?? null,
+      sarcasm_flagged: item.sarcasm_flagged ? 1 : 0,
     });
   }
 
@@ -499,6 +504,13 @@ export class SocialStorageService {
     if (!this.db) throw new Error('[social-store] Not connected — call connect() first');
     return this.db;
   }
+
+  private runMigrations(): void {
+    // v2: language detection column (Issue #4)
+    try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN language TEXT').run(); } catch { /* already exists */ }
+    // v2: sarcasm flag column (Issue #2)
+    try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN sarcasm_flagged INTEGER').run(); } catch { /* already exists */ }
+  }
 }
 
 // ── Row → domain object helpers ───────────────────────────────────────────────
@@ -515,6 +527,8 @@ interface RawItemRow {
   score_sentiment: number; score_engagement: number;
   score_recency: number; score_authority: number; score_composite: number;
   last_updated: string;
+  language: string | null;
+  sarcasm_flagged: number | null;
 }
 
 function parseItemRow(row: RawItemRow): ScoredSocialItem {
@@ -543,6 +557,8 @@ function parseItemRow(row: RawItemRow): ScoredSocialItem {
     score_authority: row.score_authority,
     score_composite: row.score_composite,
     last_updated: row.last_updated,
+    language: row.language ?? undefined,
+    sarcasm_flagged: row.sarcasm_flagged ? true : undefined,
   };
 }
 

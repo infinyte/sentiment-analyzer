@@ -68,6 +68,10 @@ export interface ScoredSentimentItem {
   sentiment_score: number;
   weighted_score: number;
   source_weight: number;
+  /** True when sarcasm/irony was detected in the content. */
+  sarcasm_flagged?: boolean;
+  /** True when ABSA context window was used instead of full text. */
+  context_window_used?: boolean;
 }
 
 export interface SentimentSourceBreakdown {

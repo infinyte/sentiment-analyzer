@@ -13,6 +13,8 @@
 
 import { SentimentAnalyzerEngine } from '../../sentiment-analyzer.js';
 import { extractCoins } from './coin-extractor.js';
+import { detectSarcasm } from './sarcasm-detector.js';
+import { finBertService } from '../../finbert.js';
 import type { SocialMediaItem, ScoredSocialItem, SocialSource } from '../../../types/social-media.js';
 
 const analyzer = new SentimentAnalyzerEngine();
@@ -207,4 +209,135 @@ export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
 
 export function scoreItems(items: SocialMediaItem[]): ScoredSocialItem[] {
   return items.map(scoreItem);
+}
+
+// ── Language Detection (Issue #4) ─────────────────────────────────────────────
+
+/**
+ * Returns an ISO 639-1 language code for `text`.
+ *
+ * Uses Unicode script ranges rather than an external library so it works in
+ * both ESM and CommonJS (Jest) environments without additional configuration.
+ *
+ * Detects non-Latin scripts reliably; defaults to 'en' for Latin-script text
+ * (English, Spanish, French, German, …).
+ */
+export function detectLanguage(text: string): string {
+  if (text.trim().length < 10) return 'en';
+
+  let cjk = 0, hangul = 0, arabic = 0, cyrillic = 0, hiragana = 0, katakana = 0;
+
+  for (const char of text) {
+    const cp = char.codePointAt(0) ?? 0;
+    if ((cp >= 0x4E00 && cp <= 0x9FFF) || (cp >= 0x3400 && cp <= 0x4DBF)) cjk++;
+    else if (cp >= 0xAC00 && cp <= 0xD7AF) hangul++;
+    else if (cp >= 0x0600 && cp <= 0x06FF) arabic++;
+    else if (cp >= 0x0400 && cp <= 0x04FF) cyrillic++;
+    else if (cp >= 0x3040 && cp <= 0x309F) hiragana++;
+    else if (cp >= 0x30A0 && cp <= 0x30FF) katakana++;
+  }
+
+  const len = text.length;
+  if ((hiragana + katakana) / len > 0.05) return 'ja';
+  if (cjk / len > 0.15) return 'zh';
+  if (hangul / len > 0.1) return 'ko';
+  if (arabic / len > 0.1) return 'ar';
+  if (cyrillic / len > 0.1) return 'ru';
+  return 'en';
+}
+
+// ── Async Scoring Pipeline (Issues #1, #2, #4) ────────────────────────────────
+
+/**
+ * Async variant of scoreItem that integrates:
+ *   - FinBERT sentiment model when FINBERT_API_URL is configured  (Issue #1)
+ *   - Sarcasm/irony heuristic detection                           (Issue #2)
+ *   - Language detection via franc-min                            (Issue #4)
+ *
+ * Falls back gracefully to the sync keyword scorer when FinBERT is unavailable.
+ * The sync scoreItem() is unchanged so existing callers keep working.
+ */
+export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocialItem> {
+  const fullText = [item.title, item.content].filter(Boolean).join(' ');
+
+  // Sarcasm detection (shared; used regardless of FinBERT availability)
+  const sarcasmResult = detectSarcasm(fullText);
+
+  // Language detection
+  const language = detectLanguage(fullText);
+
+  // Sentiment scoring — FinBERT preferred, keyword fallback
+  let sentResult: { score: number; raw: number; confidence: number };
+  let finbert_used = false;
+
+  if (finBertService.isAvailable()) {
+    const finBertOutput = await finBertService.analyze(fullText);
+    if (finBertOutput !== null) {
+      finbert_used = true;
+      const rawSentiment = finBertService.toSentimentScore(finBertOutput);
+
+      if (sarcasmResult.sarcastic && sarcasmResult.confidence >= 0.67) {
+        // Strong sarcasm signal: invert and halve the magnitude
+        const invertedRaw = -rawSentiment * 0.5;
+        sentResult = {
+          score: parseFloat((50 + invertedRaw * 50).toFixed(2)),
+          raw:   invertedRaw,
+          confidence: finBertOutput.score * 0.5,
+        };
+      } else {
+        sentResult = {
+          score: parseFloat((50 + rawSentiment * 50).toFixed(2)),
+          raw:   rawSentiment,
+          confidence: finBertOutput.score,
+        };
+      }
+    } else {
+      sentResult = scoreSentiment(fullText);
+    }
+  } else {
+    sentResult = scoreSentiment(fullText);
+    // Apply sarcasm adjustment to keyword-based score too
+    if (sarcasmResult.sarcastic && sarcasmResult.confidence >= 0.67) {
+      const invertedRaw = -sentResult.raw * 0.5;
+      sentResult = {
+        score: parseFloat((50 + invertedRaw * 50).toFixed(2)),
+        raw:   invertedRaw,
+        confidence: sentResult.confidence * 0.5,
+      };
+    }
+  }
+
+  const engScore  = scoreEngagement(item);
+  const recScore  = scoreRecency(item.content_created_at);
+  const authScore = scoreAuthority(item);
+
+  const composite = parseFloat((
+    sentResult.score * WEIGHTS.sentiment +
+    engScore          * WEIGHTS.engagement +
+    authScore         * WEIGHTS.authority +
+    recScore          * WEIGHTS.recency
+  ).toFixed(2));
+
+  const coins = item.coins_mentioned.length ? item.coins_mentioned : extractCoins(fullText);
+
+  return {
+    ...item,
+    language,
+    coins_mentioned: coins,
+    sentiment_score:     sentResult.raw,
+    sentiment_confidence: sentResult.confidence,
+    score_sentiment:  sentResult.score,
+    score_engagement: engScore,
+    score_recency:    recScore,
+    score_authority:  authScore,
+    score_composite:  composite,
+    sarcasm_flagged:  sarcasmResult.sarcastic,
+    finbert_used,
+    last_updated: new Date().toISOString(),
+  };
+}
+
+/** Async bulk scoring — runs items in parallel. */
+export async function scoreItemsAsync(items: SocialMediaItem[]): Promise<ScoredSocialItem[]> {
+  return Promise.all(items.map(scoreItemAsync));
 }

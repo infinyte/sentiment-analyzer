@@ -6,6 +6,7 @@ import type {
 } from '../types.js';
 import logger from '../logger.js';
 import { NewsAPIService } from './newsapi.js';
+import { detectSarcasm } from './social-media/scoring/sarcasm-detector.js';
 
 type NormalizedSourceItem = {
   id: string;
@@ -73,6 +74,20 @@ const NEGATIVE_TERMS = [
   'drop', 'sell-off', 'bear', 'bearish', 'hack', 'exploit', 'lawsuit', 'ban', 'liquidation', 'outflow',
   'loss', 'decline', 'downgrade', 'fraud', 'delay', 'outage',
 ];
+
+/**
+ * ABSA helper: extract a ±windowSize token window centred on the first
+ * occurrence of `target` in `text`.  Returns null when `target` is not found.
+ */
+function extractContextWindow(text: string, target: string, windowSize = 50): string | null {
+  const tokens = text.split(/\s+/);
+  const targetLower = target.toLowerCase();
+  const idx = tokens.findIndex(t => t.toLowerCase().includes(targetLower));
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - windowSize);
+  const end   = Math.min(tokens.length, idx + windowSize + 1);
+  return tokens.slice(start, end).join(' ');
+}
 
 class NewsApiContentAdapter implements ContentSourceAdapter {
   constructor(private readonly newsApi: NewsAPIService) {}
@@ -187,14 +202,14 @@ export class ContentSignalService {
     ];
   }
 
-  async collect(topic: string, symbol: string, days = 7): Promise<CollectedSignalResult> {
+  async collect(topic: string, symbol: string, days = 7, targetCoin?: string): Promise<CollectedSignalResult> {
     const sourceItems = await Promise.all(this.adapters.map(adapter => adapter.collect(topic, symbol, days)));
     const normalized = sourceItems
       .flat()
       .filter(item => item.title.trim().length > 0 || item.body.trim().length > 0);
 
     const scored = normalized
-      .map(item => this.scoreItem(item, topic, symbol))
+      .map(item => this.scoreItem(item, topic, symbol, targetCoin))
       .sort((left, right) => Math.abs(right.weighted_score) - Math.abs(left.weighted_score));
 
     const sourceBreakdown = this.buildSourceBreakdown(scored);
@@ -209,14 +224,35 @@ export class ContentSignalService {
     };
   }
 
-  private scoreItem(item: NormalizedSourceItem, topic: string, symbol: string): ScoredSentimentItem {
+  private scoreItem(item: NormalizedSourceItem, topic: string, symbol: string, targetCoin?: string): ScoredSentimentItem {
     const combinedText = `${item.title} ${item.body}`.trim().toLowerCase();
-    const keywordScore = this.clamp(
-      POSITIVE_TERMS.filter(term => combinedText.includes(term)).length -
-        NEGATIVE_TERMS.filter(term => combinedText.includes(term)).length,
+
+    // ── ABSA: extract context window around the target coin mention ────────────
+    let scoringText = combinedText;
+    let context_window_used = false;
+    if (targetCoin) {
+      const window = extractContextWindow(combinedText, targetCoin);
+      if (window) {
+        scoringText = window;
+        context_window_used = true;
+      }
+    }
+
+    // ── Sarcasm detection ──────────────────────────────────────────────────────
+    const sarcasmResult = detectSarcasm(scoringText);
+
+    // ── Keyword scoring ────────────────────────────────────────────────────────
+    let rawKeywordScore = this.clamp(
+      POSITIVE_TERMS.filter(term => scoringText.includes(term)).length -
+        NEGATIVE_TERMS.filter(term => scoringText.includes(term)).length,
       -4,
       4
     ) / 4;
+
+    // When sarcasm is detected with high confidence, invert the sentiment signal
+    if (sarcasmResult.sarcastic && sarcasmResult.confidence >= 0.67) {
+      rawKeywordScore = -rawKeywordScore * 0.5; // invert + halve magnitude
+    }
 
     const symbolMatch = combinedText.includes(symbol.toLowerCase()) ? 1 : 0;
     const topicParts = topic.toLowerCase().split(/\s+/).filter(Boolean);
@@ -225,7 +261,7 @@ export class ContentSignalService {
 
     const recencyScore = this.computeRecencyScore(item.publishedAt);
     const engagementScore = this.computeEngagementScore(item.engagementValue ?? 0);
-    const sentimentScore = this.clamp(keywordScore * (0.75 + relevanceScore * 0.25), -1, 1);
+    const sentimentScore = this.clamp(rawKeywordScore * (0.75 + relevanceScore * 0.25), -1, 1);
     const weightedScore = sentimentScore * item.sourceWeight * recencyScore * (0.7 + relevanceScore * 0.3) * (0.85 + engagementScore * 0.15);
 
     return {
@@ -240,10 +276,12 @@ export class ContentSignalService {
       engagement_score: Number(engagementScore.toFixed(3)),
       recency_score: Number(recencyScore.toFixed(3)),
       relevance_score: Number(relevanceScore.toFixed(3)),
-      keyword_score: Number(keywordScore.toFixed(3)),
+      keyword_score: Number(rawKeywordScore.toFixed(3)),
       sentiment_score: Number(sentimentScore.toFixed(3)),
       weighted_score: Number(weightedScore.toFixed(3)),
       source_weight: item.sourceWeight,
+      sarcasm_flagged: sarcasmResult.sarcastic,
+      context_window_used,
     };
   }
 

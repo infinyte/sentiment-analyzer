@@ -18,7 +18,7 @@ import { DiscordScraper }  from './discord-scraper.js';
 import { TelegramScraper } from './telegram-scraper.js';
 import { YouTubeScraper }  from './youtube-scraper.js';
 import { TikTokScraper }   from './tiktok-scraper.js';
-import { scoreItems }      from '../scoring/item-scorer.js';
+import { scoreItemsAsync } from '../scoring/item-scorer.js';
 import { extractCoins }    from '../scoring/coin-extractor.js';
 import { socialStore }     from '../../../database/sqlite-social-store.js';
 import type { SocialMediaItem, SocialSource } from '../../../types/social-media.js';
@@ -104,7 +104,7 @@ export class SocialMediaScraperManager {
 
     this.populateCoins(allRaw, upper);
 
-    const scored = scoreItems(allRaw);
+    const scored = await scoreItemsAsync(allRaw);
     let stored = 0;
     try {
       stored = socialStore.upsertItems(scored);
@@ -153,7 +153,7 @@ export class SocialMediaScraperManager {
     try {
       const items = await fetcher();
       this.populateCoins(items);
-      const scored = scoreItems(items);
+      const scored = await scoreItemsAsync(items);
       socialStore.upsertItems(scored);
       if (items.length) socialStore.incrementFetchCount(source, items.length);
       logger.info(`scrape-manager: ${source} bulk refresh`, { count: items.length });

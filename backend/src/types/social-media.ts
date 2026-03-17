@@ -35,6 +35,8 @@ export interface SocialMediaItem {
   coins_mentioned: string[];
   /** Extra platform-specific fields (subreddit, etc.). */
   metadata: Record<string, unknown>;
+  /** ISO 639-1 language code detected from content (e.g. 'en', 'zh', 'ko'). */
+  language?: string;
 }
 
 // ── Scored item (after scoring pipeline) ─────────────────────────────────────
@@ -55,6 +57,10 @@ export interface ScoredSocialItem extends SocialMediaItem {
   /** Composite weighted signal [0, 100]. */
   score_composite: number;
   last_updated: string;
+  /** True when sarcasm/irony heuristics fired for this item. */
+  sarcasm_flagged?: boolean;
+  /** True when FinBERT was used for sentiment (vs keyword fallback). */
+  finbert_used?: boolean;
 }
 
 // ── Trending topic ────────────────────────────────────────────────────────────
