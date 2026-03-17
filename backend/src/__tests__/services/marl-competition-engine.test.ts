@@ -1,10 +1,46 @@
+// ── Mock dependencies ─────────────────────────────────────────────────────────
+
+const mockGetTopCoins = jest.fn().mockResolvedValue([
+  {
+    symbol:                   'BTC',
+    price_usd:                50000,
+    price_change_24h_percent: 3,
+    price_change_7d_percent:  8,
+    volatility_24h:           4,
+    volatility_7d:            6,
+    volume_24h_usd:           30_000_000_000,
+    market_cap_usd:           1_000_000_000_000,
+    market_rank:              1,
+    sentiment_score:          0.6,
+    sentiment_confidence:     0.8,
+    sentiment_summary:        'Bullish momentum',
+  },
+  { symbol: 'ETH', price_usd: 3000, price_change_24h_percent: 1, price_change_7d_percent: 2,
+    volatility_24h: 3, volatility_7d: 5, volume_24h_usd: 15_000_000_000, market_cap_usd: 400_000_000_000,
+    market_rank: 2, sentiment_score: 0.3, sentiment_confidence: 0.5, sentiment_summary: '' },
+]);
+
+const mockAnalyzeAdvanced = jest.fn().mockReturnValue({
+  sentiment:        'BULLISH',
+  confidence:       0.75,
+  risk_level:       'MEDIUM',
+  news_score:       0.6,
+  momentum_score:   0.5,
+  volatility_score: 0.2,
+  volume_score:     0.4,
+  rsi_score:        0.3,
+});
+
 jest.mock('../../services/coingecko', () => ({
   CoinGeckoService: jest.fn().mockImplementation(() => ({
-    getTopCoins: jest.fn().mockResolvedValue([
-      { symbol: 'BTC', price_usd: 50000 },
-      { symbol: 'ETH', price_usd: 3000 },
-    ]),
+    getTopCoins:    mockGetTopCoins,
     getCoinHistory: jest.fn().mockResolvedValue([]),
+  })),
+}));
+
+jest.mock('../../services/sentiment-analyzer', () => ({
+  SentimentAnalyzerEngine: jest.fn().mockImplementation(() => ({
+    analyzeAdvancedSentiment: mockAnalyzeAdvanced,
   })),
 }));
 
@@ -245,5 +281,143 @@ describe('MarlCompetitionEngine', () => {
     const second = engine.createAgentState({ id: 'alpha', riskProfile: 'AGGRESSIVE', initialCapital: 10000 }, 10000);
 
     expect(second.agent.qValues.get('POS:0|GAIN:0|CASH:100|SIG:BUY')).toEqual([0.5, 0, 0, 0, 0]);
+  });
+});
+
+// ─── computeLiveSignal + holdSignal ───────────────────────────────────────────
+
+describe('MarlCompetitionEngine — computeLiveSignal and holdSignal', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  type PrivateEngine = {
+    computeLiveSignal: (symbol: string, livePrice: number) => Promise<any>;
+    holdSignal:        (symbol: string, price: number)    => any;
+  };
+
+  beforeEach(() => {
+    mockGetTopCoins.mockClear();
+    mockAnalyzeAdvanced.mockClear();
+  });
+
+  it('returns a BUY signal when composite score exceeds +0.25', async () => {
+    // Default mockAnalyzeAdvanced returns scores that yield a positive composite:
+    // 0.30*0.6 + 0.25*0.5 - 0.10*0.2 + 0.20*0.4 + 0.15*0.3 = 0.18+0.125-0.02+0.08+0.045 = 0.41 → BUY
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('BTC', 50000);
+
+    expect(signal.symbol).toBe('BTC');
+    expect(signal.signal).toBe('BUY');
+    expect(signal.strength).toBeGreaterThan(0);
+    expect(signal.strength).toBeLessThanOrEqual(1);
+    expect(signal.target_price_high).toBeGreaterThan(50000);
+    expect(signal.stop_loss).toBeLessThan(50000);
+    expect(signal.reasoning).toMatch(/Advanced:/);
+    expect(mockAnalyzeAdvanced).toHaveBeenCalledWith(
+      expect.objectContaining({ symbol: 'BTC', price_usd: 50000 }),
+      expect.objectContaining({ sentiment_score: 0.6 }),
+    );
+  });
+
+  it('targets the live price over the cached CoinGecko price', async () => {
+    // BTC CoinGecko price is 50000 in the mock; supply a different live price.
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const livePrice = 62000;
+    const signal = await engine.computeLiveSignal('BTC', livePrice);
+
+    // MarketData passed to analyzeAdvancedSentiment must use livePrice
+    expect(mockAnalyzeAdvanced).toHaveBeenCalledWith(
+      expect.objectContaining({ price_usd: livePrice }),
+      expect.anything(),
+    );
+    expect(signal.target_price_high).toBeGreaterThan(livePrice);
+    expect(signal.stop_loss).toBeLessThan(livePrice);
+  });
+
+  it('returns a SELL signal when composite score is below -0.25', async () => {
+    mockAnalyzeAdvanced.mockReturnValueOnce({
+      sentiment:        'BEARISH',
+      confidence:       0.7,
+      risk_level:       'HIGH',
+      news_score:      -0.6,
+      momentum_score:  -0.5,
+      volatility_score: 0.5,
+      volume_score:    -0.3,
+      rsi_score:       -0.4,
+      // composite: 0.30*(-0.6) + 0.25*(-0.5) - 0.10*0.5 + 0.20*(-0.3) + 0.15*(-0.4)
+      //          = -0.18 - 0.125 - 0.05 - 0.06 - 0.06 = -0.475 → SELL
+    });
+
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('BTC', 50000);
+
+    expect(signal.signal).toBe('SELL');
+    expect(signal.strength).toBeGreaterThan(0);
+  });
+
+  it('returns a HOLD signal when composite score is between -0.25 and +0.25', async () => {
+    mockAnalyzeAdvanced.mockReturnValueOnce({
+      sentiment:        'NEUTRAL',
+      confidence:       0.5,
+      risk_level:       'LOW',
+      news_score:       0.1,
+      momentum_score:   0.0,
+      volatility_score: 0.1,
+      volume_score:     0.0,
+      rsi_score:        0.0,
+      // composite: 0.30*0.1 + 0 - 0.01 + 0 + 0 = 0.02 → HOLD
+    });
+
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('BTC', 50000);
+
+    expect(signal.signal).toBe('HOLD');
+  });
+
+  it('falls back to HOLD signal when the symbol is not in the CoinGecko top-50', async () => {
+    // Only ETH and BTC in the mock; request an unknown symbol
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('DOGE', 0.12);
+
+    expect(signal.signal).toBe('HOLD');
+    expect(signal.reasoning).toMatch(/no market data/i);
+    expect(mockAnalyzeAdvanced).not.toHaveBeenCalled();
+  });
+
+  it('falls back to HOLD signal when CoinGecko throws', async () => {
+    mockGetTopCoins.mockRejectedValueOnce(new Error('rate limited'));
+
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('BTC', 50000);
+
+    expect(signal.signal).toBe('HOLD');
+    expect(signal.reasoning).toMatch(/no market data/i);
+  });
+
+  it('holdSignal returns correct shape with neutral targets around the price', () => {
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const price  = 3000;
+    const signal = engine.holdSignal('ETH', price);
+
+    expect(signal.symbol).toBe('ETH');
+    expect(signal.signal).toBe('HOLD');
+    expect(signal.strength).toBe(0);
+    expect(signal.target_price_high).toBeCloseTo(price * 1.05, 2);
+    expect(signal.target_price_low).toBeCloseTo(price * 0.97, 2);
+    expect(signal.stop_loss).toBeCloseTo(price * 0.95, 2);
+    expect(signal.reasoning).toMatch(/no market data/i);
+    expect(signal.risk_reward_ratio).toBeGreaterThan(0);
+  });
+
+  it('strength is capped at 1 even for very high composite scores', async () => {
+    mockAnalyzeAdvanced.mockReturnValueOnce({
+      sentiment: 'BULLISH', confidence: 1, risk_level: 'LOW',
+      news_score: 1, momentum_score: 1, volatility_score: 0,
+      volume_score: 1, rsi_score: 1,
+      // composite ≈ 0.30 + 0.25 + 0 + 0.20 + 0.15 = 0.90 → strength = min(0.90*2,1) = 1
+    });
+
+    const engine = new MarlCompetitionEngine() as unknown as PrivateEngine;
+    const signal = await engine.computeLiveSignal('BTC', 50000);
+
+    expect(signal.strength).toBe(1);
   });
 });

@@ -12,7 +12,8 @@
 
 import { TradingAgent } from './trading-agent.js';
 import type { AgentConfig, AgentMetrics } from './trading-agent.js';
-import type { TradingSignal } from './sentiment-analyzer.js';
+import { SentimentAnalyzerEngine } from './sentiment-analyzer.js';
+import type { TradingSignal, MarketData, NewsData } from './sentiment-analyzer.js';
 import { CoinGeckoService } from './coingecko.js';
 import { storage } from '../storage.js';
 import logger from '../logger.js';
@@ -885,9 +886,11 @@ export class MarlCompetitionEngine {
 
   private results: Map<string, CompetitionRecord> = new Map();
   private coinGecko: CoinGeckoService;
+  private readonly sentimentEngine: SentimentAnalyzerEngine;
 
   constructor() {
     this.coinGecko = new CoinGeckoService();
+    this.sentimentEngine = new SentimentAnalyzerEngine();
     this.loadLearningStatesFromDb();
   }
 
@@ -970,6 +973,87 @@ export class MarlCompetitionEngine {
       result.set(symbol, cachedPrice);
     }
     return result;
+  }
+
+  // ── Live signal computation ───────────────────────────────────────────────
+
+  /**
+   * Derive a live TradingSignal for a symbol using real CoinGecko market data and
+   * local ADVANCED sentiment analysis. CoinGecko caches its responses (5-min TTL),
+   * so repeated calls within a tournament tick are cheap.
+   * Falls back to a neutral HOLD signal if market data is unavailable.
+   */
+  private async computeLiveSignal(symbol: string, livePrice: number): Promise<TradingSignal> {
+    try {
+      const coins = await this.coinGecko.getTopCoins(50);
+      const coin = coins.find(c => c.symbol.toUpperCase() === symbol.toUpperCase());
+      if (!coin) return this.holdSignal(symbol, livePrice);
+
+      const market: MarketData = {
+        symbol:                   coin.symbol,
+        price_usd:                livePrice, // use freshest price, not cached CoinGecko price
+        price_change_24h_percent: coin.price_change_24h_percent,
+        price_change_7d_percent:  coin.price_change_7d_percent,
+        volatility_24h:           coin.volatility_24h,
+        volatility_7d:            coin.volatility_7d,
+        volume_24h_usd:           coin.volume_24h_usd,
+        market_cap_usd:           coin.market_cap_usd,
+        market_rank:              coin.market_rank,
+      };
+      const news: NewsData = {
+        headlines:            [],
+        sentiment_score:      coin.sentiment_score,
+        sentiment_confidence: coin.sentiment_confidence,
+        sentiment_summary:    coin.sentiment_summary,
+      };
+
+      const advanced = this.sentimentEngine.analyzeAdvancedSentiment(market, news);
+
+      // Re-derive composite inline (mirrors the private compositeFromAdvanced formula)
+      const composite =
+        0.30 * advanced.news_score +
+        0.25 * advanced.momentum_score -
+        0.10 * advanced.volatility_score +
+        0.20 * advanced.volume_score +
+        0.15 * advanced.rsi_score;
+
+      let signal: 'BUY' | 'SELL' | 'HOLD';
+      if (composite > 0.25)       signal = 'BUY';
+      else if (composite < -0.25) signal = 'SELL';
+      else                        signal = 'HOLD';
+
+      const strength = Math.min(Math.abs(composite) * 2, 1);
+      const volFraction = Math.max(market.volatility_24h / 100, 0.02); // floor at 2%
+      const atr = livePrice * volFraction;
+      const multiplier = 1 + strength;
+
+      return {
+        symbol,
+        signal,
+        strength,
+        target_price_high: livePrice + atr * multiplier * 2,
+        target_price_low:  livePrice + atr * multiplier,
+        stop_loss:         livePrice - atr * multiplier,
+        reasoning: `Advanced: ${advanced.sentiment} (conf=${advanced.confidence.toFixed(2)}, risk=${advanced.risk_level})`,
+        risk_reward_ratio: 2,
+      };
+    } catch {
+      return this.holdSignal(symbol, livePrice);
+    }
+  }
+
+  /** Neutral fallback TradingSignal emitted when live data is unavailable. */
+  private holdSignal(symbol: string, price: number): TradingSignal {
+    return {
+      symbol,
+      signal:            'HOLD',
+      strength:          0,
+      target_price_high: price * 1.05,
+      target_price_low:  price * 0.97,
+      stop_loss:         price * 0.95,
+      reasoning:         'no market data — holding',
+      risk_reward_ratio: 1.4,
+    };
   }
 
   // ── Factory ───────────────────────────────────────────────────────────────
@@ -1398,6 +1482,10 @@ export class MarlCompetitionEngine {
     const initialPrices = await this.fetchBasePrices(validSymbols);
     let currentPrices = new Map(initialPrices);
 
+    // Signal cache: refresh at most once per 5 min per symbol to limit CoinGecko calls
+    const signalCache = new Map<string, { signal: TradingSignal; cachedAt: number }>();
+    const SIGNAL_TTL_MS = 5 * 60 * 1_000;
+
     // Init risk guard with opening equity per agent
     for (const state of agentStates) {
       riskGuard.initAgent(state.agentId, computeEquity(state, currentPrices));
@@ -1456,16 +1544,15 @@ export class MarlCompetitionEngine {
             const price  = currentPrices.get(symbol) ?? 0;
             if (price === 0) continue;
 
-            const sentimentSignal = {
-              symbol,
-              signal: 'BUY' as const,
-              strength: 0.5,
-              target_price_high: price * 1.05,
-              target_price_low:  price * 0.97,
-              stop_loss:         price * 0.95,
-              reasoning:         'live market observation',
-              risk_reward_ratio: 2,
-            };
+            const sentimentSignal: TradingSignal = await (async () => {
+              let cached = signalCache.get(symbol);
+              if (!cached || Date.now() - cached.cachedAt >= SIGNAL_TTL_MS) {
+                const fresh = await this.computeLiveSignal(symbol, price);
+                cached = { signal: fresh, cachedAt: Date.now() };
+                signalCache.set(symbol, cached);
+              }
+              return cached.signal;
+            })();
 
             const portfolioArr = Array.from(state.portfolio.values()).map(p => ({
               ...p,
@@ -1540,7 +1627,7 @@ export class MarlCompetitionEngine {
             // Poll for fill (up to 10s)
             const filled = await this.pollUntilFilled(adapter, clientOrderId, 10_000);
             if (filled) {
-              try { storage.updateBrokerOrder(clientOrderId, filled); } catch { /* non-fatal */ }
+              try { storage.updateBrokerOrder(clientOrderId, filled as Parameters<typeof storage.updateBrokerOrder>[1]); } catch { /* non-fatal */ }
 
               const fillPrice = filled.avgFillPrice;
               if (action.type === 'BUY') {

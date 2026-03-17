@@ -14,6 +14,8 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { CompetitionConfig, CompetitionAgentSpec } from '../services/marl-competition-engine.js';
+import { brokerRegistry } from '../services/brokers/broker-registry.js';
+import type { ExchangeMode, RiskConfig } from '../types/broker.js';
 import logger from '../logger.js';
 
 const router = Router();
@@ -197,6 +199,9 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       refreshInterval?: unknown;
       evolutionaryRounds?: unknown;
       learningEnabled?: unknown;
+      exchangeMode?: unknown;
+      brokerCredentialId?: unknown;
+      riskConfig?: unknown;
     };
 
     if (!isValidMode(body.mode)) {
@@ -259,6 +264,74 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
 
     const learningEnabled = body.learningEnabled !== false;
 
+    // ─── exchangeMode / broker validation ────────────────────────────────────
+    const VALID_EXCHANGE_MODES = ['SIMULATED', 'PAPER', 'LIVE'] as const;
+    let exchangeMode: ExchangeMode = 'SIMULATED';
+    if (body.exchangeMode !== undefined) {
+      if (
+        typeof body.exchangeMode !== 'string' ||
+        !(VALID_EXCHANGE_MODES as readonly string[]).includes(body.exchangeMode)
+      ) {
+        return res.status(400).json({ error: `"exchangeMode" must be one of: ${VALID_EXCHANGE_MODES.join(', ')}` });
+      }
+      exchangeMode = body.exchangeMode as ExchangeMode;
+    }
+
+    let brokerCredentialId: string | undefined;
+    if (exchangeMode === 'PAPER' || exchangeMode === 'LIVE') {
+      if (typeof body.brokerCredentialId !== 'string' || !body.brokerCredentialId.trim()) {
+        return res.status(400).json({
+          error: '"brokerCredentialId" is required when exchangeMode is PAPER or LIVE',
+        });
+      }
+      // Sanitize: UUIDs contain hex digits and hyphens only, max 36 chars
+      const sanitizedCredId = body.brokerCredentialId
+        .replace(/[^a-zA-Z0-9-]/g, '')
+        .slice(0, 36);
+      if (!brokerRegistry.has(sanitizedCredId)) {
+        return res.status(400).json({
+          error: `Broker adapter for credentialId "${sanitizedCredId}" is not connected — call POST /api/marl/broker/connect/:id first`,
+        });
+      }
+      brokerCredentialId = sanitizedCredId;
+    }
+
+    let riskConfig: RiskConfig | undefined;
+    if (body.riskConfig !== undefined) {
+      if (typeof body.riskConfig !== 'object' || body.riskConfig === null || Array.isArray(body.riskConfig)) {
+        return res.status(400).json({ error: '"riskConfig" must be an object' });
+      }
+      const rc = body.riskConfig as Record<string, unknown>;
+
+      const maxPositionPct     = typeof rc.maxPositionPct     === 'number' ? rc.maxPositionPct     : 0.10;
+      const maxLossPerStepPct  = typeof rc.maxLossPerStepPct  === 'number' ? rc.maxLossPerStepPct  : 0.02;
+      const maxDailyDrawdownPct= typeof rc.maxDailyDrawdownPct=== 'number' ? rc.maxDailyDrawdownPct: 0.10;
+
+      if (maxPositionPct <= 0 || maxPositionPct > 1) {
+        return res.status(400).json({ error: '"riskConfig.maxPositionPct" must be between 0 (exclusive) and 1 (inclusive)' });
+      }
+      if (maxLossPerStepPct <= 0 || maxLossPerStepPct > 1) {
+        return res.status(400).json({ error: '"riskConfig.maxLossPerStepPct" must be between 0 (exclusive) and 1 (inclusive)' });
+      }
+      if (maxDailyDrawdownPct <= 0 || maxDailyDrawdownPct > 1) {
+        return res.status(400).json({ error: '"riskConfig.maxDailyDrawdownPct" must be between 0 (exclusive) and 1 (inclusive)' });
+      }
+
+      const allowedSymbols = Array.isArray(rc.allowedSymbols)
+        ? (rc.allowedSymbols as unknown[])
+            .filter(s => typeof s === 'string')
+            .map(s => (s as string).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
+        : [];
+
+      riskConfig = {
+        maxPositionPct,
+        maxLossPerStepPct,
+        maxDailyDrawdownPct,
+        allowedSymbols,
+        capitalIsolation: typeof rc.capitalIsolation === 'boolean' ? rc.capitalIsolation : true,
+      };
+    }
+
     const config: CompetitionConfig = {
       mode: body.mode,
       agents: agentSpecs,
@@ -267,6 +340,9 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       refreshInterval,
       evolutionaryRounds,
       learningEnabled,
+      exchangeMode,
+      brokerCredentialId,
+      riskConfig,
     };
 
     const competitionId = `comp_${Date.now()}`;
@@ -302,6 +378,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
     logger.info('competition started', {
       competitionId,
       mode: config.mode,
+      exchangeMode,
       agentCount: agentSpecs.length,
       symbols,
       duration,
@@ -311,6 +388,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       competitionId,
       status: 'STARTED',
       mode: config.mode,
+      exchangeMode,
       agentCount: agentSpecs.length,
       symbols,
       duration,
