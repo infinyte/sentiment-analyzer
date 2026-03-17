@@ -1,4 +1,5 @@
 import type { Sentiment } from '../types.js';
+import logger from '../logger.js';
 
 export class SentimentService {
   private apiKey: string;
@@ -82,11 +83,11 @@ Respond with ONLY this JSON (no markdown, no explanation):
           trending_score: 0,
         };
       } catch {
-        console.error('Failed to parse Claude response:', content);
+        logger.error('claude parse failed', { symbol, content });
         return neutralDefault('Analysis failed');
       }
     } catch (error) {
-      console.error('Sentiment analysis error:', error);
+      logger.error('sentiment analysis error', { symbol, error: String(error) });
       return neutralDefault('Error during analysis');
     }
   }

@@ -7,7 +7,7 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 **Current State:**
 - ✅ Postman integration tests exist (manual/CLI)
 - ✅ Jest configured in backend
-- ❌ No unit tests implemented
+- ✅ Backend unit tests implemented for Cache, CoinGeckoService, NewsAPIService, and SentimentService
 - ❌ No backend integration tests
 - ❌ No frontend component tests
 - ❌ No E2E tests
@@ -29,27 +29,34 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 **Location:** `backend/src/__tests__/services/cache.test.ts`
 
-**Tests to Implement:**
+**Current Status:** Implemented
+
+**Tests Currently Implemented:**
 
 | # | Test Name | Description | Acceptance Criteria |
 |---|-----------|-------------|-------------------|
 | 1.1.1 | Set and retrieve value | Cache stores and retrieves values correctly | Value retrieved equals value set |
-| 1.1.2 | TTL expiration | Cached value expires after TTL | Value returns `undefined` after TTL elapsed |
-| 1.1.3 | Update existing key | Resetting same key updates value and TTL | New value returned; TTL counter resets |
-| 1.1.4 | Delete operation | Deleting key removes from cache | Subsequent retrieval returns `undefined` |
-| 1.1.5 | Clear all | Clear operation removes all entries | Cache size = 0 after clear |
-| 1.1.6 | Get expiration time | Method returns time until expiration | Returned value in milliseconds, decreases over time |
-| 1.1.7 | Multiple concurrent sets | Multiple parallel sets work correctly | All values stored without race conditions |
-| 1.1.8 | Large value storage | Cache handles large objects | No performance degradation; memory bounded |
+| 1.1.2 | Missing key lookup | Missing keys return `null` | `get()` returns `null` for absent entries |
+| 1.1.3 | TTL expiration | Cached value expires after TTL | Value returns `null` after TTL elapsed |
+| 1.1.4 | Value before expiration | Cached value remains available before TTL elapses | Value is returned before expiry |
+| 1.1.5 | Update existing key | Resetting same key updates value and TTL | New value returned; TTL counter resets |
+| 1.1.6 | Delete operation | Deleting key removes from cache | Subsequent retrieval returns `null` |
+| 1.1.7 | Clear all | Clear operation removes all entries | `size() = 0` after clear |
+| 1.1.8 | Size reporting | Cache reports number of live entries | `size()` matches inserted live keys |
+| 1.1.9 | Many distinct keys | Multiple keys are stored without collision | 100 keys can be stored and retrieved |
+| 1.1.10 | Complex object storage | Cache stores nested objects correctly | Retrieved object deeply equals inserted object |
 
 **Mock Requirements:** None (pure logic)
 
-**Estimated Effort:** 2-3 hours
+**Coverage Notes:**
+- Current tests use Jest fake timers for TTL validation.
+- The implemented cache API returns `null` for misses and expired entries, not `undefined`.
+- There is no current test for a dedicated expiration-inspection method because the cache implementation does not expose one.
 
 **Success Criteria:**
-- ✅ 8 unit tests pass
-- ✅ Code coverage > 95% for Cache class
-- ✅ All TTL edge cases covered (0ms, very large TTL)
+- ✅ 10 unit tests pass
+- ✅ Core cache behaviors are covered: set/get, expiry, overwrite, delete, clear, size, and complex values
+- ⚠️ TTL edge cases like `0ms` and very large TTL values are not explicitly asserted
 
 ---
 
@@ -59,34 +66,41 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 **Location:** `backend/src/__tests__/services/coingecko.test.ts`
 
-**Tests to Implement:**
+**Current Status:** Implemented
+
+**Tests Currently Implemented:**
 
 | # | Test Name | Description | Acceptance Criteria |
 |---|-----------|-------------|-------------------|
 | 1.2.1 | getTopCoins success | Fetches and transforms coin data | Returns array with correct structure (Coin[]) |
-| 1.2.2 | getTopCoins limit param | Respects limit parameter | Returned array length ≤ limit |
+| 1.2.2 | getTopCoins limit param | Respects limit parameter | Request URL contains `per_page=<limit>` |
 | 1.2.3 | Volatility calculation | Correctly calculates volatility from high/low | `volatility_24h = ((high-low)/price)*100` |
 | 1.2.4 | Handle null prices | Handles missing/null price data gracefully | Volatility = 0 when price is null |
 | 1.2.5 | Symbol uppercase | Symbols converted to uppercase | All symbols in [A-Z] format |
-| 1.2.6 | Timestamp set | Each coin has current timestamp | timestamp ≤ Date.now() + 1000ms |
-| 1.2.7 | Market rank assignment | Market rank from API mapped correctly | market_rank > 0 for top 50 |
-| 1.2.8 | API error handling | Network/API errors throw | Exception propagated; no silent failures |
-| 1.2.9 | Response validation | Invalid API response rejected | Throws error instead of returning malformed data |
+| 1.2.6 | Missing high/low fallback | Missing high and low values fall back to price | `volatility_24h = 0` when high/low are absent |
+| 1.2.7 | Default sentiment fields | Service initializes sentiment placeholders | `sentiment_score = NEUTRAL`; confidence = 0 |
+| 1.2.8 | Market rank fallback | Missing market rank defaults safely | `market_rank = 999` when absent |
+| 1.2.9 | API error handling | Non-OK responses reject the request | Throws `CoinGecko API error: <status>` |
 | 1.2.10 | getCoinHistory success | Fetches historical OHLCV data | Returns array of {timestamp, open, high, low, close} |
 | 1.2.11 | getCoinHistory default days | Default days parameter = 7 | Correct number of candles returned |
-| 1.2.12 | getCoinHistory max days | Caps days at 365 | Never requests more than 1 year |
+| 1.2.12 | Network failure propagation | Network errors from `getTopCoins` bubble up | Promise rejects with the fetch error |
+| 1.2.13 | getCoinHistory error fallback | History request failures return empty data | Returns `[]` on non-OK response |
 
 **Mock Requirements:**
 - Mock `fetch` to return CoinGecko API response
-- Provide fixtures for: valid response, empty array, malformed data, API error
+- Provide fixtures for: valid market response, OHLCV tuples, missing optional fields, HTTP error, network error
 
-**Estimated Effort:** 4-5 hours
+**Coverage Notes:**
+- Current tests validate request URL construction, transformation logic, and fallback values.
+- `getTopCoins` is tested as a throwing API for HTTP and network failures.
+- `getCoinHistory` is tested as a tolerant API that returns `[]` on non-OK responses.
+- The document previously claimed timestamp assertions and a 365-day cap test, but those are not present in the repository tests.
 
 **Success Criteria:**
-- ✅ 12 unit tests pass
-- ✅ 100% coverage of transformations (lines 40-90)
-- ✅ All error paths covered
-- ✅ Volatility calculation verified against manual examples
+- ✅ 13 unit tests pass
+- ✅ Core transformation and fallback paths are covered for both `getTopCoins` and `getCoinHistory`
+- ✅ Volatility calculation is verified against a manual example
+- ⚠️ No current assertion covers timestamp fields or a maximum-day request cap
 
 ---
 
@@ -96,31 +110,37 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 **Location:** `backend/src/__tests__/services/newsapi.test.ts`
 
-**Tests to Implement:**
+**Current Status:** Implemented
+
+**Tests Currently Implemented:**
 
 | # | Test Name | Description | Acceptance Criteria |
 |---|-----------|-------------|-------------------|
 | 1.3.1 | getHeadlines success | Fetches headlines for symbol | Returns array of strings |
-| 1.3.2 | Headline filtering | Filters out irrelevant headlines | Only crypto-relevant articles included |
-| 1.3.3 | Headline limit | Respects max headlines | Returns ≤ 10 headlines |
-| 1.3.4 | Missing API key | Handles missing NEWSAPI_API_KEY | Throws specific error; doesn't make request |
-| 1.3.5 | API rate limit error | Handles 429 response | Throws "Rate limit exceeded" error |
+| 1.3.2 | Headline limit | Service caps headline results | Returns at most 20 strings |
+| 1.3.3 | Symbol encoding | Search topic is URL-encoded | Request URL contains encoded topic |
+| 1.3.4 | Date parameter | `days` argument affects the `from` query parameter | Request URL contains derived ISO date |
+| 1.3.5 | API rate limit/error fallback | Non-OK responses do not crash the service | Returns `[]` on HTTP 429 or similar |
 | 1.3.6 | Empty results | Handles symbol with no news | Returns empty array (not error) |
-| 1.3.7 | Symbol normalization | Converts symbol to searchable format | "BTC" → searches "Bitcoin" or similar |
-| 1.3.8 | Duplicate headlines | Removes duplicate headlines | No repeated strings in result |
-| 1.3.9 | Date sorting | Headlines sorted by recency | Most recent first |
+| 1.3.7 | Network failure fallback | Fetch errors do not crash the service | Returns `[]` on rejected fetch |
+| 1.3.8 | Constructor API key usage | Constructor-injected API key is used in the request | URL contains `apiKey=<constructor value>` |
+| 1.3.9 | Constructor precedence | Constructor API key overrides environment variable | URL uses constructor value over `process.env` |
 
 **Mock Requirements:**
 - Mock `fetch` for NewsAPI responses
-- Fixtures: valid response (5+ articles), rate limit error, empty response
+- Fixtures: valid article payloads, oversized article list, HTTP error, network error, empty response
 
-**Estimated Effort:** 3-4 hours
+**Coverage Notes:**
+- Current tests validate URL construction, result shaping, and graceful fallback behavior.
+- The service is currently designed to return `[]` on HTTP and network failures, not throw.
+- The earlier plan mentioned relevance filtering, deduplication, and sort-order assertions, but those are not implemented in the current Jest suite.
 
 **Success Criteria:**
 - ✅ 9 unit tests pass
-- ✅ Headline filtering logic covered
-- ✅ API error scenarios handled
+- ✅ URL construction and API key selection are covered
+- ✅ API error scenarios handled through empty-array fallback
 - ✅ Empty data cases don't crash
+- ⚠️ No current assertions cover relevance filtering, deduplication, or recency sorting
 
 ---
 
@@ -199,45 +219,41 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 | | 2. All services available | Includes service health details |
 
 **Mock Requirements:**
-- Mock external services: CoinGeckoService, NewsAPIService, SentimentService
-- Use supertest for HTTP assertions
-- Provide realistic response fixtures
 
 **Estimated Effort:** 6-8 hours
 
 **Success Criteria:**
-- ✅ 23 integration tests pass
-- ✅ All endpoints respond with correct status codes
-- ✅ Response schemas validated
-- ✅ Sorting and filtering verified
-- ✅ Caching behavior confirmed
-- ✅ Error cases handled gracefully
 
----
 
 ### 2.2 End-to-End API Flow Tests
 
-**Purpose:** Test realistic user workflows combining multiple endpoints.
+**Purpose:** Test realistic user workflows that span multiple backend endpoints.
 
-**Location:** `backend/src/__tests__/integration/e2e-flows.test.ts`
+**Location:** Planned `backend/src/__tests__/integration/e2e-flows.test.ts`
 
-**Workflows to Test:**
+**Current Status:** Not implemented
+
+**Repository Reality:**
+- There is no `backend/src/__tests__/integration/e2e-flows.test.ts` file.
+- The backend currently has API-level integration coverage in `backend/src/__tests__/api/core.test.ts` and `backend/src/__tests__/api/marl.test.ts`.
+- Those tests exercise endpoint validation and request/response behavior with mocked services, but they do not model multi-request user workflows as a separate flow suite.
+
+**Recommended Flows to Add:**
 
 | # | Workflow | Steps | Assertion |
 |---|----------|-------|-----------|
-| 2.2.1 | User views dashboard | 1. GET /api/coins<br>2. Verify 50 coins returned<br>3. All have sentiment scores | All coins populated; no NEUTRAL-only coins |
-| 2.2.2 | User views coin detail | 1. GET /api/coins (get symbol)<br>2. GET /api/coins/:symbol<br>3. Verify price_history & headlines | Detail includes 7 days history; 3-10 headlines |
-| 2.2.3 | Admin refreshes sentiment | 1. POST /api/refresh-sentiment<br>2. Receive job_id<br>3. Wait 2s<br>4. GET /api/sentiment/:symbol | Sentiment updated; confidence > 0 |
-| 2.2.4 | Cache invalidation | 1. GET /api/coins (1st - slow)<br>2. GET /api/coins (2nd - fast)<br>3. Verify timing difference | 1st: 800-2000ms; 2nd: <100ms |
-| 2.2.5 | Error recovery | 1. newsapi returns error<br>2. Still get sentiment (headlines [])<br>3. No app crash | BULL/NEUTRAL/BEAR still assigned |
+| 2.2.1 | User views dashboard | 1. `GET /api/coins`<br>2. Verify response metadata<br>3. Verify sentiment fields present | Response includes `data`, `count`, `last_updated`, and sentiment fields for each coin |
+| 2.2.2 | User views coin detail | 1. `GET /api/coins`<br>2. Pick a known symbol<br>3. `GET /api/coins/:symbol` | Detail response includes `coin`, `price_history`, and `headlines` |
+| 2.2.3 | Admin refreshes sentiment | 1. `POST /api/refresh-sentiment` with valid `x-api-key`<br>2. Receive `job_id` and processing status | Refresh endpoint accepts authenticated requests and returns processing metadata |
+| 2.2.4 | Sentiment cache read-after-prime | 1. `GET /api/sentiment/:symbol` for uncached symbol<br>2. Prime via `GET /api/coins`<br>3. `GET /api/sentiment/:symbol` again | First response is `404`; second response is `200` with cached sentiment |
+| 2.2.5 | Error recovery with partial upstream failure | 1. Mock NewsAPI failure<br>2. `GET /api/coins` or `GET /api/coins/:symbol`<br>3. Verify API still responds | API returns a valid response shape without crashing when one dependency fails |
 
 **Estimated Effort:** 4-5 hours
 
 **Success Criteria:**
-- ✅ 5 end-to-end flows pass
-- ✅ No unexpected errors during workflows
-- ✅ Data consistency across endpoints
-- ✅ Cache behavior verified
+- ❌ No dedicated end-to-end API flow suite exists yet
+- ✅ Related endpoint integration coverage exists in the backend API tests
+- ⚠️ Multi-request user workflows, cache timing assertions, and partial-failure flows still need dedicated coverage
 
 ---
 
@@ -245,28 +261,39 @@ This document outlines a comprehensive testing strategy for the Sentiment Analyz
 
 ### 3.1 Setup React Testing Environment
 
-**Purpose:** Configure Vitest + React Testing Library for frontend unit tests.
+**Purpose:** Configure a frontend unit-test harness for React components and hooks.
 
-**Location:** `frontend/vitest.config.ts` (new), `frontend/src/__tests__/setup.ts` (new)
+**Location:** Planned `frontend/vitest.config.ts`, planned `frontend/src/__tests__/setup.ts`
 
-**Configuration Tasks:**
+**Current Status:** Not implemented
+
+**Repository Reality:**
+- No `vitest.config.ts` exists under `frontend/`.
+- No `frontend/src/__tests__/setup.ts` file exists.
+- No frontend `.test.tsx` or `.spec.tsx` files exist in the repository.
+- `frontend/package.json` does not contain `test`, `test:watch`, or `test:ui` scripts.
+- The current frontend dev dependencies do not include Vitest, React Testing Library, `jsdom`, or MSW.
+
+**Configuration Tasks Still Required:**
 
 | Task | Details | Acceptance Criteria |
 |------|---------|-------------------|
-| 3.1.1 | Install Vitest | `npm install --save-dev vitest @vitest/ui` | Package installed; can run `npm run test` |
-| 3.1.2 | Install testing libraries | `npm install --save-dev @testing-library/react @testing-library/jest-dom` | Libraries available for import |
-| 3.1.3 | Configure vitest.config.ts | Setup jsdom environment; path aliases | Config file imports without errors |
-| 3.1.4 | Create test setup file | Import jest-dom; configure MSW (if using) | Each test file doesn't need setup boilerplate |
-| 3.1.5 | Add npm scripts | Add `test`, `test:watch`, `test:ui` | Commands executable: `npm run test` |
-| 3.1.6 | Mock fetch globally | Setup MSW or manual mocks for `/api/` | Tests can mock API responses |
+| 3.1.1 | Install Vitest | Add `vitest` and optionally `@vitest/ui` to frontend dev dependencies | `npm run test` can invoke Vitest |
+| 3.1.2 | Install testing libraries | Add `@testing-library/react`, `@testing-library/jest-dom`, and `jsdom` | React components can render in tests |
+| 3.1.3 | Configure `vitest.config.ts` | Set `jsdom` environment and React plugin integration | Config loads and test files are discovered |
+| 3.1.4 | Create test setup file | Import `jest-dom` and any shared mocks | Test files do not need repeated setup boilerplate |
+| 3.1.5 | Add npm scripts | Add `test`, `test:watch`, and optional `test:ui` scripts to `frontend/package.json` | Test commands are runnable from the frontend package |
+| 3.1.6 | Decide API mocking strategy | Use simple `fetch` mocks or add MSW if broader integration-style UI tests are needed | Frontend tests can control `/api` responses deterministically |
 
 **Estimated Effort:** 2-3 hours
 
 **Success Criteria:**
-- ✅ `npm run test` executes without errors
-- ✅ Test runner identifies `.test.tsx` files
-- ✅ Can write tests that render React components
-- ✅ fetch can be mocked in tests
+- ❌ `npm run test` does not exist for the frontend today
+- ❌ No frontend test runner is configured yet
+- ⚠️ Frontend test infrastructure must be created before hook or component tests can be added
+
+---
+
 
 ---
 

@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { CompetitionConfig, CompetitionAgentSpec } from '../services/marl-competition-engine.js';
+import logger from '../logger.js';
 
 const router = Router();
 const engine = new MarlCompetitionEngine();
@@ -163,9 +164,17 @@ router.post('/api/marl/competition/start', (req, res) => {
         });
       })
       .catch(err => {
-        console.error(`[marl] Competition ${competitionId} failed:`, err);
+        logger.error('competition failed', { competitionId, error: String(err) });
         engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
       });
+
+    logger.info('competition started', {
+      competitionId,
+      mode: config.mode,
+      agentCount: agentSpecs.length,
+      symbols,
+      duration,
+    });
 
     return res.status(202).json({
       competitionId,
@@ -178,7 +187,7 @@ router.post('/api/marl/competition/start', (req, res) => {
       message: `Tournament started. Poll /api/marl/competition/${competitionId}/status for updates.`,
     });
   } catch (err) {
-    console.error('[marl] Error starting competition:', err);
+    logger.error('competition start error', { error: String(err) });
     return res.status(500).json({ error: 'Failed to start competition' });
   }
 });
@@ -381,7 +390,7 @@ router.post('/api/marl/agents/compare', async (req, res) => {
       })),
     });
   } catch (err) {
-    console.error('[marl] Error comparing agents:', err);
+    logger.error('agent compare error', { error: String(err) });
     return res.status(500).json({ error: 'Agent comparison failed' });
   }
 });

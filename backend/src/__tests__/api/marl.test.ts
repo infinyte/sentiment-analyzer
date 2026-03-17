@@ -117,20 +117,22 @@ import { MarlCompetitionEngine } from '../../services/marl-competition-engine.js
 
 // ── Shared engine instance captured once at module load ───────────────────────
 
-let engine: ReturnType<typeof MarlCompetitionEngine['prototype']['constructor']> & {
+interface MockEngine {
   storeRecord: jest.Mock;
   updateRecord: jest.Mock;
   runCompetition: jest.Mock;
   runSingleTournament: jest.Mock;
   getRecord: jest.Mock;
   getAllRecords: jest.Mock;
-};
+}
+
+let engine: MockEngine;
 
 beforeAll(() => {
   // The router creates `new MarlCompetitionEngine()` when the module loads.
   // Capture the mock instance so tests can configure per-call behaviour.
   engine = (MarlCompetitionEngine as jest.MockedClass<typeof MarlCompetitionEngine>)
-    .mock.instances[0] as typeof engine;
+    .mock.instances[0] as unknown as MockEngine;
 });
 
 beforeEach(() => {

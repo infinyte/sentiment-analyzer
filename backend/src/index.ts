@@ -19,6 +19,7 @@ import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
 import { storage } from './storage.js';
 import marlRoutes from './routes/marl-competition.js';
+import logger from './logger.js';
 
 dotenv.config();
 
@@ -32,6 +33,19 @@ const port = process.env.PORT || 3000;
 app.use(helmet());
 app.use(cors({ origin: process.env.ALLOWED_ORIGINS || '*' }));
 app.use(express.json());
+
+// HTTP request logger — records method, path, status, and duration for every request
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration_ms = Date.now() - start;
+    const meta = { method: req.method, url: req.url, status: res.statusCode, duration_ms };
+    if (res.statusCode >= 500) logger.error('request', meta);
+    else if (res.statusCode >= 400) logger.warn('request', meta);
+    else logger.info('request', meta);
+  });
+  next();
+});
 
 // Initialize services
 const coingecko = new CoinGeckoService();
@@ -49,9 +63,9 @@ const configuredAgents: Map<string, AgentConfig> = new Map();
 try {
   storage.connect();
   const pruned = storage.pruneExpiredSentiment();
-  if (pruned > 0) console.log(`[storage] Pruned ${pruned} expired sentiment rows`);
+  if (pruned > 0) logger.info('storage pruned expired rows', { count: pruned });
 } catch (err) {
-  console.warn('[storage] SQLite unavailable, falling back to in-memory only:', err);
+  logger.warn('storage unavailable, using in-memory only', { error: String(err) });
 }
 
 // Graceful shutdown — close DB before process exits
@@ -112,7 +126,7 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<void> {
     coin.sentiment_summary = sentimentData.summary;
     coin.trending_score = sentimentData.trending_score;
   } catch (error) {
-    console.error(`Failed to fetch sentiment for ${coin.symbol}:`, error);
+    logger.error('sentiment fetch failed', { symbol: coin.symbol, error: String(error) });
     // Keep defaults on error
   }
 }
@@ -155,7 +169,7 @@ app.get('/api/coins', async (req, res) => {
       count: coins.length,
     });
   } catch (error) {
-    console.error('Error in /api/coins:', error);
+    logger.error('route error', { endpoint: '/api/coins', error: String(error) });
     res.status(500).json({ error: 'Failed to fetch coins' });
   }
 });
@@ -203,7 +217,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
       news_count: headlines.length,
     });
   } catch (error) {
-    console.error('Error in /api/coins/:symbol:', error);
+    logger.error('route error', { endpoint: '/api/coins/:symbol', error: String(error) });
     res.status(500).json({ error: 'Failed to fetch coin details' });
   }
 });
@@ -239,7 +253,7 @@ app.post('/api/refresh-sentiment', async (req, res) => {
           coins = coins.filter(c => upperSymbols.includes(c.symbol));
         }
 
-        console.log(`[${jobId}] Starting forced sentiment refresh for ${coins.length} coins...`);
+        logger.info('sentiment refresh started', { jobId, coinCount: coins.length });
 
         // Clear sentiment cache entries first so fetchAndCacheSentiment re-analyzes
         for (const coin of coins) {
@@ -249,16 +263,16 @@ app.post('/api/refresh-sentiment', async (req, res) => {
         // Analyze sequentially to respect NewsAPI and Claude rate limits
         for (const coin of coins) {
           await fetchAndCacheSentiment(coin);
-          console.log(`[${jobId}] Refreshed sentiment for ${coin.symbol}: ${coin.sentiment_score}`);
+          logger.info('sentiment refreshed', { jobId, symbol: coin.symbol, sentiment: coin.sentiment_score });
         }
 
-        console.log(`[${jobId}] Sentiment refresh completed for ${coins.length} coins`);
+        logger.info('sentiment refresh completed', { jobId, coinCount: coins.length });
       } catch (error) {
-        console.error(`[${jobId}] Sentiment refresh failed:`, error);
+        logger.error('sentiment refresh failed', { jobId, error: String(error) });
       }
     })();
   } catch (error) {
-    console.error('Error in /api/refresh-sentiment:', error);
+    logger.error('route error', { endpoint: '/api/refresh-sentiment', error: String(error) });
     res.status(500).json({ error: 'Failed to queue job' });
   }
 });
@@ -372,7 +386,7 @@ app.post('/api/sentiment/analyze', async (req, res) => {
 
     res.json({ mode: analysisMode, results });
   } catch (error) {
-    console.error('Error in /api/sentiment/analyze:', error);
+    logger.error('route error', { endpoint: '/api/sentiment/analyze', error: String(error) });
     res.status(500).json({ error: 'Analysis failed' });
   }
 });
@@ -413,7 +427,7 @@ app.post('/api/agents/configure', (req, res) => {
       readyForBacktesting: true,
     });
   } catch (error) {
-    console.error('Error in /api/agents/configure:', error);
+    logger.error('route error', { endpoint: '/api/agents/configure', error: String(error) });
     res.status(500).json({ error: 'Agent configuration failed' });
   }
 });
@@ -508,7 +522,7 @@ app.post('/api/backtest/run', async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('Error in /api/backtest/run:', error);
+    logger.error('route error', { endpoint: '/api/backtest/run', error: String(error) });
     res.status(500).json({ error: 'Backtest simulation failed' });
   }
 });
@@ -552,7 +566,7 @@ app.get('/api/rankings/top-coins', async (req, res) => {
       })),
     });
   } catch (error) {
-    console.error('Error in /api/rankings/top-coins:', error);
+    logger.error('route error', { endpoint: '/api/rankings/top-coins', error: String(error) });
     res.status(500).json({ error: 'Failed to compute rankings' });
   }
 });
@@ -601,9 +615,7 @@ app.use((req, res) => {
 // ============================================================================
 
 app.listen(port, () => {
-  console.log(`\n✓ Server running on port ${port}`);
-  console.log(`✓ API: http://localhost:${port}/api/coins`);
-  console.log(`✓ Health: http://localhost:${port}/api/health\n`);
+  logger.info('server started', { port, env: process.env.NODE_ENV || 'development' });
 });
 
 // ============================================================================
@@ -615,7 +627,7 @@ const cronSchedule = process.env.SENTIMENT_JOB_CRON || '0 2 * * *';
 cron.schedule(cronSchedule, async () => {
   const batchSize = parseInt(process.env.SENTIMENT_BATCH_SIZE || '50');
   const started = Date.now();
-  console.log(`[cron] Sentiment batch job started (${batchSize} coins, schedule: ${cronSchedule})`);
+  logger.info('cron started', { batchSize, schedule: cronSchedule });
 
   try {
     const coins = await coingecko.getTopCoins(batchSize);
@@ -630,9 +642,9 @@ cron.schedule(cronSchedule, async () => {
     }
 
     const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    console.log(`[cron] Sentiment batch job completed: ${coins.length} coins in ${elapsed}s`);
+    logger.info('cron completed', { coinCount: coins.length, elapsed_s: elapsed });
   } catch (error) {
-    console.error('[cron] Sentiment batch job failed:', error);
+    logger.error('cron failed', { error: String(error) });
   }
 });
 
