@@ -98,22 +98,23 @@ const mockCompletedRecord = {
   result: mockCompetitionResult,
 };
 
+const mockEngine = {
+  storeRecord: jest.fn(),
+  updateRecord: jest.fn(),
+  runCompetition: jest.fn().mockResolvedValue(mockCompetitionResult),
+  runSingleTournament: jest.fn().mockResolvedValue(mockCompetitionResult),
+  getRecord: jest.fn().mockReturnValue(null),
+  getAllRecords: jest.fn().mockReturnValue([]),
+};
+
 jest.mock('../../services/marl-competition-engine.js', () => ({
-  MarlCompetitionEngine: jest.fn().mockImplementation(() => ({
-    storeRecord:         jest.fn(),
-    updateRecord:        jest.fn(),
-    runCompetition:      jest.fn().mockResolvedValue(mockCompetitionResult),
-    runSingleTournament: jest.fn().mockResolvedValue(mockCompetitionResult),
-    getRecord:           jest.fn().mockReturnValue(null),
-    getAllRecords:        jest.fn().mockReturnValue([]),
-  })),
+  MarlCompetitionEngine: jest.fn().mockImplementation(() => mockEngine),
 }));
 
 // ── Imports (after mocks) ─────────────────────────────────────────────────────
 
 import request from 'supertest';
 import app from '../../index.js';
-import { MarlCompetitionEngine } from '../../services/marl-competition-engine.js';
 
 // ── Shared engine instance captured once at module load ───────────────────────
 
@@ -126,18 +127,13 @@ interface MockEngine {
   getAllRecords: jest.Mock;
 }
 
-let engine: MockEngine;
-
-beforeAll(() => {
-  // The router creates `new MarlCompetitionEngine()` when the module loads.
-  // Capture the mock instance so tests can configure per-call behaviour.
-  engine = (MarlCompetitionEngine as jest.MockedClass<typeof MarlCompetitionEngine>)
-    .mock.instances[0] as unknown as MockEngine;
-});
+const engine = mockEngine as MockEngine;
 
 beforeEach(() => {
   // Restore sensible defaults before each test (clearMocks wipes .calls but
   // NOT mockReturnValue — we reset here to avoid test-order dependencies).
+  engine.storeRecord.mockClear();
+  engine.updateRecord.mockClear();
   engine.getRecord.mockReturnValue(null);
   engine.getAllRecords.mockReturnValue([]);
   engine.runCompetition.mockResolvedValue(mockCompetitionResult);

@@ -614,9 +614,11 @@ app.use((req, res) => {
 // START SERVER
 // ============================================================================
 
-app.listen(port, () => {
-  logger.info('server started', { port, env: process.env.NODE_ENV || 'development' });
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => {
+    logger.info('server started', { port, env: process.env.NODE_ENV || 'development' });
+  });
+}
 
 // ============================================================================
 // SCHEDULED SENTIMENT JOB

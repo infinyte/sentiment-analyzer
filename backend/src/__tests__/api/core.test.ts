@@ -259,7 +259,7 @@ describe('GET /api/info/modes', () => {
   it('returns static documentation with modes and agent types', async () => {
     const res = await request(app).get('/api/info/modes');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('analysisModes');
+    expect(res.body).toHaveProperty('analysisMode');
     expect(res.body).toHaveProperty('agentTypes');
     expect(res.body).toHaveProperty('riskProfiles');
   });
@@ -300,9 +300,10 @@ describe('POST /api/sentiment/analyze', () => {
         headlines: { BTC: ['Bitcoin rises', 'BTC bullish'] },
       });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('BTC');
-    expect(res.body.BTC).toHaveProperty('sentiment');
-    expect(res.body.BTC).toHaveProperty('confidence');
+    expect(res.body.mode).toBe('BASIC');
+    expect(res.body).toHaveProperty('results.BTC');
+    expect(res.body.results.BTC).toHaveProperty('sentiment');
+    expect(res.body.results.BTC).toHaveProperty('confidence');
   });
 
   it('returns 200 for ADVANCED mode with marketData', async () => {
@@ -326,7 +327,8 @@ describe('POST /api/sentiment/analyze', () => {
         },
       });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('BTC');
+    expect(res.body.mode).toBe('ADVANCED');
+    expect(res.body).toHaveProperty('results.BTC');
   });
 
   it('defaults to BASIC mode when mode is omitted', async () => {
@@ -334,7 +336,8 @@ describe('POST /api/sentiment/analyze', () => {
       .post('/api/sentiment/analyze')
       .send({ symbols: ['ETH'] });
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('ETH');
+    expect(res.body.mode).toBe('BASIC');
+    expect(res.body).toHaveProperty('results.ETH');
   });
 });
 
@@ -370,8 +373,8 @@ describe('GET /api/rankings/top-coins', () => {
   it('returns a ranked list of coins', async () => {
     const res = await request(app).get('/api/rankings/top-coins');
     expect(res.status).toBe(200);
-    expect(res.body).toHaveProperty('rankings');
-    expect(Array.isArray(res.body.rankings)).toBe(true);
+    expect(res.body).toHaveProperty('coins');
+    expect(Array.isArray(res.body.coins)).toBe(true);
   });
 
   it('accepts limit query param', async () => {
