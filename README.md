@@ -127,12 +127,17 @@ Express Backend (port 3000)
 | GET | `/api/marl/competition/:id/results` | Full results — rankings, H2H, equity curve, market impact |
 | POST | `/api/marl/agents/compare` | N-round head-to-head comparison between two agents |
 | GET | `/api/marl/competitions` | List all competitions (in-memory) |
-| GET | `/api/marl/info` | Documentation for modes, agent configs, and order book |
+| GET | `/api/marl/agents/learning` | List all persisted agent learning states |
+| DELETE | `/api/marl/agents/:agentId/learning` | Reset agent learning state (requires `x-api-key`). Query: `?riskProfile=` |
+| GET | `/api/marl/info` | Documentation for modes, agent configs, order book, and learning persistence |
 
 **Tournament Modes:**
 - `SINGLE` — one-shot tournament; all agents compete simultaneously on a shared order book
 - `EVOLUTIONARY` — multi-round tournament where underperformers are mutated/replaced each round
 - `CONTINUOUS` — ongoing learning loop; agents update Q-tables and policy weights in real time
+
+**Learning Persistence:**
+Agent Q-tables and policy-network weights are saved to SQLite (`agent_learning_states` table) at the end of every competition and loaded on startup. Agents accumulate knowledge across separate competition runs — they genuinely get smarter over time. Use `DELETE /api/marl/agents/:agentId/learning` (with `x-api-key`) to reset an agent to a blank state.
 
 **MARL rate limiting:**
 - `POST /api/marl/competition/start` defaults to 5 requests per 60 seconds per client IP

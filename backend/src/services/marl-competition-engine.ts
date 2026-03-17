@@ -1554,6 +1554,38 @@ export class MarlCompetitionEngine {
     return metrics;
   }
 
+  // ── Learning state management (public) ───────────────────────────────────
+
+  /**
+   * List all agent learning states held in the process-level cache.
+   * Used by `GET /api/marl/agents/learning`.
+   */
+  listLearningStates(): Array<{ cacheKey: string; agentId: string; riskProfile: string }> {
+    return Array.from(MarlCompetitionEngine.learningStateCache.keys()).map(key => {
+      const [agentId, riskProfile] = key.split('::');
+      return { cacheKey: key, agentId: agentId ?? key, riskProfile: riskProfile ?? 'UNKNOWN' };
+    });
+  }
+
+  /**
+   * Clear learned state for one agent (optionally filtered to a single riskProfile).
+   * Removes from both the in-process cache and SQLite.
+   * Returns the number of cache keys actually cleared.
+   */
+  clearAgentLearningState(agentId: string, riskProfile?: string): number {
+    const profiles: Array<'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING'> = riskProfile
+      ? [riskProfile as 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING']
+      : ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'];
+
+    let cleared = 0;
+    for (const profile of profiles) {
+      const key = this.getLearningCacheKey({ id: agentId, riskProfile: profile });
+      if (MarlCompetitionEngine.learningStateCache.delete(key)) cleared++;
+      try { storage.deleteAgentLearningState(key); } catch { /* DB unavailable */ }
+    }
+    return cleared;
+  }
+
   // ── Result store ──────────────────────────────────────────────────────────
 
   storeRecord(record: CompetitionRecord): void {

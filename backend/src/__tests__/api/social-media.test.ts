@@ -1,3 +1,5 @@
+/// <reference types="jest" />
+
 jest.mock('node-cron', () => ({ schedule: jest.fn() }));
 
 jest.mock('../../storage.js', () => ({

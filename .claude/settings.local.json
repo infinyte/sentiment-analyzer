@@ -14,7 +14,9 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(list\\(d.get\\(''''devDependencies'''', {}\\).keys\\(\\)\\)\\)\")",
       "Bash(npm install:*)",
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); pkg=d.get\\(''''packages'''',{}\\).get\\(''''node_modules/@vitejs/plugin-react'''',{}\\); print\\(pkg.get\\(''''version'''',''''missing''''\\)\\)\")",
-      "Bash(npm ci:*)"
+      "Bash(npm ci:*)",
+      "Read(//c/Users/kmitc/.claude/projects/C--work-sentiment-analyzer/memory//**)",
+      "Read(//c/Users/kmitc/.claude/projects/C--work-sentiment-analyzer/memory/**)"
     ]
   }
 }

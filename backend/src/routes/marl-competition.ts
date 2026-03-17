@@ -564,6 +564,60 @@ router.get('/api/marl/competitions', competitionReadRateLimit, (_req, res) => {
   });
 });
 
+// ─── GET /api/marl/agents/learning ───────────────────────────────────────────
+/**
+ * List all agent learning states currently held in the process cache (and SQLite).
+ *
+ * Example:
+ *   curl http://localhost:3000/api/marl/agents/learning
+ */
+router.get('/api/marl/agents/learning', competitionReadRateLimit, (_req, res) => {
+  const states = engine.listLearningStates();
+  return res.json({ count: states.length, agents: states });
+});
+
+// ─── DELETE /api/marl/agents/:agentId/learning ───────────────────────────────
+/**
+ * Reset (delete) learned Q-table + policy weights for a specific agent.
+ * Requires the `x-api-key` header matching `API_SECRET_KEY`.
+ * Pass `?riskProfile=AGGRESSIVE` to clear only one profile; omit to clear all three.
+ *
+ * Example:
+ *   curl -X DELETE "http://localhost:3000/api/marl/agents/bull/learning?riskProfile=AGGRESSIVE" \
+ *     -H "x-api-key: your-secret"
+ */
+router.delete('/api/marl/agents/:agentId/learning', (req, res) => {
+  const apiKey = req.headers['x-api-key'];
+  if (!apiKey || apiKey !== process.env.API_SECRET_KEY) {
+    return res.status(401).json({ error: 'Unauthorized — x-api-key header required' });
+  }
+
+  const { agentId } = req.params;
+  const { riskProfile } = req.query;
+
+  if (riskProfile !== undefined && !isValidRiskProfile(riskProfile)) {
+    return res.status(400).json({
+      error: `riskProfile must be one of: ${VALID_RISK_PROFILES.join(', ')}`,
+    });
+  }
+
+  const cleared = engine.clearAgentLearningState(
+    agentId,
+    typeof riskProfile === 'string' ? riskProfile : undefined
+  );
+
+  logger.info('agent learning state reset', { agentId, riskProfile: riskProfile ?? 'all', cleared });
+
+  return res.json({
+    agentId,
+    riskProfile: riskProfile ?? 'all profiles',
+    cleared,
+    message: cleared > 0
+      ? `Cleared learning state for ${cleared} profile(s). Agent will start fresh next competition.`
+      : 'No persisted learning state found for this agent.',
+  });
+});
+
 // ─── GET /api/marl/info ───────────────────────────────────────────────────────
 /**
  * Documentation endpoint.
@@ -604,12 +658,19 @@ router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
       competitorImpact: 'Avg slippage bps, times outbid/outsold',
     },
     endpoints: {
-      'POST /api/marl/competition/start': 'Start a new tournament',
-      'GET  /api/marl/competition/:id/status': 'Poll running competition',
-      'GET  /api/marl/competition/:id/results': 'Fetch completed results',
-      'POST /api/marl/agents/compare': 'Head-to-head multi-round comparison',
-      'GET  /api/marl/competitions': 'List all competitions',
-      'GET  /api/marl/info': 'This documentation',
+      'POST   /api/marl/competition/start': 'Start a new tournament',
+      'GET    /api/marl/competition/:id/status': 'Poll running competition',
+      'GET    /api/marl/competition/:id/results': 'Fetch completed results',
+      'POST   /api/marl/agents/compare': 'Head-to-head multi-round comparison',
+      'GET    /api/marl/competitions': 'List all competitions',
+      'GET    /api/marl/agents/learning': 'List all persisted agent learning states',
+      'DELETE /api/marl/agents/:agentId/learning': 'Reset agent learning (requires x-api-key). Query: ?riskProfile=',
+      'GET    /api/marl/info': 'This documentation',
+    },
+    learningPersistence: {
+      storage: 'SQLite agent_learning_states table — Q-table + policy weights + epsilon survive restarts',
+      scope: 'Keyed by "{agentId}::{riskProfile}" — agents accumulate knowledge across separate competitions',
+      reset: 'DELETE /api/marl/agents/:agentId/learning to clear one or all risk-profile snapshots',
     },
   });
 });
