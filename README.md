@@ -124,6 +124,12 @@ curl -s -X POST http://localhost:3000/api/marl/agents/compare \
     "rounds": 5,
     "duration": 100
   }' | jq '{winner: .overallWinner, a1WinRate: .agent1WinRate, a2WinRate: .agent2WinRate}'
+
+# List all competitions
+curl -s http://localhost:3000/api/marl/competitions | jq '{total: .total, latest: .competitions[0]}'
+
+# API documentation (modes, risk profiles, order book, learning algorithm)
+curl -s http://localhost:3000/api/marl/info | jq .
 ```
 
 ### Example cURL Commands
@@ -231,21 +237,20 @@ Running the sentiment batch daily against 50 coins costs approximately **$6–15
 
 ---
 
-## Phase 2: Multi-Agent Reinforcement Learning (MARL) — In Development
+## Phase 2: Multi-Agent Reinforcement Learning (MARL) — Complete ✅
 
-Phase 2 introduces competitive multi-agent trading where multiple AI agents compete against each other in a shared market environment, enabling emergent strategy discovery through adversarial learning.
+Competitive multi-agent trading: multiple AI agents compete simultaneously on a shared order book, discovering emergent strategies through adversarial Q-learning.
 
 ### Key Concepts
 
-- **Competitive Environment** — Agents compete for the same trading opportunities; one agent's gain affects others
-- **Game Theory Integration** — Nash equilibrium strategies, cooperative/competitive dynamics
-- **Agent Specialization** — Agents develop distinct market niches (momentum, mean-reversion, arbitrage)
-- **Tournament System** — Agents compete in structured brackets with ELO-style rankings
+- **SharedOrderBook** — Price-time FIFO order matching; agents directly affect each other's fill prices through slippage
+- **MarlTradingAgent** — Q-learning + epsilon-greedy exploration + experience replay; 50-feature state space; 5-action policy network (50→64→32→5)
+- **Tournament Modes** — SINGLE (one-shot), EVOLUTIONARY (mutation + replacement), CONTINUOUS (live learning loop)
+- **Risk Profiles** — CONSERVATIVE (1% risk/trade), AGGRESSIVE (5%), SCALPING (3%, short hold)
 
 ### Documentation
 
-See [`docs/phase2/`](./docs/phase2/) for full architecture, training guides, and integration details:
+See [`docs/phase2/`](./docs/phase2/) for full architecture, game theory analysis, and integration details:
 - [MARL Executive Summary](./docs/phase2/MARL_EXECUTIVE_SUMMARY.md)
 - [Detailed Architecture](./docs/phase2/MARL_ARCHITECTURE_DETAILED.md)
 - [Integration Guide](./docs/phase2/MARL_INTEGRATION_GUIDE.md)
-- [Kickoff Prompt](./docs/phase2/CLAUDE_CODE_KICKOFF_PHASE2_MARL.md)

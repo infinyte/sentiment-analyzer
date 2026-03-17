@@ -12,6 +12,9 @@ module.exports = {
   },
   clearMocks: true,
   restoreMocks: true,
+  // Force-exit after all tests complete to close the Express server handle
+  // that app.listen() opens when index.ts is imported in integration tests.
+  forceExit: true,
   // Suppress console output in tests unless there's a failure
   silent: false,
 };
