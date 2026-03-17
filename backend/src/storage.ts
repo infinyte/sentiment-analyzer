@@ -5,6 +5,8 @@
  *   1. Backtest simulation results (SimulationResult → JSON blob)
  *   2. Sentiment analysis cache (so the 24-hr window survives a reboot)
  *   3. MARL agent learning states (Q-table + policy-network weights + epsilon)
+ *   4. Broker credentials (AES-256-GCM encrypted — master key in BROKER_MASTER_KEY env)
+ *   5. Broker order audit trail (every real/paper order, credentials stripped)
  *
  * better-sqlite3 is synchronous — no async/await needed inside this module.
  * All public methods are safe to call from async Express handlers.
@@ -12,11 +14,21 @@
 
 import Database from 'better-sqlite3';
 import path from 'path';
+import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
 import type { SimulationResult } from './services/backtesting-engine.js';
 import type { Sentiment } from './types.js';
+import type {
+  StoredCredential,
+  BrokerOrder,
+  BrokerProvider,
+  ExchangeMode,
+  EncryptedBlob,
+} from './types/broker.js';
 import logger from './logger.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
+
+export type { StoredCredential, BrokerOrder };
 
 export interface BacktestSummaryRow {
   testId: string;
@@ -193,6 +205,175 @@ export class StorageService {
     return row.cnt;
   }
 
+  // ── Broker Credentials ───────────────────────────────────────────────────
+
+  /**
+   * Persist encrypted broker credentials.
+   * The plaintext apiKey and apiSecret are encrypted with AES-256-GCM before storage.
+   * Upserts by id.
+   */
+  saveBrokerCredential(cred: {
+    id: string;
+    label: string;
+    provider: BrokerProvider;
+    mode: ExchangeMode;
+    apiKey: string;
+    apiSecret: string;
+  }): void {
+    const db = this.requireDb();
+    const payload = JSON.stringify({ apiKey: cred.apiKey, apiSecret: cred.apiSecret });
+    const encrypted = encryptWithMasterKey(payload);
+    db.prepare(`
+      INSERT INTO broker_credentials (id, label, provider, mode, encrypted, created_at)
+      VALUES (@id, @label, @provider, @mode, @encrypted, @createdAt)
+      ON CONFLICT(id) DO UPDATE SET
+        label     = excluded.label,
+        provider  = excluded.provider,
+        mode      = excluded.mode,
+        encrypted = excluded.encrypted
+    `).run({
+      id:        cred.id,
+      label:     cred.label,
+      provider:  cred.provider,
+      mode:      cred.mode,
+      encrypted: JSON.stringify(encrypted),
+      createdAt: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Load all stored credentials (without decrypting).
+   * Used to show the admin which credentials exist.
+   */
+  listBrokerCredentials(): StoredCredential[] {
+    const db = this.requireDb();
+    const rows = db
+      .prepare('SELECT id, label, provider, mode, encrypted, created_at AS createdAt, last_used AS lastUsed FROM broker_credentials ORDER BY created_at DESC')
+      .all() as Array<{ id: string; label: string; provider: BrokerProvider; mode: ExchangeMode; encrypted: string; createdAt: string; lastUsed?: string }>;
+    return rows.map(r => ({ ...r, encrypted: JSON.parse(r.encrypted) as EncryptedBlob }));
+  }
+
+  /**
+   * Decrypt and return the raw credentials for a given credential ID.
+   * Returns undefined if not found or if the master key is missing/wrong.
+   */
+  decryptBrokerCredential(id: string): { apiKey: string; apiSecret: string } | undefined {
+    const db = this.requireDb();
+    const row = db
+      .prepare('SELECT encrypted FROM broker_credentials WHERE id = ?')
+      .get(id) as { encrypted: string } | undefined;
+    if (!row) return undefined;
+
+    const blob = JSON.parse(row.encrypted) as EncryptedBlob;
+    const plaintext = decryptWithMasterKey(blob);
+    const parsed = JSON.parse(plaintext) as { apiKey: string; apiSecret: string };
+
+    // Touch last_used timestamp
+    db.prepare('UPDATE broker_credentials SET last_used = ? WHERE id = ?')
+      .run(new Date().toISOString(), id);
+
+    return parsed;
+  }
+
+  /** Delete a stored credential. Returns true if a row was removed. */
+  deleteBrokerCredential(id: string): boolean {
+    const db = this.requireDb();
+    return db.prepare('DELETE FROM broker_credentials WHERE id = ?').run(id).changes > 0;
+  }
+
+  // ── Broker Order Audit ────────────────────────────────────────────────────
+
+  /** Insert a new order row (typically right after submission). */
+  insertBrokerOrder(order: BrokerOrder): void {
+    const db = this.requireDb();
+    db.prepare(`
+      INSERT OR IGNORE INTO broker_order_audit (
+        id, competition_id, agent_id, client_order_id, broker_order_id,
+        credential_id, provider, mode, symbol, side, quantity, limit_price,
+        status, filled_quantity, avg_fill_price, submitted_at, updated_at, broker_response
+      ) VALUES (
+        @id, @competitionId, @agentId, @clientOrderId, @brokerOrderId,
+        @credentialId, @provider, @mode, @symbol, @side, @quantity, @limitPrice,
+        @status, @filledQuantity, @avgFillPrice, @submittedAt, @updatedAt, @brokerResponse
+      )
+    `).run({
+      ...order,
+      limitPrice:     order.limitPrice ?? null,
+      brokerOrderId:  order.brokerOrderId ?? null,
+      brokerResponse: order.brokerResponse ? JSON.stringify(order.brokerResponse) : null,
+    });
+  }
+
+  /** Update fill/status fields after a poll or fill event. */
+  updateBrokerOrder(clientOrderId: string, updates: {
+    status?:         BrokerOrder['status'];
+    filledQuantity?: number;
+    avgFillPrice?:   number;
+    brokerOrderId?:  string;
+    brokerResponse?: unknown;
+  }): void {
+    const db = this.requireDb();
+    const fields: string[] = ['updated_at = @updatedAt'];
+    const params: Record<string, unknown> = { clientOrderId, updatedAt: new Date().toISOString() };
+
+    if (updates.status         !== undefined) { fields.push('status = @status');                   params.status         = updates.status; }
+    if (updates.filledQuantity !== undefined) { fields.push('filled_quantity = @filledQuantity');   params.filledQuantity = updates.filledQuantity; }
+    if (updates.avgFillPrice   !== undefined) { fields.push('avg_fill_price = @avgFillPrice');      params.avgFillPrice   = updates.avgFillPrice; }
+    if (updates.brokerOrderId  !== undefined) { fields.push('broker_order_id = @brokerOrderId');    params.brokerOrderId  = updates.brokerOrderId; }
+    if (updates.brokerResponse !== undefined) { fields.push('broker_response = @brokerResponse');   params.brokerResponse = JSON.stringify(updates.brokerResponse); }
+
+    db.prepare(`UPDATE broker_order_audit SET ${fields.join(', ')} WHERE client_order_id = @clientOrderId`)
+      .run(params);
+  }
+
+  /** Return all audit rows for a competition (newest first). */
+  getBrokerOrders(competitionId: string, agentId?: string): BrokerOrder[] {
+    const db = this.requireDb();
+    const base = `
+      SELECT id, competition_id AS competitionId, agent_id AS agentId,
+             client_order_id AS clientOrderId, broker_order_id AS brokerOrderId,
+             credential_id AS credentialId, provider, mode, symbol, side, quantity,
+             limit_price AS limitPrice, status, filled_quantity AS filledQuantity,
+             avg_fill_price AS avgFillPrice, submitted_at AS submittedAt,
+             updated_at AS updatedAt, broker_response AS brokerResponse
+      FROM broker_order_audit
+      WHERE competition_id = ?
+    `;
+    const rows = agentId
+      ? db.prepare(`${base} AND agent_id = ? ORDER BY submitted_at DESC`).all(competitionId, agentId)
+      : db.prepare(`${base} ORDER BY submitted_at DESC`).all(competitionId);
+
+    return (rows as Array<BrokerOrder & { brokerResponse: string | null }>).map(r => ({
+      ...r,
+      limitPrice:     r.limitPrice ?? undefined,
+      brokerOrderId:  r.brokerOrderId ?? undefined,
+      brokerResponse: r.brokerResponse ? JSON.parse(r.brokerResponse) : undefined,
+    }));
+  }
+
+  /** Return open orders across all competitions (for restart reconciliation). */
+  getOpenBrokerOrders(): BrokerOrder[] {
+    const db = this.requireDb();
+    const rows = db.prepare(`
+      SELECT id, competition_id AS competitionId, agent_id AS agentId,
+             client_order_id AS clientOrderId, broker_order_id AS brokerOrderId,
+             credential_id AS credentialId, provider, mode, symbol, side, quantity,
+             limit_price AS limitPrice, status, filled_quantity AS filledQuantity,
+             avg_fill_price AS avgFillPrice, submitted_at AS submittedAt,
+             updated_at AS updatedAt, broker_response AS brokerResponse
+      FROM broker_order_audit
+      WHERE status IN ('PENDING', 'SUBMITTED', 'PARTIALLY_FILLED')
+      ORDER BY submitted_at DESC
+    `).all();
+
+    return (rows as Array<BrokerOrder & { brokerResponse: string | null }>).map(r => ({
+      ...r,
+      limitPrice:     r.limitPrice ?? undefined,
+      brokerOrderId:  r.brokerOrderId ?? undefined,
+      brokerResponse: r.brokerResponse ? JSON.parse(r.brokerResponse) : undefined,
+    }));
+  }
+
   // ── Agent Learning States ─────────────────────────────────────────────────
 
   /**
@@ -277,6 +458,41 @@ export class StorageService {
         payload    TEXT NOT NULL,
         updated_at TEXT NOT NULL
       );
+
+      CREATE TABLE IF NOT EXISTS broker_credentials (
+        id         TEXT PRIMARY KEY,
+        label      TEXT NOT NULL,
+        provider   TEXT NOT NULL,
+        mode       TEXT NOT NULL,
+        encrypted  TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        last_used  TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS broker_order_audit (
+        id              TEXT PRIMARY KEY,
+        competition_id  TEXT NOT NULL,
+        agent_id        TEXT NOT NULL,
+        client_order_id TEXT NOT NULL UNIQUE,
+        broker_order_id TEXT,
+        credential_id   TEXT NOT NULL,
+        provider        TEXT NOT NULL,
+        mode            TEXT NOT NULL,
+        symbol          TEXT NOT NULL,
+        side            TEXT NOT NULL,
+        quantity        REAL NOT NULL,
+        limit_price     REAL,
+        status          TEXT NOT NULL DEFAULT 'PENDING',
+        filled_quantity REAL NOT NULL DEFAULT 0,
+        avg_fill_price  REAL NOT NULL DEFAULT 0,
+        submitted_at    TEXT NOT NULL,
+        updated_at      TEXT NOT NULL,
+        broker_response TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_audit_competition ON broker_order_audit (competition_id);
+      CREATE INDEX IF NOT EXISTS idx_audit_agent       ON broker_order_audit (agent_id, submitted_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_audit_open        ON broker_order_audit (status) WHERE status IN ('PENDING','SUBMITTED','PARTIALLY_FILLED');
     `);
   }
 
@@ -300,6 +516,44 @@ function dateReviver(_key: string, value: unknown): unknown {
     return new Date((value as { __date__: string }).__date__);
   }
   return value;
+}
+
+// ─── AES-256-GCM Encryption ───────────────────────────────────────────────────
+//
+// Master key is read from BROKER_MASTER_KEY env var at call time (not module load).
+// If the env var is missing, encryption/decryption throws — intentional fail-fast.
+//
+// Key derivation: if BROKER_MASTER_KEY is 64 hex chars → use directly as 32-byte key.
+//                 Otherwise → SHA-256 hash the string to produce 32 bytes.
+
+function getMasterKey(): Buffer {
+  const raw = process.env.BROKER_MASTER_KEY;
+  if (!raw) throw new Error('[storage] BROKER_MASTER_KEY env var is not set');
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    return Buffer.from(raw, 'hex');
+  }
+  // Derive 32 bytes via SHA-256 of the provided string
+  return createHash('sha256').update(raw).digest();
+}
+
+function encryptWithMasterKey(plaintext: string): EncryptedBlob {
+  const key = getMasterKey();
+  const iv  = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return {
+    iv:         iv.toString('hex'),
+    authTag:    cipher.getAuthTag().toString('hex'),
+    ciphertext: ciphertext.toString('hex'),
+  };
+}
+
+function decryptWithMasterKey(blob: EncryptedBlob): string {
+  const key     = getMasterKey();
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(blob.iv, 'hex'));
+  decipher.setAuthTag(Buffer.from(blob.authTag, 'hex'));
+  return decipher.update(Buffer.from(blob.ciphertext, 'hex')).toString('utf8')
+       + decipher.final('utf8');
 }
 
 // ─── Module-level singleton ───────────────────────────────────────────────────

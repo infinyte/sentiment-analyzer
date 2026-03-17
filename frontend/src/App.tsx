@@ -378,12 +378,15 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
 // ============================================================================
 
 interface DashboardProps {
+  coins: Coin[];
+  loading: boolean;
+  error: string | null;
+  lastUpdated: Date | null;
   onCoinSelect: (symbol: string) => void;
 }
 
-function Dashboard({ onCoinSelect }: DashboardProps) {
+function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: DashboardProps) {
   const [sortBy, setSortBy] = useState('market_cap');
-  const { coins, loading, error, lastUpdated } = useCoins();
 
   if (error) {
     return (
@@ -873,8 +876,34 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 type ActiveView = 'dashboard' | 'marl' | 'social';
 
 export default function App() {
+  const { coins, loading, error, lastUpdated } = useCoins();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+
+  const handleTickerSearch = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+
+    const normalizedQuery = searchQuery.trim().toUpperCase();
+    if (!normalizedQuery) {
+      setSearchFeedback('Enter a ticker symbol to search.');
+      return;
+    }
+
+    const matchedCoin = coins.find(coin => coin.symbol.toUpperCase() === normalizedQuery)
+      ?? coins.find(coin => coin.symbol.toUpperCase().includes(normalizedQuery));
+
+    if (!matchedCoin) {
+      setSearchFeedback(`No coin found for ticker ${normalizedQuery}.`);
+      return;
+    }
+
+    setActiveView('dashboard');
+    setSelectedSymbol(matchedCoin.symbol);
+    setSearchQuery(matchedCoin.symbol);
+    setSearchFeedback(null);
+  };
 
   const navTabStyle = (view: ActiveView): React.CSSProperties => ({
     padding: '0.5rem 1rem',
@@ -920,12 +949,65 @@ export default function App() {
             Social Intel
           </button>
         </div>
+        <form
+          onSubmit={handleTickerSearch}
+          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.75rem 0' }}
+        >
+          <label htmlFor="coin-ticker-search" style={{ fontSize: '0.8125rem', color: '#4b5563', fontWeight: 600 }}>
+            Search ticker
+          </label>
+          <input
+            id="coin-ticker-search"
+            type="search"
+            value={searchQuery}
+            onChange={e => {
+              setSearchQuery(e.target.value);
+              if (searchFeedback) setSearchFeedback(null);
+            }}
+            placeholder="BTC"
+            aria-label="Search ticker"
+            style={{
+              width: '10rem',
+              padding: '0.5rem 0.75rem',
+              borderRadius: '0.375rem',
+              border: '1px solid #d1d5db',
+              fontSize: '0.875rem',
+            }}
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              padding: '0.5rem 0.9rem',
+              borderRadius: '0.375rem',
+              border: 'none',
+              backgroundColor: loading ? '#93c5fd' : '#2563eb',
+              color: '#ffffff',
+              cursor: loading ? 'wait' : 'pointer',
+              fontSize: '0.875rem',
+              fontWeight: 600,
+            }}
+          >
+            Open
+          </button>
+          {searchFeedback && (
+            <span style={{ fontSize: '0.8125rem', color: '#b91c1c' }} role="status">
+              {searchFeedback}
+            </span>
+          )}
+        </form>
       </nav>
 
       {/* Main */}
       <main>
         {activeView === 'dashboard' && (
-          <Dashboard onCoinSelect={setSelectedSymbol} />
+          <Dashboard
+            coins={coins}
+            loading={loading}
+            error={error}
+            lastUpdated={lastUpdated}
+            onCoinSelect={setSelectedSymbol}
+          />
         )}
         {activeView === 'marl' && (
           <MarlCompetitionViewer />

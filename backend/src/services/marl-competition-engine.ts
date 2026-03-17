@@ -92,6 +92,12 @@ export interface CompetitionConfig {
   refreshInterval: number;
   evolutionaryRounds?: number;
   learningEnabled: boolean;
+  /** If set to 'PAPER' or 'LIVE', real orders are placed via the broker adapter. Defaults to 'SIMULATED'. */
+  exchangeMode?: 'SIMULATED' | 'PAPER' | 'LIVE';
+  /** Credential ID (from broker_credentials table) required when exchangeMode is PAPER or LIVE. */
+  brokerCredentialId?: string;
+  /** Risk limits applied when exchangeMode is PAPER or LIVE. Safe defaults used if omitted. */
+  riskConfig?: import('../types/broker.js').RiskConfig;
 }
 
 export interface FinalRanking {
@@ -1298,6 +1304,10 @@ export class MarlCompetitionEngine {
     onProgress?: (progress: number) => void,
     competitionId?: string
   ): Promise<CompetitionResult> {
+    // Route to real-trading path when exchangeMode is PAPER or LIVE
+    if (config.exchangeMode === 'PAPER' || config.exchangeMode === 'LIVE') {
+      return this.runSingleTournamentReal(config, onProgress, competitionId);
+    }
     switch (config.mode) {
       case 'EVOLUTIONARY':
         return this.runEvolutionaryTournament(config, onProgress, competitionId);
@@ -1355,6 +1365,259 @@ export class MarlCompetitionEngine {
       equitySnapshots,
       config.duration
     );
+  }
+
+  // ── REAL / PAPER tournament (wall-clock setInterval) ─────────────────────
+
+  async runSingleTournamentReal(
+    config: CompetitionConfig,
+    onProgress?: (progress: number) => void,
+    competitionId = `comp_real_${Date.now()}`
+  ): Promise<CompetitionResult> {
+    const { brokerRegistry } = await import('./brokers/broker-registry.js');
+    const { RiskGuard } = await import('./risk/risk-guard.js');
+    const { DEFAULT_RISK_CONFIG } = await import('../types/broker.js');
+    const { storage } = await import('../storage.js');
+    const { randomUUID } = await import('node:crypto');
+
+    const credentialId = config.brokerCredentialId;
+    if (!credentialId) throw new Error('[marl] brokerCredentialId is required for PAPER/LIVE mode');
+
+    const adapter = brokerRegistry.get(credentialId);
+    if (!adapter) throw new Error(`[marl] no connected adapter for credentialId: ${credentialId}`);
+
+    // Validate symbols against the broker
+    const validSymbols = await adapter.validateSymbols(config.symbols);
+    if (validSymbols.length === 0) throw new Error('[marl] no valid symbols for this broker');
+
+    const riskGuard = new RiskGuard(config.riskConfig ?? DEFAULT_RISK_CONFIG);
+    const agentStates = config.agents.map(spec => this.createAgentState(spec));
+    const equitySnapshots: EquitySnapshot[] = [];
+
+    // Seed live prices
+    const initialPrices = await this.fetchBasePrices(validSymbols);
+    let currentPrices = new Map(initialPrices);
+
+    // Init risk guard with opening equity per agent
+    for (const state of agentStates) {
+      riskGuard.initAgent(state.agentId, computeEquity(state, currentPrices));
+    }
+
+    const durationMs   = config.duration * 1000;
+    const intervalMs   = config.refreshInterval;
+    const startTime    = Date.now();
+    let stepCount      = 0;
+    let emergencyStop  = false;
+
+    logger.info('marl real tournament started', {
+      competitionId,
+      mode: config.exchangeMode,
+      credentialId,
+      symbols: validSymbols,
+      durationMs,
+      intervalMs,
+    });
+
+    await new Promise<void>((resolve) => {
+      const tick = setInterval(async () => {
+        try {
+          const elapsed  = Date.now() - startTime;
+          const progress = Math.min(100, Math.round((elapsed / durationMs) * 100));
+          onProgress?.(progress);
+
+          if (elapsed >= durationMs || emergencyStop) {
+            clearInterval(tick);
+            resolve();
+            return;
+          }
+
+          // Fetch fresh prices from CoinGecko
+          try {
+            const fresh = await this.fetchBasePrices(validSymbols);
+            currentPrices = fresh;
+          } catch {
+            // Keep last known prices on CoinGecko failure — non-fatal
+          }
+
+          for (const state of agentStates) {
+            riskGuard.recordStepOpen(state.agentId, computeEquity(state, currentPrices));
+
+            // Daily drawdown check
+            if (riskGuard.checkDailyDrawdown(state.agentId, computeEquity(state, currentPrices))) {
+              logger.warn('marl real: emergency stop triggered', { agentId: state.agentId, competitionId });
+              emergencyStop = true;
+              await adapter.cancelAllOrders(competitionId).catch(() => {});
+              clearInterval(tick);
+              resolve();
+              return;
+            }
+
+            const symbol = validSymbols[stepCount % validSymbols.length];
+            const price  = currentPrices.get(symbol) ?? 0;
+            if (price === 0) continue;
+
+            const sentimentSignal = {
+              symbol,
+              signal: 'BUY' as const,
+              strength: 0.5,
+              target_price_high: price * 1.05,
+              target_price_low:  price * 0.97,
+              stop_loss:         price * 0.95,
+              reasoning:         'live market observation',
+              risk_reward_ratio: 2,
+            };
+
+            const portfolioArr = Array.from(state.portfolio.values()).map(p => ({
+              ...p,
+              unrealizedPnl: (currentPrices.get(p.symbol) ?? p.avgPrice) * p.quantity - p.avgPrice * p.quantity,
+            }));
+            const equity = computeEquity(state, currentPrices);
+
+            const observation: AgentObservation = {
+              currentPrice:  price,
+              bidAsk:        { bid: price * 0.9999, ask: price * 1.0001 },
+              spreadBps:     2,
+              portfolio:     portfolioArr,
+              cash:          state.cash,
+              equity,
+              equityHistory: state.equityHistory.slice(-20),
+              sentimentSignal,
+              competitorOrders: [],
+            };
+
+            const action = state.agent.computeAction(observation);
+
+            if (action.type === 'HOLD' || action.type === 'WAIT') continue;
+            if (action.type !== 'BUY' && action.type !== 'SELL') continue;
+
+            const pos = state.portfolio.get(symbol);
+            if (action.type === 'SELL' && (!pos || pos.quantity <= 0)) continue;
+
+            const quantity = action.type === 'BUY'
+              ? Math.max(0.001, Math.min(action.quantity ?? 1, state.cash / price * 0.95))
+              : Math.min(action.quantity ?? 1, pos?.quantity ?? 0);
+
+            if (quantity <= 0) continue;
+
+            const portfolioValue = portfolioArr.reduce((s, p) => s + p.quantity * (currentPrices.get(p.symbol) ?? p.avgPrice), 0);
+
+            const riskResult = riskGuard.checkOrder({
+              agentId:        state.agentId,
+              symbol,
+              side:           action.type,
+              quantity,
+              price,
+              cash:           state.cash,
+              portfolioValue,
+            });
+
+            if (!riskResult.approved) {
+              logger.debug('marl real: order blocked by risk guard', { agentId: state.agentId, symbol, reason: riskResult.reason });
+              continue;
+            }
+
+            const finalQty     = riskResult.adjustedQuantity ?? quantity;
+            const clientOrderId = randomUUID();
+
+            let placedOrder;
+            try {
+              placedOrder = await adapter.placeOrder({
+                competitionId,
+                agentId:       state.agentId,
+                credentialId,
+                clientOrderId,
+                symbol,
+                side:          action.type,
+                quantity:      finalQty,
+                limitPrice:    price,
+              });
+              try { storage.insertBrokerOrder(placedOrder); } catch { /* non-fatal */ }
+            } catch (err) {
+              logger.warn('marl real: order placement failed', { agentId: state.agentId, symbol, error: String(err) });
+              continue;
+            }
+
+            // Poll for fill (up to 10s)
+            const filled = await this.pollUntilFilled(adapter, clientOrderId, 10_000);
+            if (filled) {
+              try { storage.updateBrokerOrder(clientOrderId, filled); } catch { /* non-fatal */ }
+
+              const fillPrice = filled.avgFillPrice;
+              if (action.type === 'BUY') {
+                state.cash -= filled.filledQuantity * fillPrice;
+                const existing = state.portfolio.get(symbol);
+                if (existing) {
+                  const totalQty = existing.quantity + filled.filledQuantity;
+                  existing.avgPrice = (existing.avgPrice * existing.quantity + fillPrice * filled.filledQuantity) / totalQty;
+                  existing.quantity = totalQty;
+                } else {
+                  state.portfolio.set(symbol, { symbol, quantity: filled.filledQuantity, avgPrice: fillPrice });
+                }
+              } else {
+                const existing = state.portfolio.get(symbol);
+                if (existing) {
+                  state.cash += filled.filledQuantity * fillPrice;
+                  existing.quantity -= filled.filledQuantity;
+                  if (existing.quantity <= 0) state.portfolio.delete(symbol);
+                }
+              }
+
+              state.orderCounter += 1;
+
+              if (config.learningEnabled) {
+                const reward = action.type === 'BUY'
+                  ? (price - fillPrice) / Math.max(fillPrice, 1)
+                  : (fillPrice - (pos?.avgPrice ?? fillPrice)) / Math.max(pos?.avgPrice ?? fillPrice, 1);
+                state.agent.learn(reward, observation);
+              }
+            }
+          }
+
+          // Snapshot equity every 10 ticks
+          if (stepCount % 10 === 0) {
+            equitySnapshots.push({
+              timestamp: new Date(),
+              agentEquities: agentStates.map(s => ({
+                agentId: s.agentId,
+                equity:  computeEquity(s, currentPrices),
+              })),
+            });
+          }
+
+          stepCount++;
+        } catch (err) {
+          logger.error('marl real: tick error', { competitionId, error: String(err) });
+        }
+      }, intervalMs);
+    });
+
+    this.persistLearningStates(agentStates);
+
+    const openOrderCount = await adapter.cancelAllOrders(competitionId).catch(() => 0);
+    if (openOrderCount > 0) {
+      logger.info('marl real: cancelled remaining open orders', { competitionId, count: openOrderCount });
+    }
+
+    return this.buildResult(competitionId, 'SINGLE', agentStates, currentPrices, equitySnapshots, config.duration);
+  }
+
+  /** Poll an order until it reaches a terminal status or the timeout elapses. */
+  private async pollUntilFilled(
+    adapter: { pollOrderStatus: (id: string) => Promise<{ status: string; filledQuantity: number; avgFillPrice: number; brokerOrderId?: string }>; cancelOrder: (id: string) => Promise<boolean> },
+    clientOrderId: string,
+    timeoutMs: number,
+  ): Promise<{ status: string; filledQuantity: number; avgFillPrice: number; brokerOrderId?: string } | null> {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000));
+      try {
+        const s = await adapter.pollOrderStatus(clientOrderId);
+        if (s.status === 'FILLED' || s.status === 'PARTIALLY_FILLED') return s;
+        if (s.status === 'CANCELLED' || s.status === 'REJECTED') return null;
+      } catch { break; }
+    }
+    await adapter.cancelOrder(clientOrderId).catch(() => {});
+    return null;
   }
 
   // ── EVOLUTIONARY tournament ───────────────────────────────────────────────

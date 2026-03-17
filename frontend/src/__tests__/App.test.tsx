@@ -153,4 +153,21 @@ describe('App detail modal', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/coins/BTC?days=7');
     });
   });
+
+  it('opens the detail modal from the top ticker search', async () => {
+    render(<App />);
+
+    await screen.findByText('Bitcoin');
+
+    fireEvent.change(screen.getByLabelText('Search ticker'), { target: { value: 'btc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    await screen.findByText('Signal Overview');
+
+    expect(screen.getByText('Scored Market Signals')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/coins/BTC?days=7');
+    });
+  });
 });

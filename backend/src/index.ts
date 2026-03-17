@@ -20,7 +20,9 @@ import type { BacktestConfig } from './services/backtesting-engine.js';
 import { storage } from './storage.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
+import marlRealTradingRoutes from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
+import { brokerRegistry } from './services/brokers/broker-registry.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
@@ -86,9 +88,28 @@ try {
   logger.warn('social-store unavailable', { error: String(err) });
 }
 
-// Graceful shutdown — close DBs before process exits
-process.on('SIGTERM', () => { storage.close(); socialStore.close(); process.exit(0); });
-process.on('SIGINT',  () => { storage.close(); socialStore.close(); process.exit(0); });
+// Warn about any open real-trading orders that survived a restart.
+// Broker adapters do NOT survive restarts — admin must re-POST
+// /api/marl/broker/connect/:id to reconnect before running PAPER/LIVE competitions.
+try {
+  const openOrders = storage.getOpenBrokerOrders();
+  if (openOrders.length > 0) {
+    logger.warn('open real-trading orders found from previous session — broker adapters not connected, re-connect via POST /api/marl/broker/connect/:id', {
+      count: openOrders.length,
+      competitionIds: [...new Set(openOrders.map(o => o.competitionId))],
+    });
+  }
+} catch { /* storage may not be connected yet */ }
+
+// Graceful shutdown — disconnect brokers, close DBs before process exits
+async function shutdown() {
+  await brokerRegistry.disconnectAll().catch(() => {});
+  storage.close();
+  socialStore.close();
+  process.exit(0);
+}
+process.on('SIGTERM', () => { void shutdown(); });
+process.on('SIGINT',  () => { void shutdown(); });
 
 
 // ============================================================================
@@ -865,6 +886,7 @@ app.post('/api/trending/ingest', (req, res) => {
 // ============================================================================
 
 app.use(marlRoutes);
+app.use(marlRealTradingRoutes);
 app.use(socialMediaRoutes);
 
 // 404 handler
