@@ -1025,18 +1025,46 @@ export class MarlCompetitionEngine {
     orderBook: SharedOrderBook,
     learningEnabled: boolean
   ): void {
-    for (const state of agentStates) {
-      for (const symbol of symbols) {
-        // Seed order book with last price
-        orderBook.setLastPrice(symbol, prices.get(symbol) ?? 1000);
+    // CHECKPOINT 5 — Price updates + synthetic market-maker seeding
+    // Clear stale resting orders and inject synthetic BID+ASK at exact market price.
+    // Without this the order book starts empty: BUYs can't fill (no ASKs) and SELLs
+    // can't execute (no position). Agents never trade → flat equity.
+    for (const symbol of symbols) {
+      orderBook.clearSymbol(symbol);
+      const price = prices.get(symbol) ?? 1000;
+      const prevPrice = prevPrices.get(symbol) ?? price;
+      const pricePct = prevPrice > 0 ? ((price - prevPrice) / prevPrice) * 100 : 0;
+      logger.debug(`[STEP ${step}] price ${symbol}: ${prevPrice.toFixed(2)} → ${price.toFixed(2)} (${pricePct >= 0 ? '+' : ''}${pricePct.toFixed(3)}%)`);
 
+      // Synthetic market-maker at exact current price gives every order immediate liquidity.
+      const MARKET_DEPTH = 1e9;
+      orderBook.placeOrder(`_mm_ask_${symbol}_${step}`, '_mm_', symbol, 'ASK', price, MARKET_DEPTH);
+      orderBook.placeOrder(`_mm_bid_${symbol}_${step}`, '_mm_', symbol, 'BID', price, MARKET_DEPTH);
+      orderBook.setLastPrice(symbol, price);
+    }
+
+    for (const state of agentStates) {
+      // CHECKPOINT 1 — agent state before decisions
+      logger.debug(`[STEP ${step}] agent=${state.agentId} cash=${state.cash.toFixed(2)} positions=${state.portfolio.size}`);
+
+      for (const symbol of symbols) {
         const currentPrice = prices.get(symbol) ?? 1000;
         const signal = this.buildSignal(symbol, currentPrice, prevPrices.get(symbol) ?? currentPrice);
         const obs = buildObservation(state, prices, symbol, signal, orderBook);
+
+        // CHECKPOINT 2 — decision
         const action = state.agent.computeAction(obs);
+        logger.debug(`[STEP ${step}] agent=${state.agentId} symbol=${symbol} decision=${action.type} qty=${action.quantity !== undefined ? action.quantity.toFixed(6) : 'N/A'} price=${currentPrice.toFixed(2)}`);
 
         const competitors = agentStates.filter(s => s.agentId !== state.agentId);
-        const { reward } = this.executeAction(state, action, prices, orderBook, competitors);
+
+        // CHECKPOINT 3 — order execution
+        const { reward, tradeExecuted } = this.executeAction(state, action, prices, orderBook, competitors);
+
+        // CHECKPOINT 4 — portfolio update
+        if (tradeExecuted) {
+          logger.info(`[STEP ${step}] TRADE agent=${state.agentId} ${action.type} ${symbol} qty=${action.quantity?.toFixed(6)} @ ${currentPrice.toFixed(2)} reward=${reward.toFixed(4)} cash=${state.cash.toFixed(2)} positions=${state.portfolio.size}`);
+        }
 
         if (learningEnabled) {
           const nextObs = buildObservation(state, nextPrices, symbol, signal, orderBook);
