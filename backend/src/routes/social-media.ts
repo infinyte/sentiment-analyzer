@@ -159,11 +159,12 @@ router.get('/api/social-media/item/:id', (req, res) => {
     res.json({
       ...item,
       scoring_breakdown: {
-        score_sentiment:  item.score_sentiment,
-        score_engagement: item.score_engagement,
-        score_authority:  item.score_authority,
-        score_recency:    item.score_recency,
-        score_composite:  item.score_composite,
+        score_sentiment:     item.score_sentiment,
+        score_engagement:    item.score_engagement,
+        score_authority:     item.score_authority,
+        score_recency:       item.score_recency,
+        score_composite:     item.score_composite,
+        context_window_used: item.context_window_used ?? false,
         weights: { sentiment: '30%', engagement: '25%', authority: '25%', recency: '20%' },
       },
     });

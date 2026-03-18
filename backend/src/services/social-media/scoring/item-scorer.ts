@@ -172,10 +172,32 @@ function scoreAuthority(item: SocialMediaItem): number {
 
 const WEIGHTS = { sentiment: 0.30, engagement: 0.25, authority: 0.25, recency: 0.20 };
 
+function buildBotAuditRecord(item: SocialMediaItem, coins: string[]): ScoredSocialItem {
+  return {
+    ...item,
+    coins_mentioned: coins,
+    sentiment_score: 0,
+    sentiment_confidence: 0,
+    score_sentiment: 50,
+    score_engagement: 0,
+    score_recency: 0,
+    score_authority: 0,
+    score_composite: 0,
+    last_updated: new Date().toISOString(),
+  };
+}
+
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
   const fullText = [item.title, item.content].filter(Boolean).join(' ');
+  const coins = item.coins_mentioned.length
+    ? item.coins_mentioned
+    : extractCoins(fullText);
+
+  if ((item.bot_score ?? 0) >= 0.8) {
+    return buildBotAuditRecord(item, coins);
+  }
 
   const sentResult = scoreSentiment(fullText);
   const engScore   = scoreEngagement(item);
@@ -188,10 +210,6 @@ export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
     authScore         * WEIGHTS.authority +
     recScore          * WEIGHTS.recency
   ).toFixed(2));
-
-  const coins = item.coins_mentioned.length
-    ? item.coins_mentioned
-    : extractCoins(fullText);
 
   return {
     ...item,
@@ -246,7 +264,23 @@ export function detectLanguage(text: string): string {
   return 'en';
 }
 
-// ── Async Scoring Pipeline (Issues #1, #2, #4) ────────────────────────────────
+// ── ABSA helper (Issue #3) ────────────────────────────────────────────────────
+
+/**
+ * Extract a ±windowSize token window centred on the first occurrence of
+ * `target` in `text`.  Returns null when `target` is not found.
+ */
+function extractContextWindow(text: string, target: string, windowSize = 50): string | null {
+  const tokens = text.split(/\s+/);
+  const targetLower = target.toLowerCase();
+  const idx = tokens.findIndex(t => t.toLowerCase().includes(targetLower));
+  if (idx === -1) return null;
+  const start = Math.max(0, idx - windowSize);
+  const end   = Math.min(tokens.length, idx + windowSize + 1);
+  return tokens.slice(start, end).join(' ');
+}
+
+// ── Async Scoring Pipeline (Issues #1, #2, #3, #4) ───────────────────────────
 
 /**
  * Async variant of scoreItem that integrates:
@@ -259,19 +293,36 @@ export function detectLanguage(text: string): string {
  */
 export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocialItem> {
   const fullText = [item.title, item.content].filter(Boolean).join(' ');
+  const coins = item.coins_mentioned.length ? item.coins_mentioned : extractCoins(fullText);
+
+  if ((item.bot_score ?? 0) >= 0.8) {
+    return buildBotAuditRecord(item, coins);
+  }
+
+  // ABSA (Issue #3): extract context window around the primary coin mention
+  let scoringText = fullText;
+  let context_window_used = false;
+  const primaryCoin = item.coins_mentioned[0];
+  if (primaryCoin) {
+    const window = extractContextWindow(fullText, primaryCoin);
+    if (window) {
+      scoringText = window;
+      context_window_used = true;
+    }
+  }
 
   // Sarcasm detection (shared; used regardless of FinBERT availability)
-  const sarcasmResult = detectSarcasm(fullText);
+  const sarcasmResult = detectSarcasm(scoringText);
 
   // Language detection
-  const language = detectLanguage(fullText);
+  const language = detectLanguage(scoringText);
 
   // Sentiment scoring — FinBERT preferred, keyword fallback
   let sentResult: { score: number; raw: number; confidence: number };
   let finbert_used = false;
 
   if (finBertService.isAvailable()) {
-    const finBertOutput = await finBertService.analyze(fullText);
+    const finBertOutput = await finBertService.analyze(scoringText);
     if (finBertOutput !== null) {
       finbert_used = true;
       const rawSentiment = finBertService.toSentimentScore(finBertOutput);
@@ -292,10 +343,10 @@ export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocia
         };
       }
     } else {
-      sentResult = scoreSentiment(fullText);
+      sentResult = scoreSentiment(scoringText);
     }
   } else {
-    sentResult = scoreSentiment(fullText);
+    sentResult = scoreSentiment(scoringText);
     // Apply sarcasm adjustment to keyword-based score too
     if (sarcasmResult.sarcastic && sarcasmResult.confidence >= 0.67) {
       const invertedRaw = -sentResult.raw * 0.5;
@@ -318,8 +369,6 @@ export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocia
     recScore          * WEIGHTS.recency
   ).toFixed(2));
 
-  const coins = item.coins_mentioned.length ? item.coins_mentioned : extractCoins(fullText);
-
   return {
     ...item,
     language,
@@ -333,6 +382,7 @@ export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocia
     score_composite:  composite,
     sarcasm_flagged:  sarcasmResult.sarcastic,
     finbert_used,
+    context_window_used,
     last_updated: new Date().toISOString(),
   };
 }

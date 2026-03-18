@@ -6,14 +6,16 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
-import type { Coin, Sentiment, TrendingSentiment } from './types.js';
-import type { TrendingTopicRecord } from './types/social-media.js';
+import type { Coin, OnChainMetrics, Sentiment, TrendingSentiment } from './types.js';
+import type { SentimentMomentum, TrendingTopicRecord } from './types/social-media.js';
 import { Cache } from './services/cache.js';
 import { CoinGeckoService } from './services/coingecko.js';
 import { ContentSignalService } from './services/content-signals.js';
 import { SentimentService } from './services/sentiment.js';
 import { SentimentAnalyzerEngine } from './services/sentiment-analyzer.js';
 import type { MarketData, NewsData } from './services/sentiment-analyzer.js';
+import { finBertService } from './services/finbert.js';
+import { onChainService } from './services/onchain.js';
 import type { AgentConfig } from './services/trading-agent.js';
 import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
@@ -28,6 +30,8 @@ import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
 import { SocialMediaScraperManager } from './services/social-media/scraper/scraper-manager.js';
 import { TrendingTopicDiscoveryEngine } from './services/social-media/trending/trending-discovery-engine.js';
+import { MultiSourceTrendingScoreCalculator } from './services/social-media/trending/multi-source-calculator.js';
+import { ingestQueue } from './services/social-media/ingest-queue.js';
 import logger from './logger.js';
 
 dotenv.config();
@@ -68,6 +72,7 @@ const socialScraper = new SocialScraperService();
 const trendingEngine = new TrendingTopicsEngine();
 const socialScraperManager = new SocialMediaScraperManager();
 const socialDiscoveryEngine = new TrendingTopicDiscoveryEngine();
+const trendCalculator = new MultiSourceTrendingScoreCalculator();
 
 // In-memory agent registry (cleared on restart)
 const configuredAgents: Map<string, AgentConfig> = new Map();
@@ -164,6 +169,25 @@ function applySentimentToCoin(coin: Coin, sentimentData: Sentiment): void {
   coin.trending_score = sentimentData.trending_score;
 }
 
+async function fetchOnChainMetrics(coinIdOrSymbol: string): Promise<OnChainMetrics | null> {
+  try {
+    return await onChainService.getMetrics(coinIdOrSymbol);
+  } catch (error) {
+    logger.warn('onchain lookup failed', { coinIdOrSymbol, error: String(error) });
+    return null;
+  }
+}
+
+async function fetchSentimentMomentum(symbol: string): Promise<SentimentMomentum | null> {
+  try {
+    const report = await trendCalculator.calculate(symbol, 24);
+    return report.sentiment_momentum;
+  } catch (error) {
+    logger.warn('sentiment momentum lookup failed', { symbol, error: String(error) });
+    return null;
+  }
+}
+
 async function fetchAndCacheSentiment(coin: Coin): Promise<Sentiment> {
   const cacheKey = `sentiment_${coin.symbol}`;
 
@@ -191,7 +215,7 @@ async function fetchAndCacheSentiment(coin: Coin): Promise<Sentiment> {
 
   // 3. Cold path: fetch from APIs
   try {
-    const contentAnalysis = await contentSignals.collect(coin.name, coin.symbol, 7);
+    const contentAnalysis = await contentSignals.collect(coin.name, coin.symbol, 7, coin.symbol);
     const headlines = contentAnalysis.items.map(item => item.title).filter(Boolean).slice(0, 20);
     const analyzedSentiment = await sentiment.analyzeSentiment(
       coin.symbol,
@@ -370,6 +394,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
       cache.set(headlinesKey, data, 15 * 60 * 1000);
       return data;
     })();
+    const onChainMetrics = await fetchOnChainMetrics(coin.id);
 
     const trendRecord = buildTrendingMap().get(symbol.toUpperCase());
     const trendingSentiment = trendRecord ? trendRecordToSentiment(trendRecord) : undefined;
@@ -395,6 +420,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
       scored_items: sentimentData.scored_items ?? [],
       headlines: headlines.slice(0, 10),
       news_count: sentimentData.collection_stats?.total_items ?? headlines.length,
+      ...(onChainMetrics ? { on_chain: onChainMetrics } : {}),
     });
   } catch (error) {
     logger.error('route error', { endpoint: '/api/coins/:symbol', error: String(error) });
@@ -523,6 +549,8 @@ app.post('/api/sentiment/analyze', async (req, res) => {
       const symHeadlines = headlines?.[sym] ?? headlines?.[rawSym] ?? [];
       const market = marketData?.[sym] ?? marketData?.[rawSym];
       const technical = technicalData?.[sym] ?? technicalData?.[rawSym];
+      const onChainMetrics = analysisMode === 'BASIC' ? null : await fetchOnChainMetrics(sym);
+      const sentimentMomentum = analysisMode === 'TRADING_SIGNALS' ? await fetchSentimentMomentum(sym) : null;
 
       if (analysisMode === 'BASIC') {
         results[sym] = analyzer.analyzeBasicSentiment(sym, symHeadlines);
@@ -534,7 +562,9 @@ app.post('/api/sentiment/analyze', async (req, res) => {
           sentiment_confidence: 0,
           sentiment_summary: '',
         };
-        results[sym] = analyzer.analyzeAdvancedSentiment(market, news, technical);
+        // Use FinBERT-enhanced async path; falls back to keyword scoring when
+        // FINBERT_API_URL is not configured or the model call fails.
+        results[sym] = await analyzer.analyzeAdvancedSentimentAsync(market, news, technical, finBertService, onChainMetrics);
       } else if (analysisMode === 'TRADING_SIGNALS') {
         if (!market) { results[sym] = { error: 'No marketData for symbol' }; continue; }
         const news: NewsData = {
@@ -550,9 +580,11 @@ app.post('/api/sentiment/analyze', async (req, res) => {
           key_catalysts: [], risk_factors: [], short_term_outlook: '',
           volatility_warning: false, trending_score: 0,
         };
-        results[sym] = analyzer.generateTradingSignals(market, news, sentimentInput, technical);
+        // Use FinBERT-enhanced async path for the underlying advanced analysis;
+        // falls back to keyword scoring when FINBERT_API_URL is not configured.
+        results[sym] = await analyzer.generateTradingSignalsAsync(market, news, sentimentInput, technical, finBertService, onChainMetrics, sentimentMomentum);
       } else {
-        // SMART
+        // SMART — FinBERT-enhanced async path
         if (!market) { results[sym] = { error: 'No marketData for symbol' }; continue; }
         const news: NewsData = {
           headlines: symHeadlines,
@@ -560,7 +592,7 @@ app.post('/api/sentiment/analyze', async (req, res) => {
           sentiment_confidence: 0,
           sentiment_summary: '',
         };
-        results[sym] = analyzer.analyzeSmartSentiment(market, news, technical);
+        results[sym] = await analyzer.analyzeSmartSentimentAsync(market, news, technical, finBertService, onChainMetrics);
       }
     }
 
@@ -980,6 +1012,9 @@ cron.schedule(socialCronSchedule, async () => {
       const total = results.reduce((s, r) => s + r.items_scraped, 0);
       logger.info('social cron: per-coin scrape', { symbols: top.length, total });
     }
+
+    // Log ingest queue health after scraping phase completes
+    logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
 
     // Recompute trending topics in DB
     const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');

@@ -7,7 +7,10 @@
  * Handles:
  *   - Per-source error isolation (one bad source doesn't abort others)
  *   - Source metadata tracking via SocialStorageService
- *   - Coin-mention population + scoring before persistence
+ *   - Coin-mention population before handing items to IngestQueue
+ *
+ * All heavy pipeline work (bot detection → scoring → upsert) is delegated to
+ * the shared IngestQueue, which enforces concurrency and logs latency.
  */
 
 import logger from '../../../logger.js';
@@ -18,10 +21,8 @@ import { DiscordScraper }  from './discord-scraper.js';
 import { TelegramScraper } from './telegram-scraper.js';
 import { YouTubeScraper }  from './youtube-scraper.js';
 import { TikTokScraper }   from './tiktok-scraper.js';
-import { scoreItemsAsync } from '../scoring/item-scorer.js';
-import { extractCoins }    from '../scoring/coin-extractor.js';
-import { socialStore }     from '../../../database/sqlite-social-store.js';
-import type { SocialMediaItem, SocialSource } from '../../../types/social-media.js';
+import { ingestQueue }     from '../ingest-queue.js';
+import type { SocialSource } from '../../../types/social-media.js';
 
 // ── Coin name map (symbol → display name for search queries) ──────────────────
 
@@ -65,12 +66,71 @@ export class SocialMediaScraperManager {
 
   /** Scrape all configured sources for a single coin symbol. */
   async fetchForCoin(symbol: string): Promise<ScrapeRunResult> {
-    const start  = Date.now();
-    const upper  = symbol.toUpperCase();
-    const name   = coinName(upper);
+    const start    = Date.now();
+    const upper    = symbol.toUpperCase();
+    const name     = coinName(upper);
     const errors: string[] = [];
     const bySource = this.emptyBySource();
-    const allRaw: SocialMediaItem[] = [];
+    const allRaw   = await this.scrapeAllSources(upper, name, bySource, errors);
+
+    const sourceCounters = (Object.entries(bySource) as [SocialSource, number][])
+      .filter(([, c]) => c > 0)
+      .map(([source, count]) => ({ source, count }));
+
+    let stored = 0;
+    try {
+      const result = await ingestQueue.push({ items: allRaw, targetSymbol: upper, sourceCounters });
+      stored = result.stored;
+    } catch (err) {
+      errors.push(`ingest: ${String(err)}`);
+    }
+
+    const duration = Date.now() - start;
+    logger.info('scrape-manager: coin complete', {
+      symbol: upper, items: allRaw.length, stored, duration_ms: duration,
+    });
+
+    return { symbol: upper, items_scraped: allRaw.length, items_stored: stored, by_source: bySource, errors, duration_ms: duration };
+  }
+
+  /** Scrape multiple coins sequentially. */
+  async fetchBatch(symbols: string[]): Promise<ScrapeRunResult[]> {
+    const results: ScrapeRunResult[] = [];
+    for (const sym of symbols) results.push(await this.fetchForCoin(sym));
+    return results;
+  }
+
+  // ── Bulk background fetches ────────────────────────────────────────────────
+
+  /** Fetch all RSS feeds (unfiltered) and push to IngestQueue. Best for hourly cron. */
+  async refreshRssAll(): Promise<number> {
+    return this.refreshBulk('rss', () => this.rss.fetchAll());
+  }
+
+  /** Fetch all configured Discord channels (unfiltered) and push to IngestQueue. */
+  async refreshDiscordAll(): Promise<number> {
+    return this.refreshBulk('discord', () => this.discord.fetchAll());
+  }
+
+  /** Fetch all Telegram channels (unfiltered) and push to IngestQueue. */
+  async refreshTelegramAll(): Promise<number> {
+    return this.refreshBulk('telegram', () => this.telegram.fetchAll());
+  }
+
+  // ── Private helpers ────────────────────────────────────────────────────────
+
+  /**
+   * Run all per-coin scrapers in parallel and collect results.
+   * Mutates `bySource` with per-source item counts.
+   * Pushes scraper errors into `errors`.
+   */
+  private async scrapeAllSources(
+    upper: string,
+    name: string,
+    bySource: Record<SocialSource, number>,
+    errors: string[],
+  ) {
+    const allRaw: import('../../../types/social-media.js').SocialMediaItem[] = [];
 
     await Promise.allSettled([
       this.twitter.fetch(upper, name).then(items => {
@@ -102,77 +162,23 @@ export class SocialMediaScraperManager {
       }).catch(err => errors.push(`tiktok: ${String(err)}`)),
     ]);
 
-    this.populateCoins(allRaw, upper);
-
-    const scored = await scoreItemsAsync(allRaw);
-    let stored = 0;
-    try {
-      stored = socialStore.upsertItems(scored);
-      for (const [src, count] of Object.entries(bySource) as [SocialSource, number][]) {
-        if (count > 0) socialStore.incrementFetchCount(src, count);
-      }
-    } catch (err) {
-      errors.push(`storage: ${String(err)}`);
-    }
-
-    const duration = Date.now() - start;
-    logger.info('scrape-manager: coin complete', {
-      symbol: upper, items: allRaw.length, stored, duration_ms: duration,
-    });
-
-    return { symbol: upper, items_scraped: allRaw.length, items_stored: stored, by_source: bySource, errors, duration_ms: duration };
+    return allRaw;
   }
 
-  /** Scrape multiple coins sequentially. */
-  async fetchBatch(symbols: string[]): Promise<ScrapeRunResult[]> {
-    const results: ScrapeRunResult[] = [];
-    for (const sym of symbols) results.push(await this.fetchForCoin(sym));
-    return results;
-  }
-
-  // ── Bulk background fetches ────────────────────────────────────────────────
-
-  /** Fetch all RSS feeds (unfiltered) and persist. Best for hourly cron. */
-  async refreshRssAll(): Promise<number> {
-    return this.refreshBulk('rss', () => this.rss.fetchAll());
-  }
-
-  /** Fetch all configured Discord channels (unfiltered) and persist. */
-  async refreshDiscordAll(): Promise<number> {
-    return this.refreshBulk('discord', () => this.discord.fetchAll());
-  }
-
-  /** Fetch all Telegram channels (unfiltered) and persist. */
-  async refreshTelegramAll(): Promise<number> {
-    return this.refreshBulk('telegram', () => this.telegram.fetchAll());
-  }
-
-  // ── Private helpers ────────────────────────────────────────────────────────
-
-  private async refreshBulk(source: SocialSource, fetcher: () => Promise<SocialMediaItem[]>): Promise<number> {
+  private async refreshBulk(source: SocialSource, fetcher: () => Promise<import('../../../types/social-media.js').SocialMediaItem[]>): Promise<number> {
     try {
       const items = await fetcher();
-      this.populateCoins(items);
-      const scored = await scoreItemsAsync(items);
-      socialStore.upsertItems(scored);
-      if (items.length) socialStore.incrementFetchCount(source, items.length);
+      if (items.length > 0) {
+        await ingestQueue.push({
+          items,
+          sourceCounters: [{ source, count: items.length }],
+        });
+      }
       logger.info(`scrape-manager: ${source} bulk refresh`, { count: items.length });
       return items.length;
     } catch (err) {
       logger.warn(`scrape-manager: ${source} bulk error`, { error: String(err) });
       return 0;
-    }
-  }
-
-  private populateCoins(items: SocialMediaItem[], targetSymbol?: string): void {
-    for (const item of items) {
-      if (item.coins_mentioned.length === 0) {
-        const fullText = [item.title, item.content].filter(Boolean).join(' ');
-        item.coins_mentioned = extractCoins(fullText);
-      }
-      if (targetSymbol && !item.coins_mentioned.includes(targetSymbol)) {
-        item.coins_mentioned.unshift(targetSymbol);
-      }
     }
   }
 

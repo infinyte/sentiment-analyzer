@@ -155,6 +155,18 @@ describe('SocialStorageService', () => {
       expect(items.length).toBeGreaterThanOrEqual(1);
       items.forEach(i => expect(i.coins_mentioned).toContain('BTC'));
     });
+
+    it('excludes items with bot_score >= 0.8 from trend queries', () => {
+      store.upsertItems([
+        makeItem({ source_id: 'human-btc', coins_mentioned: ['BTC'], bot_score: 0.2 }),
+        makeItem({ source_id: 'bot-btc', coins_mentioned: ['BTC'], bot_score: 0.95 }),
+      ]);
+
+      const items = store.getItemsForCoin('BTC', 24);
+
+      expect(items).toHaveLength(1);
+      expect(items[0].source_id).toBe('human-btc');
+    });
   });
 
   describe('pruneOldItems', () => {
@@ -204,11 +216,12 @@ describe('SocialStorageService', () => {
 
   describe('saveTrendingSnapshot / getHistoricalSignal', () => {
     it('stores and retrieves snapshots for a coin', () => {
-      store.saveTrendingSnapshot('BTC', 72.5);
-      store.saveTrendingSnapshot('BTC', 68.0);
+      store.saveTrendingSnapshot('BTC', 72.5, 64);
+      store.saveTrendingSnapshot('BTC', 68.0, 58);
       const history = store.getHistoricalSignal('BTC');
       expect(history.length).toBeGreaterThanOrEqual(2);
       expect(history[0].signal_composite).toBeDefined();
+      expect(history[0].signal_sentiment).toBeDefined();
     });
 
     it('returns empty array for unknown coin', () => {

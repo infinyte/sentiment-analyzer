@@ -61,6 +61,7 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 | `HUGGINGFACE_API_TOKEN` | No | Hugging Face token used with `FINBERT_API_URL` |
 | `TRANSLATION_API_KEY` | No | Reserved for future multilingual translation routing; language detection is already active without it |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Azure Application Insights telemetry |
+| `BROKER_MASTER_KEY` | No | 64-hex or passphrase used to AES-256-GCM encrypt stored broker credentials; required for PAPER/LIVE exchange mode |
 | `SOCIAL_SCRAPE_CRON` | No | Cron for hourly scrape (default: `0 * * * *`) |
 | `TRENDING_MIN_MENTIONS` | No | Min mentions to appear in trending (default: `3`) |
 
@@ -84,8 +85,7 @@ Express Backend (port 3000)
     ├── BacktestingEngine          → historical simulation + metrics
     ├── SocialMediaScraperManager  → 7-source scraper (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok) + async item scoring
     ├── TrendingDiscoveryEngine    → entity aggregation, velocity scoring, SQLite persistence
-    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison
-    ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
+    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison    ├── ExchangeAdapter framework  → CoinbaseAdapter + BinanceAdapter (sandbox / live); RiskManager (kill switch, daily-loss limit, order cap); ExchangeRegistry    ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
     └── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
 ```
 
@@ -99,6 +99,7 @@ Express Backend (port 3000)
 **Scheduled jobs:**
 
 - **Daily at 2 AM UTC** (`SENTIMENT_JOB_CRON`): re-analyzes the top `SENTIMENT_BATCH_SIZE` coins (default 50) and refreshes the sentiment cache.
+- **Every 30 minutes** (`TRENDING_JOB_CRON`, default `*/30 * * * *`): scrapes the top-20 coins via the in-memory `TrendingTopicsEngine` and refreshes topic scores.
 - **Hourly** (`SOCIAL_SCRAPE_CRON`, default `0 * * * *`): RSS + Discord + Telegram bulk refresh, Twitter + Reddit for the top 10 coins, `discoverTrends()`, and prune of old items.
 - **Midnight UTC** (`0 0 * * *`): resets daily fetch and error counters for all social sources.
 
@@ -140,6 +141,7 @@ Express Backend (port 3000)
 | GET | `/api/marl/competitions` | List all competitions (in-memory) |
 | GET | `/api/marl/agents/learning` | List all persisted agent learning states |
 | DELETE | `/api/marl/agents/:agentId/learning` | Reset agent learning state (requires `x-api-key`). Query: `?riskProfile=` |
+| GET | `/api/marl/coin-universe` | Compute per-agent coin selections from CoinGecko live data. Params: `agents` (JSON array), `universeSize`, `coinsPerAgent` |
 | GET | `/api/marl/info` | Documentation for modes, agent configs, order book, and learning persistence |
 
 **Tournament Modes:**
@@ -310,14 +312,32 @@ sentiment-analyzer/
 │   │       ├── trading-agent.ts              # Agent framework (Rule/ML/Hybrid)
 │   │       ├── backtesting-engine.ts         # Historical simulation engine
 │   │       ├── marl-competition-engine.ts    # Multi-agent competition engine (Phase 2)
+│   │       ├── exchange/                     # Real exchange adapter framework
+│   │       │   ├── exchange-adapter.ts        # Abstract base + AccountMode types
+│   │       │   ├── exchange-factory.ts        # Factory: COINBASE | BINANCE
+│   │       │   ├── exchange-registry.ts       # Process-lifetime adapter singleton
+│   │       │   ├── risk-manager.ts            # Kill switch + daily-loss + order size guard
+│   │       │   └── adapters/                  # coinbase-adapter.ts, binance-adapter.ts
+│   │       ├── risk/
+│   │       │   └── risk-guard.ts              # Pre-trade circuit breaker (MARL layer)
+│   │       ├── brokers/                      # Alpaca adapter + broker registry + factory
 │   │       └── social-media/
 │   │           ├── scraper/                  # 7 scraper adapters + scraper-manager.ts
-│   │           ├── scoring/                  # coin-extractor.ts, item-scorer.ts
+│   │           ├── scoring/                  # coin-extractor.ts, item-scorer.ts, sarcasm-detector.ts
 │   │           └── trending/                 # trending-discovery-engine.ts, multi-source-calculator.ts
 │   ├── .env.example
 │   └── package.json
 ├── frontend/
-│   ├── src/App.tsx           # All UI — components, hooks, chart
+│   ├── src/
+│   │   ├── App.tsx               # Root component + hooks (useCoins, useCoinDetail)
+│   │   ├── main.tsx              # React entry point
+│   │   ├── components/
+│   │   │   ├── MarlCompetitionViewer.tsx   # MARL tournament UI
+│   │   │   └── SocialDashboard.tsx         # Social Intel tab
+│   │   ├── hooks/
+│   │   │   ├── useMarlCompetition.ts       # MARL polling + state
+│   │   │   └── useSocialMedia.ts           # Social media hooks
+│   │   └── types/                          # marl.ts, social-media.ts
 │   ├── vite.config.ts        # Proxies /api to localhost:3000
 │   └── package.json
 ├── docs/

@@ -207,6 +207,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       refreshInterval?: unknown;
       evolutionaryRounds?: unknown;
       learningEnabled?: unknown;
+      enableSentimentFeatures?: unknown;
       exchangeMode?: unknown;
       brokerCredentialId?: unknown;
       riskConfig?: unknown;
@@ -291,6 +292,11 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
 
     const learningEnabled = body.learningEnabled !== false;
 
+    // When not explicitly set: enable sentiment features if a known NLP API key is configured
+    const enableSentimentFeatures = typeof body.enableSentimentFeatures === 'boolean'
+      ? body.enableSentimentFeatures
+      : !!(process.env.FINBERT_API_URL || process.env.LUNARCRUSH_API_KEY);
+
     // ─── exchangeMode / broker validation ────────────────────────────────────
     const VALID_EXCHANGE_MODES = ['SIMULATED', 'PAPER', 'LIVE'] as const;
     let exchangeMode: ExchangeMode = 'SIMULATED';
@@ -370,6 +376,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       refreshInterval,
       evolutionaryRounds,
       learningEnabled,
+      enableSentimentFeatures,
       exchangeMode,
       brokerCredentialId,
       riskConfig,

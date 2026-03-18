@@ -9,7 +9,12 @@ jest.mock('../../../services/sentiment-analyzer', () => ({
   })),
 }));
 
-import { scoreItem, scoreItems } from '../../../services/social-media/scoring/item-scorer';
+// Mock FinBertService singleton as unavailable by default
+jest.mock('../../../services/finbert', () => ({
+  finBertService: { isAvailable: () => false, analyze: jest.fn(), toSentimentScore: jest.fn() },
+}));
+
+import { scoreItem, scoreItems, scoreItemAsync } from '../../../services/social-media/scoring/item-scorer';
 import type { SocialMediaItem } from '../../../types/social-media';
 
 function makeItem(overrides: Partial<SocialMediaItem> = {}): SocialMediaItem {
@@ -143,5 +148,64 @@ describe('scoreItems', () => {
 
   it('returns empty array for empty input', () => {
     expect(scoreItems([])).toEqual([]);
+  });
+});
+
+// ── scoreItemAsync — ABSA (Issue #3) ─────────────────────────────────────────
+
+describe('scoreItemAsync — context_window_used (ABSA)', () => {
+  it('sets context_window_used=true when coins_mentioned present and coin found in text', async () => {
+    const item = makeItem({
+      coins_mentioned: ['BTC'],
+      content: 'This is a post about BTC and its rally while ETH drops hard today.',
+    });
+    const scored = await scoreItemAsync(item);
+    expect(scored.context_window_used).toBe(true);
+  });
+
+  it('sets context_window_used=false when coins_mentioned is empty', async () => {
+    const item = makeItem({ coins_mentioned: [] });
+    const scored = await scoreItemAsync(item);
+    expect(scored.context_window_used).toBe(false);
+  });
+
+  it('sets context_window_used=false when coin not found in text', async () => {
+    const item = makeItem({
+      coins_mentioned: ['DOGE'],
+      content: 'Nothing relevant here just random words moon lambo',
+      title: '',
+    });
+    // DOGE appears nowhere in content; extractContextWindow returns null
+    const scored = await scoreItemAsync(item);
+    expect(scored.context_window_used).toBe(false);
+  });
+
+  it('returns all expected score fields in async path', async () => {
+    const scored = await scoreItemAsync(makeItem());
+    expect(scored.score_sentiment).toBeGreaterThanOrEqual(0);
+    expect(scored.score_engagement).toBeGreaterThanOrEqual(0);
+    expect(scored.score_recency).toBeGreaterThanOrEqual(0);
+    expect(scored.score_authority).toBeGreaterThanOrEqual(0);
+    expect(scored.score_composite).toBeGreaterThanOrEqual(0);
+  });
+
+  it('multi-coin post: scores based on context window around primary coin', async () => {
+    // BTC gets bullish context; ETH gets bearish context in the same post
+    const btcItem = makeItem({
+      coins_mentioned: ['BTC'],
+      content: 'BTC surges on adoption news while ETH crashes on exploit fears today',
+    });
+    const ethItem = makeItem({
+      coins_mentioned: ['ETH'],
+      content: 'BTC surges on adoption news while ETH crashes on exploit fears today',
+      source_id: 'tweet-eth',
+    });
+
+    const btcScored = await scoreItemAsync(btcItem);
+    const ethScored = await scoreItemAsync(ethItem);
+
+    // Both should have used context windows
+    expect(btcScored.context_window_used).toBe(true);
+    expect(ethScored.context_window_used).toBe(true);
   });
 });

@@ -91,3 +91,10 @@ export interface SentimentCollectionStats {
   trending_score: number;
   collected_at: string;
 }
+
+export interface OnChainMetrics {
+  exchange_inflow: number;
+  exchange_outflow: number;
+  active_addresses_24h: number;
+  large_tx_count_24h: number;
+}

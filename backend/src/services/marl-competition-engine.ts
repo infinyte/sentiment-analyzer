@@ -70,6 +70,8 @@ export interface AgentObservation {
   equityHistory: number[];
   sentimentSignal: TradingSignal;
   competitorOrders: CompetitorOrderSummary[];
+  /** Optional extended sentiment features (present only when enableSentimentFeatures=true). */
+  sentimentFeatures?: SentimentFeatures;
 }
 
 export interface AgentAction {
@@ -109,6 +111,13 @@ export interface CompetitionConfig {
    *         resolves the union of their top picks before the competition starts.
    */
   symbolSelectionMode?: SymbolSelectionMode;
+  /**
+   * When true, appends 4 extra sentiment features to the agent state vector,
+   * extending it from BASE_STATE_DIM (50) to EXTENDED_STATE_DIM (54).
+   * Defaults to true when FINBERT_API_URL or LUNARCRUSH_API_KEY is set,
+   * false otherwise.
+   */
+  enableSentimentFeatures?: boolean;
   /**
    * When symbolSelectionMode is 'AUTO': how many top coins (by market cap) to
    * consider as the candidate universe. Default 50, max 200.
@@ -226,11 +235,32 @@ export interface CoinUniverseResult {
   resolvedSymbols: string[];
 }
 
+// ─── State-vector dimension constants ─────────────────────────────────────────
+
+/** Base 50-feature state vector (default, backward-compatible). */
+export const BASE_STATE_DIM = 50;
+/** Number of optional sentiment features appended when enabled. */
+export const SENTIMENT_FEATURE_DIM = 4;
+/** Extended state dimension when sentiment features are enabled (50 + 4). */
+export const EXTENDED_STATE_DIM = BASE_STATE_DIM + SENTIMENT_FEATURE_DIM; // 54
+
+/** Optional sentiment features injected into the extended state vector. */
+export interface SentimentFeatures {
+  /** Composite sentiment signal in [-1, 1]. */
+  sentiment_score: number;
+  /** 1-hour sentiment momentum signal normalised to [-1, 1]. */
+  sentiment_momentum_1h: number;
+  /** Perpetual funding rate (0 in simulation, real value from exchange when live). */
+  funding_rate: number;
+  /** On-chain net flow normalised to [-1, 1] (0 in simulation). */
+  on_chain_netflow: number;
+}
+
 // ─── Policy Network ───────────────────────────────────────────────────────────
 // Implements simple feedforward network in pure TypeScript (no ML libs)
-// Input: 50 features → Hidden(64, ReLU) → Hidden(32, ReLU) → Output(5, Softmax)
+// Input: inputSize features → Hidden(64, ReLU) → Hidden(32, ReLU) → Output(5, Softmax)
 
-const INPUT_SIZE = 50;
+const INPUT_SIZE = BASE_STATE_DIM; // kept for legacy references inside the class
 const HIDDEN1 = 64;
 const HIDDEN2 = 32;
 const OUTPUT_SIZE = 5; // BUY, SELL, HOLD, CANCEL, WAIT
@@ -263,6 +293,7 @@ function softmax(v: number[]): number[] {
 }
 
 class PolicyNetwork {
+  private readonly inputSize: number;
   private w1: Matrix;
   private b1: number[];
   private w2: Matrix;
@@ -270,8 +301,9 @@ class PolicyNetwork {
   private w3: Matrix;
   private b3: number[];
 
-  constructor() {
-    this.w1 = randomMatrix(INPUT_SIZE, HIDDEN1);
+  constructor(inputSize: number = INPUT_SIZE) {
+    this.inputSize = inputSize;
+    this.w1 = randomMatrix(this.inputSize, HIDDEN1);
     this.b1 = new Array(HIDDEN1).fill(0);
     this.w2 = randomMatrix(HIDDEN1, HIDDEN2);
     this.b2 = new Array(HIDDEN2).fill(0);
@@ -296,7 +328,7 @@ class PolicyNetwork {
     }
     this.b3[actionIdx] += delta * advantage;
 
-    for (let i = 0; i < INPUT_SIZE; i++) {
+    for (let i = 0; i < this.inputSize; i++) {
       this.w1[i][actionIdx % HIDDEN1] += delta * input[i] * advantage;
     }
   }
@@ -364,6 +396,10 @@ export class MarlTradingAgent extends TradingAgent {
   epsilon: number;
   readonly learningRate: number;
   readonly gamma: number;
+  /** Input dimension of the policy network (50 base or 54 extended). */
+  private readonly inputSize: number;
+  /** Whether 4 extra sentiment features are appended to the state vector. */
+  private readonly useSentimentFeatures: boolean;
   private replayBuffer: Experience[] = [];
   private currentObservation: AgentObservation | null = null;
   private currentStateKey: string = '';
@@ -374,9 +410,11 @@ export class MarlTradingAgent extends TradingAgent {
   private marlWinningTrades: number = 0;
   private learningIterations: number = 0;
 
-  constructor(config: AgentConfig) {
+  constructor(config: AgentConfig, useSentimentFeatures = false) {
     super(config);
-    this.policyNetwork = new PolicyNetwork();
+    this.useSentimentFeatures = useSentimentFeatures;
+    this.inputSize = useSentimentFeatures ? EXTENDED_STATE_DIM : BASE_STATE_DIM;
+    this.policyNetwork = new PolicyNetwork(this.inputSize);
     this.epsilon = 0.1;
     this.learningRate = 0.01;
     this.gamma = 0.99;
@@ -531,6 +569,17 @@ export class MarlTradingAgent extends TradingAgent {
   }
 
   importLearningState(snapshot: LearningStateSnapshot): void {
+    // Guard against loading weights trained with a different state dimension.
+    // Mismatches occur when enableSentimentFeatures changes between sessions.
+    const savedInputSize = snapshot.policyWeights.w1.length;
+    if (savedInputSize !== this.inputSize) {
+      logger.warn('marl-agent: learning state dimension mismatch — resetting weights', {
+        agentId: this.agentId,
+        savedInputSize,
+        expectedInputSize: this.inputSize,
+      });
+      return; // fresh network already initialised in constructor
+    }
     this.qValues.clear();
     for (const [stateKey, values] of snapshot.qValues) {
       this.qValues.set(stateKey, [...values]);
@@ -635,10 +684,19 @@ export class MarlTradingAgent extends TradingAgent {
     // Risk factor (1)
     features.push(sig.stop_loss / Math.max(midPrice, 1));                       // 46
 
-    // Pad to exactly 50
-    while (features.length < INPUT_SIZE) features.push(0);
+    // Sentiment extension (4 features at indices 47-50) — only when enabled
+    if (this.useSentimentFeatures && obs.sentimentFeatures) {
+      const sf = obs.sentimentFeatures;
+      features.push(sf.sentiment_score);                                          // 47
+      features.push(Math.max(-1, Math.min(1, sf.sentiment_momentum_1h)));        // 48
+      features.push(Math.max(-1, Math.min(1, sf.funding_rate)));                 // 49
+      features.push(Math.max(-1, Math.min(1, sf.on_chain_netflow)));             // 50
+    }
 
-    return features.slice(0, INPUT_SIZE);
+    // Pad to exactly this.inputSize (50 base or 54 extended)
+    while (features.length < this.inputSize) features.push(0);
+
+    return features.slice(0, this.inputSize);
   }
 
   // ── State Discretization ──────────────────────────────────────────────────
@@ -919,7 +977,8 @@ function buildObservation(
   prices: Map<string, number>,
   symbol: string,
   signal: TradingSignal,
-  orderBook: SharedOrderBook
+  orderBook: SharedOrderBook,
+  sentimentFeatures?: SentimentFeatures,
 ): AgentObservation {
   const price = prices.get(symbol) ?? 0;
   const marketState = orderBook.getMarketState(symbol);
@@ -947,6 +1006,7 @@ function buildObservation(
     equityHistory: state.equityHistory.slice(-20),
     sentimentSignal: signal,
     competitorOrders: orderBook.getCompetitorOrders(symbol, state.agentId),
+    sentimentFeatures,
   };
 }
 
@@ -1274,7 +1334,8 @@ export class MarlCompetitionEngine {
     spec: CompetitionAgentSpec,
     capital = spec.initialCapital ?? 10000,
     learningSnapshot?: LearningStateSnapshot,
-    mutationRate?: number
+    mutationRate?: number,
+    useSentimentFeatures = false,
   ): MarlAgentState {
     const config: AgentConfig = {
       agentId: spec.id,
@@ -1282,7 +1343,7 @@ export class MarlCompetitionEngine {
       riskProfile: spec.riskProfile,
       initialCapital: capital,
     };
-    const agent = new MarlTradingAgent(config);
+    const agent = new MarlTradingAgent(config, useSentimentFeatures);
     const seedSnapshot = learningSnapshot ?? MarlCompetitionEngine.learningStateCache.get(this.getLearningCacheKey(spec));
     if (seedSnapshot) {
       agent.importLearningState(seedSnapshot);
@@ -1479,7 +1540,8 @@ export class MarlCompetitionEngine {
     symbols: string[],
     step: number,
     orderBook: SharedOrderBook,
-    learningEnabled: boolean
+    learningEnabled: boolean,
+    enableSentimentFeatures = false,
   ): void {
     // CHECKPOINT 5 — Price updates + synthetic market-maker seeding
     // Clear stale resting orders and inject synthetic BID+ASK at exact market price.
@@ -1505,8 +1567,20 @@ export class MarlCompetitionEngine {
 
       for (const symbol of symbols) {
         const currentPrice = prices.get(symbol) ?? 1000;
-        const signal = this.buildSignal(symbol, currentPrice, prevPrices.get(symbol) ?? currentPrice);
-        const obs = buildObservation(state, prices, symbol, signal, orderBook);
+        const prevPrice    = prevPrices.get(symbol) ?? currentPrice;
+        const signal       = this.buildSignal(symbol, currentPrice, prevPrice);
+
+        // Build optional sentiment features from the current signal + price momentum
+        const sentimentFeatures: SentimentFeatures | undefined = enableSentimentFeatures
+          ? {
+              sentiment_score:        (signal.signal === 'BUY' ? 1 : signal.signal === 'SELL' ? -1 : 0) * signal.strength,
+              sentiment_momentum_1h:  prevPrice > 0 ? Math.max(-1, Math.min(1, (currentPrice - prevPrice) / prevPrice)) : 0,
+              funding_rate:           0, // not available in simulation
+              on_chain_netflow:       0, // not available in simulation
+            }
+          : undefined;
+
+        const obs = buildObservation(state, prices, symbol, signal, orderBook, sentimentFeatures);
 
         // CHECKPOINT 2 — decision
         const action = state.agent.computeAction(obs);
@@ -1523,7 +1597,7 @@ export class MarlCompetitionEngine {
         }
 
         if (learningEnabled) {
-          const nextObs = buildObservation(state, nextPrices, symbol, signal, orderBook);
+          const nextObs = buildObservation(state, nextPrices, symbol, signal, orderBook, sentimentFeatures);
           state.agent.learn(reward, nextObs);
           state.agent.decay();
         }
@@ -1624,6 +1698,19 @@ export class MarlCompetitionEngine {
     }
   }
 
+  private async runWithExchangeAdapter(
+    config: CompetitionConfig,
+    onProgress?: (progress: number) => void,
+    competitionId?: string,
+  ): Promise<CompetitionResult> {
+    logger.warn('marl exchange-adapter path falling back to simulated tournament', {
+      competitionId,
+      exchangeAdapterId: config.exchangeAdapterId,
+      exchangeAdapterMode: config.exchangeAdapterMode,
+    });
+    return this.runSingleTournament(config, onProgress, competitionId);
+  }
+
   // ── SINGLE tournament ─────────────────────────────────────────────────────
 
   async runSingleTournament(
@@ -1634,7 +1721,8 @@ export class MarlCompetitionEngine {
     const STEPS = Math.max(config.duration, 100);
     const SNAPSHOT_INTERVAL = Math.max(Math.floor(STEPS / 50), 1);
 
-    const agentStates = config.agents.map(spec => this.createAgentState(spec));
+    const useSentimentFeatures = config.enableSentimentFeatures ?? false;
+    const agentStates = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeatures));
     const orderBook = new SharedOrderBook();
     const equitySnapshots: EquitySnapshot[] = [];
 
@@ -1647,7 +1735,7 @@ export class MarlCompetitionEngine {
       const prices = priceSeries[step];
       const nextPrices = priceSeries[Math.min(step + 1, STEPS - 1)];
 
-      this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled);
+      this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeatures);
 
       if (step % SNAPSHOT_INTERVAL === 0) {
         equitySnapshots.push({
@@ -1940,7 +2028,8 @@ export class MarlCompetitionEngine {
     const stepsPerRound = Math.max(Math.floor(config.duration / rounds), 50);
     const basePrices = await this.fetchBasePrices(config.symbols);
 
-    let population = config.agents.map(spec => this.createAgentState(spec));
+    const useSentimentFeaturesEvo = config.enableSentimentFeatures ?? false;
+    let population = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeaturesEvo));
     const allEquitySnapshots: EquitySnapshot[] = [];
     let finalRoundStates = population;
 
@@ -1952,7 +2041,7 @@ export class MarlCompetitionEngine {
         const prevPrices = priceSeries[Math.max(step - 1, 0)];
         const prices = priceSeries[step];
         const nextPrices = priceSeries[Math.min(step + 1, stepsPerRound - 1)];
-        this.runStep(population, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled);
+        this.runStep(population, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeaturesEvo);
 
         if (step % Math.max(Math.floor(stepsPerRound / 10), 1) === 0) {
           allEquitySnapshots.push({
@@ -1981,7 +2070,7 @@ export class MarlCompetitionEngine {
             riskProfile: entry.agent.riskProfile,
           };
 
-          return this.createAgentState(spec, entry.initialCapital, entry.agent.exportLearningState());
+          return this.createAgentState(spec, entry.initialCapital, entry.agent.exportLearningState(), undefined, useSentimentFeaturesEvo);
         });
 
         const targetSize = config.agents.length;
@@ -1999,7 +2088,8 @@ export class MarlCompetitionEngine {
               },
               parent.initialCapital,
               parent.agent.exportLearningState(),
-              0.05
+              0.05,
+              useSentimentFeaturesEvo,
             )
           );
         }
@@ -2035,7 +2125,8 @@ export class MarlCompetitionEngine {
     const STEPS_PER_HOUR = 60;
     const totalSteps = HOURS * STEPS_PER_HOUR;
 
-    const agentStates = config.agents.map(spec => this.createAgentState(spec));
+    const useSentimentFeaturesCont = config.enableSentimentFeatures ?? false;
+    const agentStates = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeaturesCont));
     const orderBook = new SharedOrderBook();
     const allSnapshots: EquitySnapshot[] = [];
     const basePrices = await this.fetchBasePrices(config.symbols);
@@ -2050,7 +2141,7 @@ export class MarlCompetitionEngine {
         const prevPrices = priceSeries[Math.max(i - 1, 0)];
         const prices = priceSeries[i];
         const nextPrices = priceSeries[Math.min(i + 1, totalSteps - 1)];
-        this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, i, orderBook, true);
+        this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, i, orderBook, true, useSentimentFeaturesCont);
       }
 
       // Learning phase: replay 100 experiences

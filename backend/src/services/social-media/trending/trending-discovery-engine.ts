@@ -136,9 +136,10 @@ export class TrendingTopicDiscoveryEngine {
     const cutoffCurrent = new Date(Date.now() - timeWindowHours * 3_600_000).toISOString();
     const cutoffPrior   = new Date(Date.now() - timeWindowHours * 2 * 3_600_000).toISOString();
 
-    // We'll query via store helper — fetch all recent items
-    const currentItems = this.getItemsSince(cutoffCurrent);
-    const priorItems   = this.getItemsSince(cutoffPrior).filter(i => i.fetched_at < cutoffCurrent);
+    // We'll query via store helper — fetch all recent items, excluding likely bots
+    const isNotBot = (i: ScoredSocialItem) => (i.bot_score ?? 0) < 0.8;
+    const currentItems = this.getItemsSince(cutoffCurrent).filter(isNotBot);
+    const priorItems   = this.getItemsSince(cutoffPrior).filter(i => i.fetched_at < cutoffCurrent && isNotBot(i));
 
     // Build entity maps
     const currentMap = this.buildEntityMap(currentItems);
@@ -180,7 +181,7 @@ export class TrendingTopicDiscoveryEngine {
     // Snapshot composite scores for coin topics (for historical comparison)
     for (const r of records) {
       if (r.topic_type === 'coin' && r.coin_symbol) {
-        try { socialStore.saveTrendingSnapshot(r.coin_symbol, r.signal_composite); } catch { /* non-fatal */ }
+        try { socialStore.saveTrendingSnapshot(r.coin_symbol, r.signal_composite, r.signal_sentiment); } catch { /* non-fatal */ }
       }
     }
 

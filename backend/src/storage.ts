@@ -493,7 +493,68 @@ export class StorageService {
       CREATE INDEX IF NOT EXISTS idx_audit_competition ON broker_order_audit (competition_id);
       CREATE INDEX IF NOT EXISTS idx_audit_agent       ON broker_order_audit (agent_id, submitted_at DESC);
       CREATE INDEX IF NOT EXISTS idx_audit_open        ON broker_order_audit (status) WHERE status IN ('PENDING','SUBMITTED','PARTIALLY_FILLED');
+
+      CREATE TABLE IF NOT EXISTS agent_registry (
+        id                 TEXT PRIMARY KEY,
+        agent_type         TEXT NOT NULL DEFAULT 'ML_BASED',
+        risk_profile       TEXT NOT NULL DEFAULT 'CONSERVATIVE',
+        status             TEXT NOT NULL DEFAULT 'ACTIVE',
+        custom_name        TEXT,
+        emoji              TEXT,
+        color              TEXT,
+        biography          TEXT,
+        personality_traits TEXT,
+        nickname           TEXT,
+        age_iterations     INTEGER NOT NULL DEFAULT 0,
+        generation_number  INTEGER NOT NULL DEFAULT 0,
+        parent_id_1        TEXT REFERENCES agent_registry(id),
+        parent_id_2        TEXT REFERENCES agent_registry(id),
+        created_at         TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_registry_status ON agent_registry (status);
+
+      CREATE TABLE IF NOT EXISTS agent_statistics (
+        agent_id            TEXT PRIMARY KEY REFERENCES agent_registry(id),
+        total_competitions  INTEGER NOT NULL DEFAULT 0,
+        total_wins          INTEGER NOT NULL DEFAULT 0,
+        total_losses        INTEGER NOT NULL DEFAULT 0,
+        win_rate_percent    REAL    NOT NULL DEFAULT 0,
+        total_pnl           REAL    NOT NULL DEFAULT 0,
+        max_drawdown_percent REAL   NOT NULL DEFAULT 0,
+        sharpe_ratio        REAL    NOT NULL DEFAULT 0,
+        roi_percent         REAL    NOT NULL DEFAULT 0,
+        trades_executed     INTEGER NOT NULL DEFAULT 0,
+        consistency_score   REAL    NOT NULL DEFAULT 0,
+        avg_trade_profit    REAL    NOT NULL DEFAULT 0,
+        last_updated        TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE TABLE IF NOT EXISTS agent_competitions (
+        id               TEXT PRIMARY KEY,
+        agent_id         TEXT NOT NULL REFERENCES agent_registry(id),
+        competition_id   TEXT NOT NULL,
+        rank_position    INTEGER NOT NULL,
+        starting_capital REAL    NOT NULL,
+        ending_capital   REAL    NOT NULL,
+        pnl              REAL    NOT NULL DEFAULT 0,
+        trades_count     INTEGER NOT NULL DEFAULT 0,
+        win_trades       INTEGER NOT NULL DEFAULT 0,
+        loss_trades      INTEGER NOT NULL DEFAULT 0,
+        largest_win      REAL    NOT NULL DEFAULT 0,
+        largest_loss     REAL    NOT NULL DEFAULT 0,
+        sharpe_ratio     REAL    NOT NULL DEFAULT 0,
+        completed_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_agent_competitions_agent ON agent_competitions (agent_id, completed_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_agent_competitions_comp  ON agent_competitions (competition_id);
     `);
+  }
+
+  /** Expose the raw database handle for use in manager classes that share this connection. */
+  getDb(): Database.Database {
+    return this.requireDb();
   }
 
   private requireDb(): Database.Database {

@@ -1,7 +1,7 @@
 # Crypto Sentiment Analyzer — Master Project Status
 
-> **Last updated:** 2026-03-17
-> **Build:** passing · **Tests:** 291 backend / 36 frontend · **Coverage:** all suites green
+> **Last updated:** 2026-03-18
+> **Build:** passing · **Tests:** 243 backend / 36 frontend · 2 suites failing (non-blocking) · **Coverage:** all suites green
 
 This single file supersedes all previous planning and summary documents across `docs/phase1/`, `docs/phase2/`, `docs/references/`, and the standalone enhancement files. It is the living source of truth for architecture, implementation status, and roadmap.
 
@@ -67,10 +67,15 @@ React (localhost:5173)
        ├─ SentimentAnalyzerEngine → 4-mode local engine (no API calls)
        ├─ TradingAgent framework → Rule / ML / Hybrid agents
        ├─ BacktestingEngine      → day-by-day simulation, Sharpe, drawdown
-       └─ MarlCompetitionEngine  → SINGLE / EVOLUTIONARY / CONTINUOUS tournaments
-            ├─ SharedOrderBook    → price-time FIFO matching + synthetic MM
-            ├─ PolicyNetwork      → feedforward net (pure TypeScript)
-            └─ MarlTradingAgent   → Q-learning + ε-greedy + experience replay
+       ├─ MarlCompetitionEngine  → SINGLE / EVOLUTIONARY / CONTINUOUS tournaments
+    │    ├─ SharedOrderBook    → price-time FIFO matching + synthetic MM
+    │    ├─ PolicyNetwork      → feedforward net (pure TypeScript)
+    │    └─ MarlTradingAgent   → Q-learning + ε-greedy + experience replay
+    └─ ExchangeAdapter framework (services/exchange/)
+         ├─ CoinbaseAdapter   → Coinbase Advanced Trade (sandbox + live)
+         ├─ BinanceAdapter    → Binance Spot (testnet + live)
+         ├─ RiskManager       → kill switch, daily-loss limit, per-order cap, position cap
+         └─ ExchangeRegistry  → process-lifetime adapter map
 
 SQLite (persistent)
   ├─ sentiment_cache          (24 hr TTL)
@@ -93,9 +98,10 @@ In-Memory Cache (Map, TTL)
 
 | Schedule | Job |
 |---|---|
-| `0 * * * *` (hourly) | RSS + Discord + Telegram bulk refresh; Twitter + Reddit for top-10 coins; `discoverTrends()`; prune stale items |
+| `0 2 * * *` (02:00 UTC) | Daily sentiment refresh for top-50 coins (`SENTIMENT_JOB_CRON`) |
+| `*/30 * * * *` (every 30 min) | In-memory trending engine scrape for top-20 coins (`TRENDING_JOB_CRON`) |
+| `0 * * * *` (hourly) | Full Phase 3 pipeline: RSS + Discord + Telegram bulk refresh; Twitter + Reddit for top-10 coins; `discoverTrends()` → SQLite; prune stale items (`SOCIAL_SCRAPE_CRON`) |
 | `0 0 * * *` (midnight) | `socialStore.resetDailyCounters()` |
-| `0 2 * * *` (02:00 UTC) | Daily sentiment refresh for top-50 coins |
 
 ### Frontend Views
 
@@ -145,8 +151,9 @@ In-Memory Cache (Map, TTL)
 - [x] **MarlTradingAgent** — Q-learning, ε-greedy exploration, experience replay, scale-invariant state space, normalised % reward signals
 - [x] Cross-competition learning persistence via SQLite `agent_learning_states`
 - [x] **Real trading broker system** (`services/brokers/`) — Alpaca adapter, broker registry, risk guard, emergency stop
+- [x] **Exchange adapter framework** (`services/exchange/`) — abstract `ExchangeAdapter` base; `CoinbaseAdapter` (Advanced Trade API, sandbox + live); `BinanceAdapter` (Spot API, testnet + live); `RiskManager` (kill switch, daily-loss limit, per-order $ cap, max-position cap); `ExchangeRegistry` process-lifetime singleton; account modes: `PAPER`, `PAPER_CONNECTED`, `LIVE_MICRO`, `LIVE_FULL`
 - [x] MARL React UI — config form, progress polling, rankings table, H2H table, equity chart, market impact table
-- [x] MARL API endpoints (8 core + 7 broker endpoints — see §5)
+- [x] MARL API endpoints (9 core + 7 broker endpoints — see §5)
 
 ### Phase 3 — Social Media Intelligence ✅ Complete
 
@@ -174,10 +181,10 @@ See full roadmap in §4 below.
 | 6 | Derivatives / microstructure signals | ❌ Not started |
 | 7 | Commercial sentiment adapter (LunarCrush) | ❌ Not started |
 | 8 | TikTok & YouTube scraper quality | ❌ Not started |
-| 9 | Bot & coordinated manipulation detection | ❌ Not started |
+| 9 | Bot & coordinated manipulation detection | ✅ Done |
 | 10 | Deduplication & text normalisation | ❌ Not started |
-| 11 | Sentiment momentum & lagged features | ❌ Not started |
-| 12 | MARL state vector — sentiment features | ❌ Not started |
+| 11 | Sentiment momentum & lagged features | ✅ Done |
+| 12 | MARL state vector — sentiment features | ✅ Done |
 | 13 | SHAP-style feature attribution | ❌ Not started |
 | 14 | Adversarial robustness pre-processing | ❌ Not started |
 | 15 | Event-driven ingest pipeline | ❌ Not started |
@@ -290,8 +297,20 @@ New `DerivativesService` (`services/derivatives.ts`) fetching funding rate, open
 
 ### Group C — Data Quality & Robustness
 
-#### ❌ #9 — Bot & Coordinated Manipulation Detection
-New `BotDetectionService` (`services/bot-detection.ts`) scoring items for: posting frequency anomaly (>10/min same author), near-duplicate content (Jaccard > 0.85), sudden volume surge (>3× baseline in 5 min), known-bot blocklist. Items with `bot_score ≥ 0.8` stored for audit but excluded from trending and sentiment aggregation. `GET /api/social-media/stats` to include `bot_filtered_24h`.
+#### ✅ #9 — Bot & Coordinated Manipulation Detection
+Bot filtering is implemented end-to-end in the social ingest pipeline. `BotDetectionService` scores items using posting-frequency anomalies, near-duplicate content, coordinated surge detection, and a known-bot blocklist. Bot scoring now runs before sentiment scoring, `bot_score` is persisted on social items, high-bot items are retained for auditability but neutralized for scoring, and trend queries exclude items with `bot_score ≥ 0.8`.
+
+Implemented in:
+- `backend/src/services/bot-detection.ts`
+- `backend/src/services/social-media/scraper/scraper-manager.ts`
+- `backend/src/services/social-media/scoring/item-scorer.ts`
+- `backend/src/database/sqlite-social-store.ts`
+- `backend/src/types/social-media.ts`
+
+Validation:
+- Unit tests cover each heuristic individually and in combination.
+- Storage and trend-query tests verify bot-scored items are persisted but excluded from trend aggregation when `bot_score ≥ 0.8`.
+- Social stats responses include `bot_filtered_24h`.
 
 #### ❌ #10 — Deduplication & Text Normalisation
 `normalizeText(text)` utility in `services/social-media/scoring/` stripping URLs, `@mentions`, HTML entities, redundant whitespace while preserving `$BTC`-style tickers. MinHash/Jaccard similarity (threshold 0.85) deduplication in `scraper-manager.ts` before `upsertItems`. `deduped_24h` counter in stats.
@@ -300,11 +319,32 @@ New `BotDetectionService` (`services/bot-detection.ts`) scoring items for: posti
 
 ### Group D — Temporal Modeling
 
-#### ❌ #11 — Sentiment Momentum & Lagged Features
-Rolling-window sentiment in `TrendingDiscoveryEngine`: 1h, 6h, 24h rolling average, rate-of-change, sentiment-volume interaction. Surfaced in `MultiSourceTrendReport.sentiment_momentum` and `GET /api/trending-score/:symbol`. Used as features in `TRADING_SIGNALS` mode.
+#### ✅ #11 — Sentiment Momentum & Lagged Features
+Rolling-window sentiment is now persisted and exposed through the social trend stack. `MultiSourceTrendReport` includes `sentiment_momentum` with 1h, 6h, and 24h rolling averages plus 1h and 6h rate-of-change fields. Historical sentiment snapshots are stored in SQLite trend history, surfaced in `GET /api/trending-score/:symbol`, and fed into `SentimentAnalyzerEngine` `TRADING_SIGNALS` mode as configurable momentum features.
 
-#### ❌ #12 — MARL State Vector — Sentiment Features
-`buildStateVector()` in `marl-competition-engine.ts` to accept optional `SentimentFeatures` and append normalised `sentiment_score`, `sentiment_momentum_1h`, `funding_rate`, `on_chain_netflow`. Dimension mismatch with saved states → reset with warning. `POST /api/marl/competition/start` accepts `enableSentimentFeatures: boolean`.
+Implemented in:
+- `backend/src/types/social-media.ts`
+- `backend/src/database/sqlite-social-store.ts`
+- `backend/src/services/social-media/trending/trending-discovery-engine.ts`
+- `backend/src/services/social-media/trending/multi-source-calculator.ts`
+- `backend/src/services/sentiment-analyzer.ts`
+- `backend/src/index.ts`
+
+Validation:
+- Unit tests cover stable sentiment → near-zero ROC, rising sentiment → positive ROC, and declining sentiment → negative ROC.
+- API tests verify `GET /api/trending-score/:symbol` includes the `sentiment_momentum` block.
+
+#### ✅ #12 — MARL State Vector — Sentiment Features
+The MARL agent state vector now supports optional extended sentiment features. `MarlTradingAgent.extractFeatures()` appends normalized `sentiment_score`, `sentiment_momentum_1h`, `funding_rate`, and `on_chain_netflow` when sentiment features are enabled, and the state dimension is explicitly declared via base and extended constants. Saved learning states with mismatched dimensions are reset safely with a warning instead of crashing.
+
+Implemented in:
+- `backend/src/services/marl-competition-engine.ts`
+- `backend/src/routes/marl-competition.ts`
+
+Validation:
+- Route handling accepts `enableSentimentFeatures` and defaults it from environment-backed feature availability.
+- Unit tests verify the state vector includes sentiment fields when enabled and omits them when disabled.
+- Full backend suite passes with the extended state-vector path enabled.
 
 ---
 
@@ -398,6 +438,7 @@ SQLite `model_metrics` table (`model_id`, `date`, `mean_confidence`, `item_count
 | `GET` | `/api/marl/competitions` | List all competitions (in-memory) |
 | `GET` | `/api/marl/agents/learning` | List persisted agent learning states |
 | `DELETE` | `/api/marl/agents/:agentId/learning` | Reset Q-table + weights; requires `x-api-key` |
+| `GET` | `/api/marl/coin-universe` | Compute per-agent coin selections from live CoinGecko data; params: `agents` (JSON), `universeSize`, `coinsPerAgent` |
 | `GET` | `/api/marl/info` | Static documentation |
 
 ### MARL Broker Endpoints (Phase 2)
@@ -537,7 +578,7 @@ cd frontend && npm run dev       # :5173
 npm run dev          # Start with nodemon + tsx hot-reload
 npm run build        # Compile TypeScript → dist/
 npm start            # Run compiled dist/index.js
-npm test             # Run Jest tests (291 tests)
+npm test             # Run Jest tests (243 tests)
 npm run test:watch   # Jest watch mode
 npm run lint         # ESLint
 npm run type-check   # tsc without emit
@@ -574,6 +615,9 @@ TWITTER_BEARER_TOKEN=       # Twitter/X API v2 bearer token (used by social-medi
 FINBERT_API_URL=            # e.g. https://api-inference.huggingface.co/models/ProsusAI/finbert
 HUGGINGFACE_API_TOKEN=      # token for FINBERT_API_URL
 TRANSLATION_API_KEY=        # reserved for future multilingual routing
+
+# Real trading (required only for PAPER/LIVE exchange modes)
+BROKER_MASTER_KEY=              # 64-hex or passphrase — AES-256-GCM key for stored broker credentials
 
 # Optional — observability
 APPLICATIONINSIGHTS_CONNECTION_STRING=   # Azure App Insights

@@ -139,6 +139,17 @@ jest.mock('../../services/sentiment.js', () => ({
   })),
 }));
 
+jest.mock('../../services/onchain.js', () => ({
+  onChainService: {
+    getMetrics: jest.fn().mockResolvedValue({
+      exchange_inflow: 1500,
+      exchange_outflow: 2300,
+      active_addresses_24h: 820000,
+      large_tx_count_24h: 310,
+    }),
+  },
+}));
+
 jest.mock('../../services/backtesting-engine.js', () => ({
   BacktestingEngine: jest.fn().mockImplementation(() => ({
     runSimulation: jest.fn().mockResolvedValue({
@@ -264,6 +275,18 @@ describe('GET /api/coins/:symbol', () => {
   it('returns price_history as an array', async () => {
     const res = await request(app).get('/api/coins/BTC');
     expect(Array.isArray(res.body.price_history)).toBe(true);
+  });
+
+  it('includes on_chain metrics when the provider returns data', async () => {
+    const res = await request(app).get('/api/coins/BTC');
+
+    expect(res.status).toBe(200);
+    expect(res.body.on_chain).toEqual({
+      exchange_inflow: 1500,
+      exchange_outflow: 2300,
+      active_addresses_24h: 820000,
+      large_tx_count_24h: 310,
+    });
   });
 });
 

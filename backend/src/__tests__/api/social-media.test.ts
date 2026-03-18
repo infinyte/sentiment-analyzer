@@ -129,7 +129,34 @@ jest.mock('../../services/social-media/scraper/scraper-manager.js', () => ({
 
 jest.mock('../../services/social-media/trending/multi-source-calculator.js', () => ({
   MultiSourceTrendingScoreCalculator: jest.fn().mockImplementation(() => ({
-    calculate: jest.fn().mockResolvedValue({ symbol: 'BTC' }),
+    calculate: jest.fn().mockResolvedValue({
+      symbol: 'BTC',
+      signal_sentiment: 68,
+      signal_engagement: 52,
+      signal_recency: 61,
+      signal_authority: 49,
+      signal_composite: 63,
+      trend_direction: 'BULLISH',
+      trend_strength: 'MODERATE',
+      velocity: 1.2,
+      mention_count_24h: 12,
+      unique_sources: 3,
+      sentiment_momentum: {
+        h1_avg: 66,
+        h6_avg: 61,
+        h24_avg: 55,
+        roc_1h: 5,
+        roc_6h: 8,
+        volume_interaction_24h: 1.8,
+      },
+      sentiment_distribution: { BULL: 60, NEUTRAL: 25, BEAR: 15 },
+      top_sources: [],
+      top_hashtags: [],
+      trending_keywords: [],
+      recent_items: [],
+      comparison: { score_24h_ago: 52, score_7d_ago: 40, trend_acceleration: 'accelerating' },
+      computed_at: '2026-03-18T00:00:00.000Z',
+    }),
   })),
 }));
 
@@ -247,5 +274,19 @@ describe('Social Media API routes', () => {
       next_cursor: 'opaque-cursor-token',
     });
     expect(res.body.items).toHaveLength(1);
+  });
+
+  it('returns sentiment_momentum on the trending-score endpoint', async () => {
+    const res = await request(app).get('/api/trending-score/BTC');
+
+    expect(res.status).toBe(200);
+    expect(res.body.symbol).toBe('BTC');
+    expect(res.body.sentiment_momentum).toMatchObject({
+      h1_avg: 66,
+      h6_avg: 61,
+      h24_avg: 55,
+      roc_1h: 5,
+      roc_6h: 8,
+    });
   });
 });

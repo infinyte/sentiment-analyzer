@@ -102,7 +102,7 @@ describe('TrendingTopicDiscoveryEngine', () => {
 
     await engine.discoverTrends(24, 20, 1);
 
-    expect(mockSaveTrendingSnapshot).toHaveBeenCalledWith('SOL', expect.any(Number));
+    expect(mockSaveTrendingSnapshot).toHaveBeenCalledWith('SOL', expect.any(Number), expect.any(Number));
   });
 
   it('filters out topics below minMentions threshold', async () => {

@@ -8,7 +8,7 @@ Each item maps to the existing codebase (`backend/src/services/`, `backend/src/r
 ## Group A — Model Quality (NLP Upgrades)
 
 Current status on this branch:
-- #1 is partially implemented: `FinBertService` exists and the async social/item scoring path uses it, but `analyzeAdvancedSentiment()` is not yet wired to call it directly.
+- #1 is fully implemented: `FinBertService` exists; all three non-BASIC modes (`ADVANCED`, `SMART`, `TRADING_SIGNALS`) now route through FinBERT-enhanced async methods (`analyzeAdvancedSentimentAsync`, `analyzeSmartSentimentAsync`, `generateTradingSignalsAsync`); fallback to keyword scoring when `FINBERT_API_URL` is not set.
 - #2 is implemented in both content scoring and async social scoring.
 - #3 is partially implemented: context-window extraction exists in `ContentSignalService`, but the main `/api/coins/:symbol` flow does not yet pass `targetCoin` through.
 - #4 is partially implemented: language detection and persistence are live, but translation / multilingual routing is still pending.
@@ -22,8 +22,8 @@ Replace (or supplement) the current Claude API call in `SentimentService` (`serv
 
 **Acceptance Criteria:**
 - [x] A new `FinBertService` (or adapter) in `services/` wraps the Hugging Face Inference API (or ONNX runtime) and returns `{ label: 'positive' | 'neutral' | 'negative', score: number }` per text input.
-- [ ] `SentimentAnalyzerEngine.analyzeAdvancedSentiment()` calls `FinBertService` for news/social items when `ADVANCED` or `SMART` mode is requested.
-- [ ] Fallback to the existing Claude API path when `FinBertService` is unavailable (network error / env var `FINBERT_API_URL` not set).
+- [x] `SentimentAnalyzerEngine.analyzeAdvancedSentiment()` calls `FinBertService` for news/social items when `ADVANCED` or `SMART` mode is requested.
+- [x] Fallback to the existing Claude API path when `FinBertService` is unavailable (network error / env var `FINBERT_API_URL` not set).
 - [x] Unit tests cover the new service: happy path, fallback path, and malformed API response.
 - [ ] Average latency per item does not exceed 300 ms under normal conditions.
 - [x] `npm run build` and `npm test` pass with no regressions.
@@ -51,9 +51,9 @@ Current document-level sentiment treats an entire post as having a single polari
 
 **Acceptance Criteria:**
 - [x] `ContentSignalService.scoreItem()` accepts an optional `targetCoin` parameter and applies contextual sentiment extraction when provided.
-- [ ] `GET /api/coins/:symbol` passes `targetCoin: symbol` through the scoring pipeline so cross-coin posts yield accurate per-coin scores.
-- [ ] A `context_window_used: boolean` flag is present in the `scoring_breakdown` of `GET /api/social-media/item/:id`.
-- [ ] Benchmark: at least 5 manually verified multi-coin posts score correctly (verified in tests with fixture data).
+- [x] `GET /api/coins/:symbol` passes `targetCoin: symbol` through the scoring pipeline so cross-coin posts yield accurate per-coin scores.
+- [x] A `context_window_used: boolean` flag is present in the `scoring_breakdown` of `GET /api/social-media/item/:id`.
+- [x] Benchmark: at least 5 manually verified multi-coin posts score correctly (verified in tests with fixture data).
 - [x] `npm test` passes.
 
 ---
@@ -83,12 +83,12 @@ Crypto communities are global; non-English posts are currently scored with Engli
 Add a new `OnChainService` (`services/onchain.ts`) that fetches key on-chain metrics from the Glassnode, CryptoQuant, or IntoTheBlock free-tier APIs: exchange inflow/outflow, active addresses (24 h), and large-transaction count (whale proxy). These signals should be incorporated into `SentimentAnalyzerEngine.analyzeAdvancedSentiment()` as additional features, and surfaced in the `/api/coins/:symbol` detail response under a new `on_chain` field.
 
 **Acceptance Criteria:**
-- [ ] `OnChainService` implements `getMetrics(coinId: string): Promise<OnChainMetrics>` returning `{ exchange_inflow, exchange_outflow, active_addresses_24h, large_tx_count_24h }`.
-- [ ] Results are cached with a 15-minute TTL using the existing `Cache` class (`services/cache.ts`).
-- [ ] `analyzeAdvancedSentiment()` in `ADVANCED` and `SMART` modes incorporates on-chain features with a configurable weight (default 15%).
-- [ ] `GET /api/coins/:symbol` response includes `on_chain: OnChainMetrics` when data is available.
-- [ ] Graceful degradation: if the provider returns an error or the env var `ONCHAIN_API_KEY` is absent, the field is omitted and analysis proceeds without it.
-- [ ] Unit tests mock the external API and cover: happy path, missing key fallback, cache hit.
+- [x] `OnChainService` implements `getMetrics(coinId: string): Promise<OnChainMetrics>` returning `{ exchange_inflow, exchange_outflow, active_addresses_24h, large_tx_count_24h }`.
+- [x] Results are cached with a 15-minute TTL using the existing `Cache` class (`services/cache.ts`).
+- [x] `analyzeAdvancedSentiment()` in `ADVANCED` and `SMART` modes incorporates on-chain features with a configurable weight (default 15%).
+- [x] `GET /api/coins/:symbol` response includes `on_chain: OnChainMetrics` when data is available.
+- [x] Graceful degradation: if the provider returns an error or the env var `ONCHAIN_API_KEY` is absent, the field is omitted and analysis proceeds without it.
+- [x] Unit tests mock the external API and cover: happy path, missing key fallback, cache hit.
 
 ---
 
@@ -146,12 +146,12 @@ The existing `tiktok-scraper.ts` and `youtube-scraper.ts` in `services/social-me
 Add a `BotDetectionService` (`services/bot-detection.ts`) that scores incoming social items for bot-like behaviour before they are stored or scored. Detection heuristics for v1: posting frequency anomaly (>10 posts/min from same author), duplicate/near-duplicate content (Jaccard similarity >0.85), sudden surge detection (>3× baseline volume for a coin in a 5-minute window), and known bot-account blocklist. Items flagged as bots receive a `bot_score` and are excluded from sentiment aggregation when `bot_score ≥ 0.8`.
 
 **Acceptance Criteria:**
-- [ ] `BotDetectionService.score(item: SocialMediaItem): BotScore` returns `{ score: number; reasons: string[] }`.
-- [ ] `ScrapeManager` invokes bot detection before `upsertItems` and attaches `bot_score` to each item.
-- [ ] `SocialMediaItem` type and SQLite schema include `bot_score: number | null`.
-- [ ] Items with `bot_score ≥ 0.8` are stored (for auditability) but excluded from trending-topic aggregation and sentiment scoring.
-- [ ] A `GET /api/social-media/stats` response includes `bot_filtered_24h: number`.
-- [ ] Unit tests cover each detection heuristic individually and in combination.
+- [x] `BotDetectionService.score(item: SocialMediaItem): BotScore` returns `{ score: number; reasons: string[] }`.
+- [x] `ScrapeManager` invokes bot detection before `upsertItems` and attaches `bot_score` to each item.
+- [x] `SocialMediaItem` type and SQLite schema include `bot_score: number | null`.
+- [x] Items with `bot_score ≥ 0.8` are stored (for auditability) but excluded from trending-topic aggregation and sentiment scoring.
+- [x] A `GET /api/social-media/stats` response includes `bot_filtered_24h: number`.
+- [x] Unit tests cover each detection heuristic individually and in combination.
 
 ---
 
@@ -179,13 +179,25 @@ The current deduplication in `SocialScraperService` relies on ID-based matching,
 Implement rolling-window sentiment aggregation in `TrendingDiscoveryEngine` (`services/social-media/trending/trending-discovery-engine.ts`) to produce sentiment momentum signals: 1-hour, 6-hour, and 24-hour rolling average sentiment, rate-of-change (momentum), and sentiment-volume interaction. These features should be returned in the `MultiSourceTrendReport` from `/api/trending-score/:symbol` and exposed as additional inputs to the `SentimentAnalyzerEngine` `TRADING_SIGNALS` mode.
 
 **Acceptance Criteria:**
-- [ ] `MultiSourceTrendReport` type (`types/social-media.ts`) includes `sentiment_momentum: { h1_avg, h6_avg, h24_avg, roc_1h, roc_6h }`.
-- [ ] `MultiSourceCalculator.calculate()` computes the above from the SQLite `trending_topic_history` table.
-- [ ] `SentimentAnalyzerEngine` `TRADING_SIGNALS` mode uses `roc_1h` and `roc_6h` as features (configurable weights).
-- [ ] `GET /api/trending-score/:symbol` response includes the `sentiment_momentum` block.
-- [ ] Unit tests: stable sentiment → near-zero ROC; rising sentiment → positive ROC; declining → negative ROC.
+- [x] `MultiSourceTrendReport` type (`types/social-media.ts`) includes `sentiment_momentum: { h1_avg, h6_avg, h24_avg, roc_1h, roc_6h }`.
+- [x] `MultiSourceCalculator.calculate()` computes the above from the SQLite `trending_topic_history` table.
+- [x] `SentimentAnalyzerEngine` `TRADING_SIGNALS` mode uses `roc_1h` and `roc_6h` as features (configurable weights).
+- [x] `GET /api/trending-score/:symbol` response includes the `sentiment_momentum` block.
+- [x] Unit tests: stable sentiment → near-zero ROC; rising sentiment → positive ROC; declining → negative ROC.
 
 ---
+9. Implement Bot and Coordinated-Manipulation Detection Filter
+
+**Description:**  
+Add a `BotDetectionService` (`services/bot-detection.ts`) that scores incoming social items for bot-like behaviour before they are stored or scored. Detection heuristics for v1: posting frequency anomaly (>10 posts/min from same author), duplicate/near-duplicate content (Jaccard similarity >0.85), sudden surge detection (>3× baseline volume for a coin in a 5-minute window), and known bot-account blocklist. Items flagged as bots receive a `bot_score` and are excluded from sentiment aggregation when `bot_score ≥ 0.8`.
+
+**Acceptance Criteria:**
+- [ ] `BotDetectionService.score(item: SocialMediaItem): BotScore` returns `{ score: number; reasons: string[] }`.
+- [ ] `ScrapeManager` invokes bot detection before `upsertItems` and attaches `bot_score` to each item.
+- [ ] `SocialMediaItem` type and SQLite schema include `bot_score: number | null`.
+- [ ] Items with `bot_score ≥ 0.8` are stored (for auditability) but excluded from trending-topic aggregation and sentiment scoring.
+- [ ] A `GET /api/social-media/stats` response includes `bot_filtered_24h: number`.
+- [ ] Unit tests cover each detection heuristic individually and in combination.
 
 ### 12. Integrate Sentiment Features into MARL Agent State Vector
 
@@ -193,11 +205,11 @@ Implement rolling-window sentiment aggregation in `TrendingDiscoveryEngine` (`se
 The `MarlTradingAgent` state vector in `MarlCompetitionEngine` (`services/marl-competition-engine.ts`) currently includes price/volume/volatility features. Extend it to include: `sentiment_score`, `sentiment_momentum_1h`, `funding_rate`, and `on_chain_netflow` (from issues #5, #6, #11) when available. Document the new state space dimensions and ensure backward compatibility with existing saved agent learning states.
 
 **Acceptance Criteria:**
-- [ ] `buildStateVector()` (or equivalent) in `marl-competition-engine.ts` accepts an optional `SentimentFeatures` parameter and appends normalised sentiment fields to the state array.
-- [ ] The state vector dimension is declared as a constant and updated in comments/docs when new features are added.
-- [ ] Existing saved `agent_learning_states` with the old state dimension load without crashing (dimension mismatch triggers a reset with a warning log).
-- [ ] `POST /api/marl/competition/start` accepts an optional `enableSentimentFeatures: boolean` flag (default `true` when `FINBERT_API_URL` or `LUNARCRUSH_API_KEY` is set).
-- [ ] Unit tests verify the state vector includes sentiment fields when the flag is enabled and omits them when disabled.
+- [x] `buildStateVector()` (or equivalent) in `marl-competition-engine.ts` accepts an optional `SentimentFeatures` parameter and appends normalised sentiment fields to the state array.
+- [x] The state vector dimension is declared as a constant and updated in comments/docs when new features are added.
+- [x] Existing saved `agent_learning_states` with the old state dimension load without crashing (dimension mismatch triggers a reset with a warning log).
+- [x] `POST /api/marl/competition/start` accepts an optional `enableSentimentFeatures: boolean` flag (default `true` when `FINBERT_API_URL` or `LUNARCRUSH_API_KEY` is set).
+- [x] Unit tests verify the state vector includes sentiment fields when the flag is enabled and omits them when disabled.
 
 ---
 

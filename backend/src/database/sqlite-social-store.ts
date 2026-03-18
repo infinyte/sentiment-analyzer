@@ -98,7 +98,7 @@ export class SocialStorageService {
         coins_mentioned, metadata,
         sentiment_score, sentiment_confidence,
         score_sentiment, score_engagement, score_recency, score_authority, score_composite,
-        last_updated, language, sarcasm_flagged
+        last_updated, language, sarcasm_flagged, context_window_used, bot_score
       ) VALUES (
         @id, @source, @source_id, @content, @title, @author, @author_followers,
         @engagement_likes, @engagement_shares, @engagement_comments, @engagement_views,
@@ -106,7 +106,7 @@ export class SocialStorageService {
         @coins_mentioned, @metadata,
         @sentiment_score, @sentiment_confidence,
         @score_sentiment, @score_engagement, @score_recency, @score_authority, @score_composite,
-        @last_updated, @language, @sarcasm_flagged
+        @last_updated, @language, @sarcasm_flagged, @context_window_used, @bot_score
       )
       ON CONFLICT(source, source_id) DO UPDATE SET
         engagement_likes    = excluded.engagement_likes,
@@ -123,6 +123,8 @@ export class SocialStorageService {
         sentiment_confidence = excluded.sentiment_confidence,
         language            = excluded.language,
         sarcasm_flagged     = excluded.sarcasm_flagged,
+        context_window_used = excluded.context_window_used,
+        bot_score           = excluded.bot_score,
         last_updated        = excluded.last_updated
     `).run({
       id: item.id || randomUUID(),
@@ -151,6 +153,8 @@ export class SocialStorageService {
       last_updated: item.last_updated,
       language: item.language ?? null,
       sarcasm_flagged: item.sarcasm_flagged ? 1 : 0,
+      context_window_used: item.context_window_used ? 1 : 0,
+      bot_score: item.bot_score ?? null,
     });
   }
 
@@ -249,6 +253,7 @@ export class SocialStorageService {
       SELECT * FROM social_media_items
       WHERE coins_mentioned LIKE @pattern
         AND fetched_at >= datetime('now', @since)
+        AND (bot_score IS NULL OR bot_score < 0.8)
       ORDER BY fetched_at DESC
     `).all({
       pattern: `%"${coin.toUpperCase()}"%`,
@@ -322,22 +327,22 @@ export class SocialStorageService {
     `).all(...args) as TrendingTopicRecord[]);
   }
 
-  /** Historical signal for a coin — returns up to 2 snapshots (24h ago, 7d ago). */
-  getHistoricalSignal(coin: string): { snapshot_time: string; signal_composite: number }[] {
+  /** Historical signal snapshots for a coin — used for momentum and comparison. */
+  getHistoricalSignal(coin: string): { snapshot_time: string; signal_composite: number; signal_sentiment: number }[] {
     return this.requireDb().prepare(`
-      SELECT snapshot_time, signal_composite
+      SELECT snapshot_time, signal_composite, signal_sentiment
       FROM trending_topic_history
       WHERE coin_symbol = ?
       ORDER BY snapshot_time DESC
-      LIMIT 10
-    `).all(coin.toUpperCase()) as { snapshot_time: string; signal_composite: number }[];
+      LIMIT 100
+    `).all(coin.toUpperCase()) as { snapshot_time: string; signal_composite: number; signal_sentiment: number }[];
   }
 
-  saveTrendingSnapshot(coin: string, signalComposite: number): void {
+  saveTrendingSnapshot(coin: string, signalComposite: number, signalSentiment = 50): void {
     this.requireDb().prepare(`
-      INSERT INTO trending_topic_history (id, coin_symbol, signal_composite, snapshot_time)
-      VALUES (?, ?, ?, datetime('now'))
-    `).run(randomUUID(), coin.toUpperCase(), signalComposite);
+      INSERT INTO trending_topic_history (id, coin_symbol, signal_composite, signal_sentiment, snapshot_time)
+      VALUES (?, ?, ?, ?, datetime('now'))
+    `).run(randomUUID(), coin.toUpperCase(), signalComposite, signalSentiment);
   }
 
   // ── Source Metadata ────────────────────────────────────────────────────────
@@ -410,14 +415,16 @@ export class SocialStorageService {
     total_items: number;
     items_24h: number;
     trending_topics: number;
+    bot_filtered_24h: number;
     sources: SourceMetadata[];
   } {
     const db = this.requireDb();
     const total = (db.prepare('SELECT COUNT(*) AS cnt FROM social_media_items').get() as { cnt: number }).cnt;
     const h24 = (db.prepare(`SELECT COUNT(*) AS cnt FROM social_media_items WHERE fetched_at >= datetime('now', '-24 hours')`).get() as { cnt: number }).cnt;
+    const botFiltered = (db.prepare(`SELECT COUNT(*) AS cnt FROM social_media_items WHERE bot_score >= 0.8 AND fetched_at >= datetime('now', '-24 hours')`).get() as { cnt: number }).cnt;
     const topics = (db.prepare('SELECT COUNT(*) AS cnt FROM trending_topics').get() as { cnt: number }).cnt;
     const sources = this.getAllSourceMeta();
-    return { total_items: total, items_24h: h24, trending_topics: topics, sources };
+    return { total_items: total, items_24h: h24, trending_topics: topics, bot_filtered_24h: botFiltered, sources };
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
@@ -484,6 +491,7 @@ export class SocialStorageService {
         id               TEXT PRIMARY KEY,
         coin_symbol      TEXT NOT NULL,
         signal_composite REAL NOT NULL,
+        signal_sentiment REAL NOT NULL DEFAULT 50,
         snapshot_time    TEXT NOT NULL
       );
 
@@ -510,6 +518,12 @@ export class SocialStorageService {
     try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN language TEXT').run(); } catch { /* already exists */ }
     // v2: sarcasm flag column (Issue #2)
     try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN sarcasm_flagged INTEGER').run(); } catch { /* already exists */ }
+    // v3: ABSA context-window flag column (Issue #3)
+    try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN context_window_used INTEGER').run(); } catch { /* already exists */ }
+    // v4: bot detection score column (Issue #9)
+    try { this.requireDb().prepare('ALTER TABLE social_media_items ADD COLUMN bot_score REAL').run(); } catch { /* already exists */ }
+    // v5: sentiment snapshot history column (Issue #11)
+    try { this.requireDb().prepare('ALTER TABLE trending_topic_history ADD COLUMN signal_sentiment REAL NOT NULL DEFAULT 50').run(); } catch { /* already exists */ }
   }
 }
 
@@ -529,6 +543,8 @@ interface RawItemRow {
   last_updated: string;
   language: string | null;
   sarcasm_flagged: number | null;
+  context_window_used: number | null;
+  bot_score: number | null;
 }
 
 function parseItemRow(row: RawItemRow): ScoredSocialItem {
@@ -559,6 +575,8 @@ function parseItemRow(row: RawItemRow): ScoredSocialItem {
     last_updated: row.last_updated,
     language: row.language ?? undefined,
     sarcasm_flagged: row.sarcasm_flagged ? true : undefined,
+    context_window_used: row.context_window_used ? true : undefined,
+    bot_score: row.bot_score ?? null,
   };
 }
 

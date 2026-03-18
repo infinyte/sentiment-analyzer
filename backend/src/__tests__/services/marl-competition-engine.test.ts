@@ -131,6 +131,48 @@ describe('MarlTradingAgent', () => {
     expect(clone.qValues.get('P:50000|S:20|E:10000|SIG:BUY')).toEqual([0.25, -0.1, 0.05, 0, 0]);
     expect(clone.epsilon).toBe(source.epsilon);
   });
+
+  it('appends sentiment feature fields when enableSentimentFeatures is true', () => {
+    const agent = new MarlTradingAgent({
+      agentId: 'sentiment-on',
+      type: 'ML_BASED',
+      riskProfile: 'AGGRESSIVE',
+      initialCapital: 10000,
+    }, true);
+
+    const features = agent.extractFeatures(createObservation({
+      sentimentFeatures: {
+        sentiment_score: 0.6,
+        sentiment_momentum_1h: 0.25,
+        funding_rate: 0.01,
+        on_chain_netflow: -0.2,
+      },
+    }));
+
+    expect(features).toHaveLength(54);
+    expect(features.slice(47, 51)).toEqual([0.6, 0.25, 0.01, -0.2]);
+    expect(features.slice(51)).toEqual([0, 0, 0]);
+  });
+
+  it('omits sentiment feature fields when enableSentimentFeatures is false', () => {
+    const agent = new MarlTradingAgent({
+      agentId: 'sentiment-off',
+      type: 'ML_BASED',
+      riskProfile: 'AGGRESSIVE',
+      initialCapital: 10000,
+    }, false);
+
+    const features = agent.extractFeatures(createObservation({
+      sentimentFeatures: {
+        sentiment_score: 0.6,
+        sentiment_momentum_1h: 0.25,
+        funding_rate: 0.01,
+        on_chain_netflow: -0.2,
+      },
+    }));
+
+    expect(features).toHaveLength(50);
+  });
 });
 
 describe('SharedOrderBook', () => {

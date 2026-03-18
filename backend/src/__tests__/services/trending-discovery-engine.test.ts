@@ -58,6 +58,6 @@ describe('TrendingTopicDiscoveryEngine', () => {
       ])
     );
     expect(mockedStore.upsertTrendingTopic).toHaveBeenCalled();
-    expect(mockedStore.saveTrendingSnapshot).toHaveBeenCalledWith('BTC', expect.any(Number));
+    expect(mockedStore.saveTrendingSnapshot).toHaveBeenCalledWith('BTC', expect.any(Number), expect.any(Number));
   });
 });

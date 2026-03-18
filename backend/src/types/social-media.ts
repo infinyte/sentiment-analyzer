@@ -37,6 +37,9 @@ export interface SocialMediaItem {
   metadata: Record<string, unknown>;
   /** ISO 639-1 language code detected from content (e.g. 'en', 'zh', 'ko'). */
   language?: string;
+  /** Bot-probability score in [0, 1] assigned by BotDetectionService.
+   *  null = not yet scored; ≥ 0.8 = likely bot. */
+  bot_score?: number | null;
 }
 
 // ── Scored item (after scoring pipeline) ─────────────────────────────────────
@@ -61,6 +64,9 @@ export interface ScoredSocialItem extends SocialMediaItem {
   sarcasm_flagged?: boolean;
   /** True when FinBERT was used for sentiment (vs keyword fallback). */
   finbert_used?: boolean;
+  /** True when ABSA context-window extraction was applied to focus scoring
+   *  on the target coin mention rather than the full text. */
+  context_window_used?: boolean;
 }
 
 // ── Trending topic ────────────────────────────────────────────────────────────
@@ -111,6 +117,15 @@ export interface SourceBreakdown {
   avg_authority: number;
 }
 
+export interface SentimentMomentum {
+  h1_avg: number;
+  h6_avg: number;
+  h24_avg: number;
+  roc_1h: number;
+  roc_6h: number;
+  volume_interaction_24h?: number;
+}
+
 export interface MultiSourceTrendReport {
   symbol: string;
   signal_sentiment: number;
@@ -123,6 +138,7 @@ export interface MultiSourceTrendReport {
   velocity: number;
   mention_count_24h: number;
   unique_sources: number;
+  sentiment_momentum: SentimentMomentum;
   sentiment_distribution: { BULL: number; NEUTRAL: number; BEAR: number };
   top_sources: SourceBreakdown[];
   top_hashtags: string[];

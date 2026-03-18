@@ -1,5 +1,7 @@
-import type { Coin, Sentiment } from '../types.js';
+import type { Coin, OnChainMetrics, Sentiment } from '../types.js';
+import type { SentimentMomentum } from '../types/social-media.js';
 import type { FinBertService } from './finbert.js';
+import { finBertService as defaultFinBertService } from './finbert.js';
 
 // ─── Analysis Mode ────────────────────────────────────────────────────────────
 
@@ -47,6 +49,7 @@ export interface AdvancedAnalysisResult {
   volatility_score: number; // 0–1 (higher = more volatile)
   volume_score: number;   // –1 to 1 (above avg = positive)
   rsi_score: number;      // –1 to 1 (derived from RSI if provided)
+  on_chain_score?: number; // –1 to 1 (net exchange flows + activity + whale proxy)
   summary: string;
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
 }
@@ -73,7 +76,9 @@ export interface SmartAnalysisResult {
     volatility: number;
     volume: number;
     technical: number;
+    on_chain: number;
   };
+  on_chain_score?: number;
   explanation: string;
 }
 
@@ -83,9 +88,24 @@ export interface RankedCoin {
   rank: number;
 }
 
+interface SentimentAnalyzerConfig {
+  onChainWeight?: number;
+  tradingSignalMomentumWeight1h?: number;
+  tradingSignalMomentumWeight6h?: number;
+}
+
 // ─── SentimentAnalyzerEngine ──────────────────────────────────────────────────
 
 export class SentimentAnalyzerEngine {
+  private readonly onChainWeight: number;
+  private readonly tradingSignalMomentumWeight1h: number;
+  private readonly tradingSignalMomentumWeight6h: number;
+
+  constructor(config: SentimentAnalyzerConfig = {}) {
+    this.onChainWeight = this.clamp(config.onChainWeight ?? 0.15, 0, 0.5);
+    this.tradingSignalMomentumWeight1h = this.clamp(config.tradingSignalMomentumWeight1h ?? 0.08, 0, 0.5);
+    this.tradingSignalMomentumWeight6h = this.clamp(config.tradingSignalMomentumWeight6h ?? 0.12, 0, 0.5);
+  }
 
   // ── Public API ──────────────────────────────────────────────────────────────
 
@@ -110,7 +130,8 @@ export class SentimentAnalyzerEngine {
   analyzeAdvancedSentiment(
     market: MarketData,
     news: NewsData,
-    technical?: TechnicalData
+    technical?: TechnicalData,
+    onChain?: OnChainMetrics | null
   ): AdvancedAnalysisResult {
     const news_score = this.newsToScore(news);
     const momentum_score = this.calcMomentumScore(
@@ -128,17 +149,20 @@ export class SentimentAnalyzerEngine {
     const rsi_score = technical
       ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
       : 0;
+    const on_chain_score = onChain ? this.onChainToScore(onChain) : undefined;
 
     // Weighted composite (no technical weight when not provided)
     const techWeight = technical ? 0.15 : 0;
+    const onChainWeight = on_chain_score === undefined ? 0 : this.onChainWeight;
     const baseWeights = { news: 0.30, momentum: 0.25, volatility: -0.10, volume: 0.20 };
-    const scale = 1 / (0.30 + 0.25 + 0.10 + 0.20 + techWeight);
+    const scale = 1 / (0.30 + 0.25 + 0.10 + 0.20 + techWeight + onChainWeight);
     const composite =
       (baseWeights.news * news_score +
         baseWeights.momentum * momentum_score +
         baseWeights.volatility * (0 - volatility_score) + // high vol is negative
         baseWeights.volume * volume_score +
-        techWeight * rsi_score) *
+        techWeight * rsi_score +
+        onChainWeight * (on_chain_score ?? 0)) *
       scale;
 
     const risk_level = this.calcRiskLevel(volatility_score, market.market_rank);
@@ -154,7 +178,8 @@ export class SentimentAnalyzerEngine {
       volatility_score,
       volume_score,
       rsi_score,
-      summary: this.buildAdvancedSummary(market.symbol, sentiment, composite, risk_level),
+      on_chain_score,
+      summary: this.buildAdvancedSummary(market.symbol, sentiment, composite, risk_level, on_chain_score),
       risk_level,
     };
   }
@@ -167,10 +192,13 @@ export class SentimentAnalyzerEngine {
     market: MarketData,
     news: NewsData,
     sentiment: Sentiment,
-    technical?: TechnicalData
+    technical?: TechnicalData,
+    onChain?: OnChainMetrics | null,
+    sentimentMomentum?: SentimentMomentum | null
   ): TradingSignal {
-    const advanced = this.analyzeAdvancedSentiment(market, news, technical);
-    const composite = this.compositeFromAdvanced(advanced);
+    const advanced = this.analyzeAdvancedSentiment(market, news, technical, onChain);
+    const momentumAdjustment = this.sentimentMomentumToSignalScore(sentimentMomentum);
+    const composite = this.clamp(this.compositeFromAdvanced(advanced) + momentumAdjustment, -1, 1);
 
     // Signal thresholds
     let signal: 'BUY' | 'SELL' | 'HOLD';
@@ -198,7 +226,7 @@ export class SentimentAnalyzerEngine {
       target_price_high,
       target_price_low,
       stop_loss,
-      reasoning: this.buildSignalReasoning(signal, advanced, sentiment),
+      reasoning: this.buildSignalReasoning(signal, advanced, sentiment, sentimentMomentum),
       risk_reward_ratio,
     };
   }
@@ -210,7 +238,8 @@ export class SentimentAnalyzerEngine {
   analyzeSmartSentiment(
     market: MarketData,
     news: NewsData,
-    technical?: TechnicalData
+    technical?: TechnicalData,
+    onChain?: OnChainMetrics | null
   ): SmartAnalysisResult {
     const isTrending = Math.abs(market.price_change_7d_percent) > 10;
     const highVolume = market.volume_24h_usd / market.market_cap_usd > 0.05;
@@ -222,6 +251,7 @@ export class SentimentAnalyzerEngine {
       volatility: highVolume ? 0.05 : 0.15,
       volume: highVolume ? 0.25 : 0.15,
       technical: technical ? (isTrending ? 0.15 : 0.20) : 0,
+      on_chain: onChain ? this.onChainWeight : 0,
     };
 
     // Normalise weights to sum to 1
@@ -232,6 +262,7 @@ export class SentimentAnalyzerEngine {
       volatility: factor_weights.volatility / total,
       volume: factor_weights.volume / total,
       technical: factor_weights.technical / total,
+      on_chain: factor_weights.on_chain / total,
     };
 
     const news_score = this.newsToScore(news);
@@ -250,13 +281,15 @@ export class SentimentAnalyzerEngine {
     const rsi_score = technical
       ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
       : 0;
+    const on_chain_score = onChain ? this.onChainToScore(onChain) : undefined;
 
     const composite =
       w.news * news_score +
       w.momentum * momentum_score +
       w.volatility * (0 - volatility_score) +
       w.volume * volume_score +
-      w.technical * rsi_score;
+      w.technical * rsi_score +
+      w.on_chain * (on_chain_score ?? 0);
 
     const sentiment = this.scoreToSentiment(composite);
     const confidence = Math.min(Math.abs(composite) * 1.5, 1);
@@ -267,13 +300,212 @@ export class SentimentAnalyzerEngine {
       sentiment,
       confidence,
       factor_weights: w,
+      on_chain_score,
       explanation: this.buildSmartExplanation(
         market.symbol,
         composite,
         w,
         isTrending,
-        highVolume
+        highVolume,
+        on_chain_score
       ),
+    };
+  }
+
+  // ── Async FinBERT-enhanced variants ─────────────────────────────────────────
+
+  /**
+   * ADVANCED mode — async variant.
+   *
+   * Uses FinBERT to score each headline individually when available, falling
+   * back to keyword-based scoring when FinBERT is unavailable or errors.
+   * The `finBert` parameter defaults to the global singleton so callers can
+   * omit it in production and pass a mock in tests.
+   */
+  async analyzeAdvancedSentimentAsync(
+    market: MarketData,
+    news: NewsData,
+    technical?: TechnicalData,
+    finBert: FinBertService = defaultFinBertService,
+    onChain?: OnChainMetrics | null
+  ): Promise<AdvancedAnalysisResult> {
+    const news_score = await this.newsToScoreAsync(news, finBert);
+    const momentum_score = this.calcMomentumScore(
+      market.price_change_24h_percent,
+      market.price_change_7d_percent
+    );
+    const volatility_score = this.calcVolatilityScore(
+      market.volatility_24h,
+      market.volatility_7d
+    );
+    const volume_score = this.calcVolumeScore(
+      market.volume_24h_usd,
+      market.market_cap_usd
+    );
+    const rsi_score = technical
+      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
+      : 0;
+    const on_chain_score = onChain ? this.onChainToScore(onChain) : undefined;
+
+    const techWeight = technical ? 0.15 : 0;
+    const onChainWeight = on_chain_score === undefined ? 0 : this.onChainWeight;
+    const baseWeights = { news: 0.30, momentum: 0.25, volatility: -0.10, volume: 0.20 };
+    const scale = 1 / (0.30 + 0.25 + 0.10 + 0.20 + techWeight + onChainWeight);
+    const composite =
+      (baseWeights.news * news_score +
+        baseWeights.momentum * momentum_score +
+        baseWeights.volatility * (0 - volatility_score) +
+        baseWeights.volume * volume_score +
+        techWeight * rsi_score +
+        onChainWeight * (on_chain_score ?? 0)) *
+      scale;
+
+    const risk_level = this.calcRiskLevel(volatility_score, market.market_rank);
+    const sentiment = this.scoreToSentiment(composite);
+    const confidence = Math.min(Math.abs(composite) * 1.5, 1);
+
+    return {
+      symbol: market.symbol,
+      sentiment,
+      confidence,
+      news_score,
+      momentum_score,
+      volatility_score,
+      volume_score,
+      rsi_score,
+      on_chain_score,
+      summary: this.buildAdvancedSummary(market.symbol, sentiment, composite, risk_level, on_chain_score),
+      risk_level,
+    };
+  }
+
+  /**
+   * SMART mode — async variant.
+   *
+   * Identical to the sync version but uses FinBERT for headline scoring when
+   * configured.  Falls back to keyword scoring when unavailable.
+   */
+  async analyzeSmartSentimentAsync(
+    market: MarketData,
+    news: NewsData,
+    technical?: TechnicalData,
+    finBert: FinBertService = defaultFinBertService,
+    onChain?: OnChainMetrics | null
+  ): Promise<SmartAnalysisResult> {
+    const isTrending = Math.abs(market.price_change_7d_percent) > 10;
+    const highVolume = market.volume_24h_usd / market.market_cap_usd > 0.05;
+
+    const factor_weights = {
+      news: isTrending ? 0.20 : 0.35,
+      momentum: isTrending ? 0.35 : 0.15,
+      volatility: highVolume ? 0.05 : 0.15,
+      volume: highVolume ? 0.25 : 0.15,
+      technical: technical ? (isTrending ? 0.15 : 0.20) : 0,
+      on_chain: onChain ? this.onChainWeight : 0,
+    };
+
+    const total = Object.values(factor_weights).reduce((a, b) => a + b, 0);
+    const w = {
+      news: factor_weights.news / total,
+      momentum: factor_weights.momentum / total,
+      volatility: factor_weights.volatility / total,
+      volume: factor_weights.volume / total,
+      technical: factor_weights.technical / total,
+      on_chain: factor_weights.on_chain / total,
+    };
+
+    const news_score = await this.newsToScoreAsync(news, finBert);
+    const momentum_score = this.calcMomentumScore(
+      market.price_change_24h_percent,
+      market.price_change_7d_percent
+    );
+    const volatility_score = this.calcVolatilityScore(
+      market.volatility_24h,
+      market.volatility_7d
+    );
+    const volume_score = this.calcVolumeScore(
+      market.volume_24h_usd,
+      market.market_cap_usd
+    );
+    const rsi_score = technical
+      ? this.rsiToScore(technical.rsi_14 ?? this.calcRSI(technical.price_history ?? []))
+      : 0;
+    const on_chain_score = onChain ? this.onChainToScore(onChain) : undefined;
+
+    const composite =
+      w.news * news_score +
+      w.momentum * momentum_score +
+      w.volatility * (0 - volatility_score) +
+      w.volume * volume_score +
+      w.technical * rsi_score +
+      w.on_chain * (on_chain_score ?? 0);
+
+    const sentiment = this.scoreToSentiment(composite);
+    const confidence = Math.min(Math.abs(composite) * 1.5, 1);
+
+    return {
+      symbol: market.symbol,
+      composite_score: composite,
+      sentiment,
+      confidence,
+      factor_weights: w,
+      on_chain_score,
+      explanation: this.buildSmartExplanation(
+        market.symbol,
+        composite,
+        w,
+        isTrending,
+        highVolume,
+        on_chain_score
+      ),
+    };
+  }
+
+  /**
+   * TRADING_SIGNALS mode — async variant.
+   *
+   * Uses `analyzeAdvancedSentimentAsync()` (FinBERT-enhanced) to compute the
+   * underlying advanced result, then derives the BUY/SELL/HOLD signal from it.
+   * Falls back to keyword scoring when FinBERT is unavailable or errors,
+   * producing identical output to the sync `generateTradingSignals()`.
+   */
+  async generateTradingSignalsAsync(
+    market: MarketData,
+    news: NewsData,
+    sentiment: Sentiment,
+    technical?: TechnicalData,
+    finBert: FinBertService = defaultFinBertService,
+    onChain?: OnChainMetrics | null,
+    sentimentMomentum?: SentimentMomentum | null
+  ): Promise<TradingSignal> {
+    const advanced = await this.analyzeAdvancedSentimentAsync(market, news, technical, finBert, onChain);
+    const momentumAdjustment = this.sentimentMomentumToSignalScore(sentimentMomentum);
+    const composite = this.clamp(this.compositeFromAdvanced(advanced) + momentumAdjustment, -1, 1);
+
+    let signal: 'BUY' | 'SELL' | 'HOLD';
+    if (composite > 0.25) signal = 'BUY';
+    else if (composite < -0.25) signal = 'SELL';
+    else signal = 'HOLD';
+
+    const strength = Math.min(Math.abs(composite) * 2, 1);
+    const atr = market.price_usd * (market.volatility_24h / 100);
+    const multiplier = 1 + strength;
+    const target_price_high = market.price_usd + atr * multiplier * 2;
+    const target_price_low = market.price_usd + atr * multiplier;
+    const stop_loss = market.price_usd - atr * multiplier;
+    const risk = target_price_low - market.price_usd;
+    const reward = target_price_high - market.price_usd;
+    const risk_reward_ratio = risk > 0 ? reward / risk : 0;
+
+    return {
+      symbol: market.symbol,
+      signal,
+      strength,
+      target_price_high,
+      target_price_low,
+      stop_loss,
+      reasoning: this.buildSignalReasoning(signal, advanced, sentiment, sentimentMomentum),
+      risk_reward_ratio,
     };
   }
 
@@ -383,6 +615,17 @@ export class SentimentAnalyzerEngine {
     return this.clampNorm((ratio - 0.05) * 10, 1);
   }
 
+  private onChainToScore(onChain: OnChainMetrics): number {
+    const flowTotal = onChain.exchange_inflow + onChain.exchange_outflow;
+    const netFlowScore = flowTotal > 0
+      ? this.clamp((onChain.exchange_outflow - onChain.exchange_inflow) / flowTotal, -1, 1)
+      : 0;
+    const activityScore = this.clamp((Math.log10(onChain.active_addresses_24h + 1) - 5) / 2, -1, 1);
+    const whaleScore = this.clamp((Math.log10(onChain.large_tx_count_24h + 1) - 2.5) / 2, -1, 1);
+
+    return this.clamp(netFlowScore * 0.5 + activityScore * 0.3 + whaleScore * 0.2, -1, 1);
+  }
+
   // ── Helper: Converters ──────────────────────────────────────────────────────
 
   /** Maps RSI to sentiment score in [–1, 1]. Oversold < 30, overbought > 70. */
@@ -401,6 +644,37 @@ export class SentimentAnalyzerEngine {
         : 0;
     const keywordBoost = this.scoreHeadlinesByKeyword(news.headlines) * 0.3;
     return this.clamp(sentimentBase + keywordBoost, -1, 1);
+  }
+
+  /**
+   * Async variant of newsToScore.  Scores each headline via FinBERT when
+   * available; falls back to the keyword scorer when FinBERT is unavailable
+   * or returns null for an individual headline.
+   */
+  private async newsToScoreAsync(news: NewsData, finBert: FinBertService): Promise<number> {
+    const sentimentBase =
+      news.sentiment_score === 'BULL'
+        ? news.sentiment_confidence
+        : news.sentiment_score === 'BEAR'
+        ? -news.sentiment_confidence
+        : 0;
+
+    if (!finBert.isAvailable() || news.headlines.length === 0) {
+      const keywordBoost = this.scoreHeadlinesByKeyword(news.headlines) * 0.3;
+      return this.clamp(sentimentBase + keywordBoost, -1, 1);
+    }
+
+    // Score each headline with FinBERT in parallel; fall back per-item on null
+    const scores = await Promise.all(
+      news.headlines.map(async (headline) => {
+        const result = await finBert.analyze(headline);
+        if (result === null) return this.scoreHeadlinesByKeyword([headline]);
+        return finBert.toSentimentScore(result);
+      })
+    );
+
+    const avgHeadlineScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    return this.clamp(sentimentBase + avgHeadlineScore * 0.3, -1, 1);
   }
 
   /** Keyword-based headline scoring. Returns score in [–1, 1]. */
@@ -447,7 +721,8 @@ export class SentimentAnalyzerEngine {
       0.25 * a.momentum_score -
       0.10 * a.volatility_score +
       0.20 * a.volume_score +
-      0.15 * a.rsi_score
+      0.15 * a.rsi_score +
+      this.onChainWeight * (a.on_chain_score ?? 0)
     );
   }
 
@@ -471,24 +746,51 @@ export class SentimentAnalyzerEngine {
     symbol: string,
     sentiment: 'BULL' | 'NEUTRAL' | 'BEAR',
     composite: number,
-    risk: 'LOW' | 'MEDIUM' | 'HIGH'
+    risk: 'LOW' | 'MEDIUM' | 'HIGH',
+    onChainScore?: number
   ): string {
     const dir = sentiment === 'BULL' ? 'bullish' : sentiment === 'BEAR' ? 'bearish' : 'neutral';
-    return `${symbol} shows ${dir} signals (composite ${composite.toFixed(2)}) with ${risk.toLowerCase()} risk.`;
+    const onChainNote = onChainScore === undefined
+      ? ''
+      : onChainScore > 0.2
+      ? ' On-chain activity is supportive.'
+      : onChainScore < -0.2
+      ? ' On-chain flows are a headwind.'
+      : ' On-chain activity is mixed.';
+    return `${symbol} shows ${dir} signals (composite ${composite.toFixed(2)}) with ${risk.toLowerCase()} risk.${onChainNote}`;
   }
 
   private buildSignalReasoning(
     signal: 'BUY' | 'SELL' | 'HOLD',
     advanced: AdvancedAnalysisResult,
-    sentiment: Sentiment
+    sentiment: Sentiment,
+    sentimentMomentum?: SentimentMomentum | null
   ): string {
     const parts: string[] = [`Signal: ${signal} for ${advanced.symbol}.`];
     if (advanced.momentum_score > 0.3) parts.push('Strong positive momentum.');
     if (advanced.momentum_score < -0.3) parts.push('Strong negative momentum.');
     if (advanced.news_score > 0.3) parts.push('Positive news sentiment.');
     if (advanced.news_score < -0.3) parts.push('Negative news sentiment.');
+    if (sentimentMomentum) {
+      if (sentimentMomentum.roc_1h > 0 || sentimentMomentum.roc_6h > 0) parts.push('Social sentiment momentum is improving.');
+      if (sentimentMomentum.roc_1h < 0 || sentimentMomentum.roc_6h < 0) parts.push('Social sentiment momentum is deteriorating.');
+    }
     if (sentiment.volatility_warning) parts.push('Caution: elevated volatility.');
     return parts.join(' ');
+  }
+
+  private sentimentMomentumToSignalScore(sentimentMomentum?: SentimentMomentum | null): number {
+    if (!sentimentMomentum) return 0;
+
+    const roc1h = this.clamp(sentimentMomentum.roc_1h / 20, -1, 1);
+    const roc6h = this.clamp(sentimentMomentum.roc_6h / 20, -1, 1);
+
+    return this.clamp(
+      roc1h * this.tradingSignalMomentumWeight1h +
+      roc6h * this.tradingSignalMomentumWeight6h,
+      -0.5,
+      0.5,
+    );
   }
 
   private buildSmartExplanation(
@@ -496,14 +798,17 @@ export class SentimentAnalyzerEngine {
     composite: number,
     weights: SmartAnalysisResult['factor_weights'],
     isTrending: boolean,
-    highVolume: boolean
+    highVolume: boolean,
+    onChainScore?: number
   ): string {
     const regime = isTrending ? 'trending' : 'consolidating';
     const vol = highVolume ? 'high-volume' : 'normal-volume';
+    const onChainFragment = onChainScore === undefined ? '' : ` On-chain score: ${onChainScore.toFixed(3)}.`;
     return (
       `${symbol} in ${regime}, ${vol} regime. ` +
       `Composite score: ${composite.toFixed(3)}. ` +
-      `Top factor: ${this.topFactor(weights)}.`
+      `Top factor: ${this.topFactor(weights)}.` +
+      onChainFragment
     );
   }
 

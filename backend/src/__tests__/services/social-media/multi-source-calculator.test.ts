@@ -69,6 +69,14 @@ describe('MultiSourceTrendingScoreCalculator', () => {
     expect(report.trend_direction).toBe('NEUTRAL');
     expect(report.trend_strength).toBe('WEAK');
     expect(report.signal_composite).toBe(0);
+    expect(report.sentiment_momentum).toEqual({
+      h1_avg: 50,
+      h6_avg: 50,
+      h24_avg: 50,
+      roc_1h: 0,
+      roc_6h: 0,
+      volume_interaction_24h: 0,
+    });
   });
 
   // ── Signal computation ─────────────────────────────────────────────────────
@@ -214,5 +222,57 @@ describe('MultiSourceTrendingScoreCalculator', () => {
     mockGetItemsForCoin.mockReturnValue([]);
     const report = await calc.calculate('btc', 24);
     expect(report.symbol).toBe('BTC');
+  });
+
+  it('returns near-zero sentiment ROC for stable historical sentiment', async () => {
+    mockGetItemsForCoin.mockReturnValue([
+      makeItem({ score_sentiment: 60 }),
+      makeItem({ score_sentiment: 60 }),
+    ]);
+    mockGetHistoricalSignal.mockReturnValue([
+      { snapshot_time: new Date(Date.now() - 30 * 60_000).toISOString(), signal_composite: 55, signal_sentiment: 60 },
+      { snapshot_time: new Date(Date.now() - 90 * 60_000).toISOString(), signal_composite: 54, signal_sentiment: 60 },
+      { snapshot_time: new Date(Date.now() - 7 * 3_600_000).toISOString(), signal_composite: 56, signal_sentiment: 60 },
+    ]);
+
+    const report = await calc.calculate('BTC', 24);
+
+    expect(report.sentiment_momentum.h1_avg).toBeCloseTo(60, 1);
+    expect(report.sentiment_momentum.roc_1h).toBeCloseTo(0, 1);
+    expect(report.sentiment_momentum.roc_6h).toBeCloseTo(0, 1);
+  });
+
+  it('returns positive sentiment ROC when sentiment is rising', async () => {
+    mockGetItemsForCoin.mockReturnValue([
+      makeItem({ score_sentiment: 78 }),
+      makeItem({ score_sentiment: 82 }),
+    ]);
+    mockGetHistoricalSignal.mockReturnValue([
+      { snapshot_time: new Date(Date.now() - 30 * 60_000).toISOString(), signal_composite: 65, signal_sentiment: 78 },
+      { snapshot_time: new Date(Date.now() - 90 * 60_000).toISOString(), signal_composite: 50, signal_sentiment: 45 },
+      { snapshot_time: new Date(Date.now() - 8 * 3_600_000).toISOString(), signal_composite: 48, signal_sentiment: 40 },
+    ]);
+
+    const report = await calc.calculate('BTC', 24);
+
+    expect(report.sentiment_momentum.roc_1h).toBeGreaterThan(0);
+    expect(report.sentiment_momentum.roc_6h).toBeGreaterThan(0);
+  });
+
+  it('returns negative sentiment ROC when sentiment is declining', async () => {
+    mockGetItemsForCoin.mockReturnValue([
+      makeItem({ score_sentiment: 28 }),
+      makeItem({ score_sentiment: 32 }),
+    ]);
+    mockGetHistoricalSignal.mockReturnValue([
+      { snapshot_time: new Date(Date.now() - 30 * 60_000).toISOString(), signal_composite: 35, signal_sentiment: 30 },
+      { snapshot_time: new Date(Date.now() - 90 * 60_000).toISOString(), signal_composite: 70, signal_sentiment: 74 },
+      { snapshot_time: new Date(Date.now() - 8 * 3_600_000).toISOString(), signal_composite: 68, signal_sentiment: 72 },
+    ]);
+
+    const report = await calc.calculate('BTC', 24);
+
+    expect(report.sentiment_momentum.roc_1h).toBeLessThan(0);
+    expect(report.sentiment_momentum.roc_6h).toBeLessThan(0);
   });
 });

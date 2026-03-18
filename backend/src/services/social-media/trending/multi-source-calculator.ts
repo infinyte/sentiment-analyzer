@@ -17,6 +17,7 @@ import { socialStore } from '../../../database/sqlite-social-store.js';
 import { extractHashtags, extractKeywords } from '../scoring/coin-extractor.js';
 import type {
   MultiSourceTrendReport,
+  SentimentMomentum,
   TrendDirection,
   TrendStrength,
   SourceBreakdown,
@@ -102,6 +103,57 @@ function sentimentDistribution(items: ScoredSocialItem[]): { BULL: number; NEUTR
   };
 }
 
+interface HistoricalSignalSnapshot {
+  snapshot_time: string;
+  signal_composite: number;
+  signal_sentiment?: number;
+}
+
+function avgSnapshotWindow(
+  snapshots: HistoricalSignalSnapshot[],
+  endMs: number,
+  durationMs: number,
+  fallback: number,
+): number {
+  const startMs = endMs - durationMs;
+  const values = snapshots
+    .filter(snapshot => {
+      const time = Date.parse(snapshot.snapshot_time);
+      return time >= startMs && time <= endMs;
+    })
+    .map(snapshot => snapshot.signal_sentiment ?? fallback);
+
+  return parseFloat((values.length ? avg(values) : fallback).toFixed(2));
+}
+
+function buildSentimentMomentum(
+  currentSentiment: number,
+  mentionCount24h: number,
+  history: HistoricalSignalSnapshot[],
+  nowMs: number,
+): SentimentMomentum {
+  const snapshots: HistoricalSignalSnapshot[] = [
+    { snapshot_time: new Date(nowMs).toISOString(), signal_composite: 0, signal_sentiment: currentSentiment },
+    ...history,
+  ];
+
+  const h1_avg = avgSnapshotWindow(snapshots, nowMs, 1 * 3_600_000, currentSentiment);
+  const h6_avg = avgSnapshotWindow(snapshots, nowMs, 6 * 3_600_000, currentSentiment);
+  const h24_avg = avgSnapshotWindow(snapshots, nowMs, 24 * 3_600_000, currentSentiment);
+
+  const prevH1 = avgSnapshotWindow(history, nowMs - 1 * 3_600_000, 1 * 3_600_000, h1_avg);
+  const prevH6 = avgSnapshotWindow(history, nowMs - 6 * 3_600_000, 6 * 3_600_000, h6_avg);
+
+  return {
+    h1_avg,
+    h6_avg,
+    h24_avg,
+    roc_1h: parseFloat((h1_avg - prevH1).toFixed(2)),
+    roc_6h: parseFloat((h6_avg - prevH6).toFixed(2)),
+    volume_interaction_24h: parseFloat((((h24_avg - 50) / 50) * mentionCount24h).toFixed(4)),
+  };
+}
+
 // ── Dynamic signal weight adjustment ─────────────────────────────────────────
 
 function compositeSignal(params: {
@@ -142,7 +194,8 @@ export class MultiSourceTrendingScoreCalculator {
 
   async calculate(symbol: string, intervalHours = 24): Promise<MultiSourceTrendReport> {
     const upper = symbol.toUpperCase();
-    const now   = new Date().toISOString();
+    const nowMs = Date.now();
+    const now   = new Date(nowMs).toISOString();
 
     // Current window items
     const items = socialStore.getItemsForCoin(upper, intervalHours);
@@ -177,6 +230,7 @@ export class MultiSourceTrendingScoreCalculator {
 
     const score24hAgo = snap24h?.signal_composite ?? null;
     const score7dAgo  = snap7d?.signal_composite  ?? null;
+    const sentiment_momentum = buildSentimentMomentum(signal_sentiment, items.length, history, nowMs);
 
     let acceleration: MultiSourceTrendReport['comparison']['trend_acceleration'] = 'stable';
     if (score24hAgo !== null) {
@@ -211,6 +265,7 @@ export class MultiSourceTrendingScoreCalculator {
       velocity,
       mention_count_24h: items.length,
       unique_sources: uniqueSources,
+      sentiment_momentum,
       sentiment_distribution: sentimentDistribution(items),
       top_sources: buildSourceBreakdown(items),
       top_hashtags: topHashtags(items),
@@ -232,6 +287,14 @@ export class MultiSourceTrendingScoreCalculator {
       signal_recency: 0, signal_authority: 0, signal_composite: 0,
       trend_direction: 'NEUTRAL', trend_strength: 'WEAK',
       velocity: 0, mention_count_24h: 0, unique_sources: 0,
+      sentiment_momentum: {
+        h1_avg: 50,
+        h6_avg: 50,
+        h24_avg: 50,
+        roc_1h: 0,
+        roc_6h: 0,
+        volume_interaction_24h: 0,
+      },
       sentiment_distribution: { BULL: 0, NEUTRAL: 100, BEAR: 0 },
       top_sources: [], top_hashtags: [], trending_keywords: [],
       recent_items: [],
