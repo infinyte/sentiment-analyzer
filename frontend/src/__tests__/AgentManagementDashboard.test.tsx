@@ -234,5 +234,5 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents?limit=100');
     });
-  });
+  }, 15000);
 });

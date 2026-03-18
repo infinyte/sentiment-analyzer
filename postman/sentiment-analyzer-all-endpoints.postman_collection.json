@@ -1,0 +1,632 @@
+{
+  "info": {
+    "_postman_id": "9fd9e4b7-95bf-4d0c-a1ad-31b0f2d8f444",
+    "name": "Sentiment Analyzer - All Endpoints Suite",
+    "description": "Comprehensive Postman suite covering all currently implemented API endpoints in the backend.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "api_secret_key", "value": "" },
+    { "key": "symbol", "value": "BTC" },
+    { "key": "competition_id", "value": "" },
+    { "key": "agent_id", "value": "" },
+    { "key": "test_id", "value": "" },
+    { "key": "tournament_id", "value": "" },
+    { "key": "credential_id", "value": "" },
+    { "key": "social_item_id", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Core",
+      "item": [
+        {
+          "name": "GET /api/health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/health"
+          }
+        },
+        {
+          "name": "GET /api/coins",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/coins?limit=50"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.data?.length) pm.collectionVariables.set('symbol', body.data[0].symbol);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/coins/:symbol",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/coins/{{symbol}}?days=7"
+          }
+        },
+        {
+          "name": "POST /api/refresh-sentiment",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"]\n}"
+            },
+            "url": "{{base_url}}/api/refresh-sentiment"
+          }
+        },
+        {
+          "name": "GET /api/sentiment/:symbol",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/sentiment/{{symbol}}"
+          }
+        },
+        {
+          "name": "POST /api/sentiment/analyze",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"mode\": \"BASIC\",\n  \"headlines\": {\n    \"BTC\": [\"Bitcoin sentiment improves\", \"ETF inflows increase\"],\n    \"ETH\": [\"Ethereum upgrade announced\"]\n  }\n}"
+            },
+            "url": "{{base_url}}/api/sentiment/analyze"
+          }
+        },
+        {
+          "name": "POST /api/agents/configure",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agents\": [\n    {\n      \"name\": \"agent_rule\",\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    },\n    {\n      \"name\": \"agent_hybrid\",\n      \"type\": \"HYBRID\",\n      \"riskProfile\": \"AGGRESSIVE\",\n      \"initialCapital\": 10000\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/agents/configure"
+          }
+        },
+        {
+          "name": "POST /api/backtest/run",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"startDate\": \"2025-12-01\",\n  \"endDate\": \"2025-12-31\",\n  \"agents\": [\n    {\n      \"name\": \"bt_rule\",\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/backtest/run"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.testId) pm.collectionVariables.set('test_id', body.testId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/backtest/results/:testId",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/backtest/results/{{test_id}}"
+          }
+        },
+        {
+          "name": "GET /api/rankings/top-coins",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/rankings/top-coins?limit=20&timeframe=1d"
+          }
+        },
+        {
+          "name": "GET /api/info/modes",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/info/modes"
+          }
+        },
+        {
+          "name": "GET /api/scrape/social",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/scrape/social?symbol={{symbol}}&platforms=reddit,twitter"
+          }
+        },
+        {
+          "name": "POST /api/scrape/batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\", \"SOL\"],\n  \"platforms\": [\"reddit\", \"twitter\"],\n  \"query\": \"sentiment\"\n}"
+            },
+            "url": "{{base_url}}/api/scrape/batch"
+          }
+        },
+        {
+          "name": "GET /api/trending",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trending?window=4&limit=20&min_volume=2"
+          }
+        },
+        {
+          "name": "POST /api/trending/ingest",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"posts\": [\n    {\n      \"id\": \"manual-1\",\n      \"platform\": \"reddit\",\n      \"author\": \"demo\",\n      \"content\": \"Strong momentum on BTC this week\",\n      \"created_at\": \"2026-03-18T00:00:00.000Z\",\n      \"symbol\": \"BTC\"\n    }\n  ]\n}"
+            },
+            "url": "{{base_url}}/api/trending/ingest"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Social Media",
+      "item": [
+        {
+          "name": "GET /api/social-media/trending-topics",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/social-media/trending-topics?timeWindow=24&limit=20"
+          }
+        },
+        {
+          "name": "GET /api/social-media/items",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/social-media/items?sort=score&since_hours=24&limit=20"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.items?.length && body.items[0]?.id) pm.collectionVariables.set('social_item_id', body.items[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/social-media/item/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/social-media/item/{{social_item_id}}"
+          }
+        },
+        {
+          "name": "GET /api/social-media/stats",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/social-media/stats"
+          }
+        },
+        {
+          "name": "GET /api/trending-score/:symbol",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trending-score/{{symbol}}?interval=24"
+          }
+        },
+        {
+          "name": "POST /api/social-media/refresh",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"rss_only\": false\n}"
+            },
+            "url": "{{base_url}}/api/social-media/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MARL Competition",
+      "item": [
+        {
+          "name": "POST /api/marl/competition/start",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    { \"id\": \"bull\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n    { \"id\": \"bear\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 }\n  ],\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 100,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}"
+            },
+            "url": "{{base_url}}/api/marl/competition/start"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.competitionId) pm.collectionVariables.set('competition_id', body.competitionId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:competitionId/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/competition/{{competition_id}}/status"
+          }
+        },
+        {
+          "name": "GET /api/marl/competition/:competitionId/results",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/competition/{{competition_id}}/results"
+          }
+        },
+        {
+          "name": "POST /api/marl/agents/compare",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agent1\": { \"id\": \"aggressive\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n  \"agent2\": { \"id\": \"conservative\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 },\n  \"symbols\": [\"BTC\"],\n  \"rounds\": 3,\n  \"duration\": 100\n}"
+            },
+            "url": "{{base_url}}/api/marl/agents/compare"
+          }
+        },
+        {
+          "name": "GET /api/marl/competitions",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/competitions"
+          }
+        },
+        {
+          "name": "GET /api/marl/agents/learning",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/agents/learning"
+          }
+        },
+        {
+          "name": "DELETE /api/marl/agents/:agentId/learning",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/agents/{{agent_id}}/learning?riskProfile=AGGRESSIVE"
+          }
+        },
+        {
+          "name": "GET /api/marl/coin-universe",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/coin-universe?agents=[{\"id\":\"bull\",\"riskProfile\":\"AGGRESSIVE\"},{\"id\":\"bear\",\"riskProfile\":\"CONSERVATIVE\"}]&universeSize=50&coinsPerAgent=3"
+          }
+        },
+        {
+          "name": "GET /api/marl/info",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/info"
+          }
+        }
+      ]
+    },
+    {
+      "name": "MARL Broker Real Trading",
+      "item": [
+        {
+          "name": "POST /api/marl/broker/credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Alpaca Paper Demo\",\n  \"provider\": \"ALPACA\",\n  \"mode\": \"PAPER\",\n  \"apiKey\": \"REPLACE_ME\",\n  \"apiSecret\": \"REPLACE_ME\"\n}"
+            },
+            "url": "{{base_url}}/api/marl/broker/credentials"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.id) pm.collectionVariables.set('credential_id', body.id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/broker/credentials",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/broker/credentials"
+          }
+        },
+        {
+          "name": "GET /api/marl/broker/credentials/picker",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/marl/broker/credentials/picker"
+          }
+        },
+        {
+          "name": "POST /api/marl/broker/connect/:id",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/broker/connect/{{credential_id}}"
+          }
+        },
+        {
+          "name": "GET /api/marl/broker/connected",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/broker/connected"
+          }
+        },
+        {
+          "name": "GET /api/marl/broker/orders/:competitionId",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/broker/orders/{{competition_id}}"
+          }
+        },
+        {
+          "name": "POST /api/marl/broker/emergency-stop",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"competitionId\": \"{{competition_id}}\",\n  \"credentialId\": \"{{credential_id}}\"\n}"
+            },
+            "url": "{{base_url}}/api/marl/broker/emergency-stop"
+          }
+        },
+        {
+          "name": "DELETE /api/marl/broker/credentials/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+            ],
+            "url": "{{base_url}}/api/marl/broker/credentials/{{credential_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agent Stats & Evolutionary",
+      "item": [
+        {
+          "name": "GET /api/agents",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents?limit=100"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.agents?.length && body.agents[0]?.id) pm.collectionVariables.set('agent_id', body.agents[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/stats/leaderboard",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents/stats/leaderboard?limit=20"
+          }
+        },
+        {
+          "name": "GET /api/agents/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents/{{agent_id}}"
+          }
+        },
+        {
+          "name": "PUT /api/agents/:id/customize",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"🚀\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
+            },
+            "url": "{{base_url}}/api/agents/{{agent_id}}/customize"
+          }
+        },
+        {
+          "name": "GET /api/agents/:id/history",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents/{{agent_id}}/history?limit=50"
+          }
+        },
+        {
+          "name": "GET /api/agents/:id/genome",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents/{{agent_id}}/genome"
+          }
+        },
+        {
+          "name": "GET /api/agents/:id/genealogy",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/agents/{{agent_id}}/genealogy"
+          }
+        },
+        {
+          "name": "POST /api/evolutionary/tournament",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Tournament\",\n  \"populationSize\": 6,\n  \"maxGenerations\": 3,\n  \"survivalPercent\": 30,\n  \"mutationRate\": 0.5,\n  \"mutationSeverity\": \"MEDIUM\",\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"retirementEnabled\": true,\n  \"competitionDuration\": 120,\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"initialCapital\": 10000,\n  \"riskProfiles\": [\"CONSERVATIVE\", \"AGGRESSIVE\", \"SCALPING\"]\n}"
+            },
+            "url": "{{base_url}}/api/evolutionary/tournament"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 202) {",
+                  "  const body = pm.response.json();",
+                  "  if (body?.tournamentId) pm.collectionVariables.set('tournament_id', body.tournamentId);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/evolutionary/tournament",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/evolutionary/tournament"
+          }
+        },
+        {
+          "name": "GET /api/evolutionary/tournament/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/evolutionary/tournament/{{tournament_id}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trading",
+      "item": [
+        {
+          "name": "GET /api/trading/exchange-status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trading/exchange-status"
+          }
+        },
+        {
+          "name": "GET /api/trading/price/:symbol",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trading/price/{{symbol}}"
+          }
+        },
+        {
+          "name": "GET /api/trading/balances",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trading/balances"
+          }
+        },
+        {
+          "name": "POST /api/trading/order",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"BTC_USDT\",\n  \"side\": \"BUY\",\n  \"size\": 1,\n  \"orderType\": \"MARKET\"\n}"
+            },
+            "url": "{{base_url}}/api/trading/order"
+          }
+        },
+        {
+          "name": "GET /api/trading/stats",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/api/trading/stats"
+          }
+        }
+      ]
+    }
+  ]
+}
