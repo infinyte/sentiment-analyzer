@@ -875,21 +875,27 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                 <h3 style={{ margin: '0 0 1rem 0', fontSize: '1rem', fontWeight: '600' }}>
                   Recent Headlines
                 </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {detail.headlines && detail.headlines.slice(0, 5).map((headline, i) => (
-                    <div
-                      key={i}
-                      style={{
-                        padding: '0.75rem',
-                        border: '1px solid #e5e7eb',
-                        borderRadius: '0.375rem',
-                        fontSize: '0.875rem',
-                      }}
-                    >
-                      {headline}
-                    </div>
-                  ))}
-                </div>
+                {detail.headlines && detail.headlines.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {detail.headlines.slice(0, 5).map((headline, i) => (
+                      <div
+                        key={i}
+                        style={{
+                          padding: '0.75rem',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '0.375rem',
+                          fontSize: '0.875rem',
+                        }}
+                      >
+                        {headline}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '0.375rem', color: '#6b7280', fontSize: '0.875rem' }}>
+                    No headlines available. Configure NEWSAPI_API_KEY or Reddit credentials to enable news collection.
+                  </div>
+                )}
               </div>
             </>
           ) : (

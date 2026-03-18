@@ -101,6 +101,25 @@ router.get('/api/marl/broker/credentials', (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /api/marl/broker/credentials/picker ──────────────────────────────────
+// Unauthenticated endpoint that returns only id + label + provider + mode.
+// Used by the frontend dropdown so the user never has to copy-paste UUIDs.
+// No secrets or encrypted blobs are included.
+
+router.get('/api/marl/broker/credentials/picker', (_req: Request, res: Response) => {
+  try {
+    const creds = storage.listBrokerCredentials().map(c => ({
+      id:       c.id,
+      label:    c.label,
+      provider: c.provider,
+      mode:     c.mode,
+    }));
+    res.json({ credentials: creds });
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 // ─── DELETE /api/marl/broker/credentials/:id ──────────────────────────────────
 
 router.delete('/api/marl/broker/credentials/:id', async (req: Request, res: Response) => {

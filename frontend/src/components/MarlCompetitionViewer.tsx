@@ -177,6 +177,7 @@ export function MarlCompetitionViewer() {
   const [learningEnabled, setLearningEnabled] = useState(true);
   const [exchangeMode, setExchangeMode] = useState<ExchangeMode>('SIMULATED');
   const [brokerCredentialId, setBrokerCredentialId] = useState('');
+  const [availableCredentials, setAvailableCredentials] = useState<Array<{ id: string; label: string; provider: string; mode: string }>>([]);
 
   // ── Compare form state ────────────────────────────────────────────────────
   const [showCompare, setShowCompare] = useState(false);
@@ -186,6 +187,28 @@ export function MarlCompetitionViewer() {
   const [cmpDuration, setCmpDuration] = useState(100);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  // Fetch available broker credentials when switching to PAPER or LIVE mode
+  useEffect(() => {
+    if (exchangeMode === 'SIMULATED') {
+      setAvailableCredentials([]);
+      setBrokerCredentialId('');
+      return;
+    }
+    fetch('/api/marl/broker/credentials/picker')
+      .then(r => r.ok ? r.json() as Promise<{ credentials: Array<{ id: string; label: string; provider: string; mode: string }> }> : Promise.reject())
+      .then(data => {
+        const matching = data.credentials.filter(c => c.mode === exchangeMode);
+        setAvailableCredentials(matching);
+        // Auto-select if exactly one credential matches
+        if (matching.length === 1) setBrokerCredentialId(matching[0]!.id);
+        else setBrokerCredentialId('');
+      })
+      .catch(() => {
+        setAvailableCredentials([]);
+        setBrokerCredentialId('');
+      });
+  }, [exchangeMode]);
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -439,14 +462,35 @@ export function MarlCompetitionViewer() {
                 </div>
                 {exchangeMode !== 'SIMULATED' && (
                   <div>
-                    <label style={label}>Broker Credential ID</label>
-                    <input
-                      style={input}
-                      value={brokerCredentialId}
-                      onChange={e => setBrokerCredentialId(e.target.value)}
-                      placeholder="UUID from POST /api/marl/broker/credentials"
-                      required
-                    />
+                    <label style={label}>Broker Credential</label>
+                    {availableCredentials.length > 0 ? (
+                      <select
+                        style={input}
+                        value={brokerCredentialId}
+                        onChange={e => setBrokerCredentialId(e.target.value)}
+                        required
+                      >
+                        <option value="">— select a credential —</option>
+                        {availableCredentials.map(c => (
+                          <option key={c.id} value={c.id}>
+                            {c.label} ({c.provider})
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <>
+                        <input
+                          style={input}
+                          value={brokerCredentialId}
+                          onChange={e => setBrokerCredentialId(e.target.value)}
+                          placeholder="No credentials found — paste UUID manually"
+                          required
+                        />
+                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+                          Store credentials via POST /api/marl/broker/credentials to enable the dropdown.
+                        </p>
+                      </>
+                    )}
                     {exchangeMode === 'LIVE' && (
                       <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#dc2626' }}>
                         Live mode places real orders. Ensure your risk limits are configured before starting.

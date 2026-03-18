@@ -416,14 +416,44 @@ export class SocialStorageService {
     items_24h: number;
     trending_topics: number;
     bot_filtered_24h: number;
-    sources: SourceMetadata[];
+    sources: Array<{
+      source: string;
+      total_items: number;
+      items_24h: number;
+      fetch_count_today: number;
+      error_count_today: number;
+      last_fetched_at?: string;
+      status: string;
+    }>;
   } {
     const db = this.requireDb();
     const total = (db.prepare('SELECT COUNT(*) AS cnt FROM social_media_items').get() as { cnt: number }).cnt;
     const h24 = (db.prepare(`SELECT COUNT(*) AS cnt FROM social_media_items WHERE fetched_at >= datetime('now', '-24 hours')`).get() as { cnt: number }).cnt;
     const botFiltered = (db.prepare(`SELECT COUNT(*) AS cnt FROM social_media_items WHERE bot_score >= 0.8 AND fetched_at >= datetime('now', '-24 hours')`).get() as { cnt: number }).cnt;
     const topics = (db.prepare('SELECT COUNT(*) AS cnt FROM trending_topics').get() as { cnt: number }).cnt;
-    const sources = this.getAllSourceMeta();
+    const rawSources = this.getAllSourceMeta();
+
+    // Compute per-source item counts from the items table
+    const perSourceTotal = db.prepare(
+      'SELECT source, COUNT(*) AS cnt FROM social_media_items GROUP BY source'
+    ).all() as Array<{ source: string; cnt: number }>;
+    const perSource24h = db.prepare(
+      `SELECT source, COUNT(*) AS cnt FROM social_media_items WHERE fetched_at >= datetime('now', '-24 hours') GROUP BY source`
+    ).all() as Array<{ source: string; cnt: number }>;
+
+    const totalMap = new Map(perSourceTotal.map(r => [r.source, r.cnt]));
+    const h24Map   = new Map(perSource24h.map(r => [r.source, r.cnt]));
+
+    const sources = rawSources.map(s => ({
+      source:            s.source,
+      total_items:       totalMap.get(s.source) ?? 0,
+      items_24h:         h24Map.get(s.source)   ?? 0,
+      fetch_count_today: s.items_fetched_today,
+      error_count_today: s.error_count,
+      last_fetched_at:   s.last_fetch_timestamp ?? undefined,
+      status:            s.status,
+    }));
+
     return { total_items: total, items_24h: h24, trending_topics: topics, bot_filtered_24h: botFiltered, sources };
   }
 
