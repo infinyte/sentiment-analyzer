@@ -258,6 +258,11 @@ export class CoinbaseAdapter extends ExchangeAdapter {
     return this.placeOrder(symbol, 'SELL', position.quantity);
   }
 
+  /** No persistent connection to close (stateless HTTP). */
+  async disconnect(): Promise<void> {
+    logger.info('Coinbase adapter disconnected', { mode: this.mode });
+  }
+
   // ── Safety guard ─────────────────────────────────────────────────────────
 
   private validateOrder(

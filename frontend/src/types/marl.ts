@@ -6,6 +6,7 @@
 export type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 export type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 export type SymbolSelectionMode = 'MANUAL' | 'AUTO';
+export type ExchangeMode = 'SIMULATED' | 'PAPER' | 'LIVE';
 
 export interface CompetitionAgent {
   id: string;
@@ -24,6 +25,8 @@ export interface CompetitionConfig {
   refreshInterval: number;
   evolutionaryRounds?: number;
   learningEnabled: boolean;
+  exchangeMode?: ExchangeMode;
+  brokerCredentialId?: string;
 }
 
 export interface ScoredCoinEntry {

@@ -5,6 +5,7 @@ import type {
   CompetitionConfig,
   CompetitionAgent as CompetitionAgentSpec,
   SymbolSelectionMode,
+  ExchangeMode,
   CoinUniverseResponse,
   ScoredCoinEntry,
 } from '../types/marl';
@@ -174,6 +175,8 @@ export function MarlCompetitionViewer() {
   const [duration, setDuration] = useState(200);
   const [evolutionaryRounds, setEvolutionaryRounds] = useState(3);
   const [learningEnabled, setLearningEnabled] = useState(true);
+  const [exchangeMode, setExchangeMode] = useState<ExchangeMode>('SIMULATED');
+  const [brokerCredentialId, setBrokerCredentialId] = useState('');
 
   // ── Compare form state ────────────────────────────────────────────────────
   const [showCompare, setShowCompare] = useState(false);
@@ -200,6 +203,8 @@ export function MarlCompetitionViewer() {
       refreshInterval: 1000,
       evolutionaryRounds: mode === 'EVOLUTIONARY' ? evolutionaryRounds : undefined,
       learningEnabled,
+      exchangeMode,
+      brokerCredentialId: exchangeMode !== 'SIMULATED' ? brokerCredentialId.trim() || undefined : undefined,
     };
     startCompetition(config);
   };
@@ -408,6 +413,47 @@ export function MarlCompetitionViewer() {
                 <input type="checkbox" id="learning" checked={learningEnabled}
                   onChange={e => setLearningEnabled(e.target.checked)} />
                 <label htmlFor="learning" style={{ ...label, marginBottom: 0 }}>Q-Learning Enabled</label>
+              </div>
+
+              {/* Exchange mode */}
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={label}>Trading Mode</label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                  {(['SIMULATED', 'PAPER', 'LIVE'] as ExchangeMode[]).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setExchangeMode(m)}
+                      style={{
+                        ...btn(exchangeMode === m
+                          ? m === 'LIVE' ? '#dc2626' : m === 'PAPER' ? '#d97706' : '#2563eb'
+                          : '#e5e7eb'),
+                        color: exchangeMode === m ? '#fff' : '#374151',
+                        fontSize: '0.8rem',
+                        padding: '0.35rem 1rem',
+                      }}
+                    >
+                      {m === 'SIMULATED' ? 'Simulated' : m === 'PAPER' ? 'Paper Trading' : 'Live Trading'}
+                    </button>
+                  ))}
+                </div>
+                {exchangeMode !== 'SIMULATED' && (
+                  <div>
+                    <label style={label}>Broker Credential ID</label>
+                    <input
+                      style={input}
+                      value={brokerCredentialId}
+                      onChange={e => setBrokerCredentialId(e.target.value)}
+                      placeholder="UUID from POST /api/marl/broker/credentials"
+                      required
+                    />
+                    {exchangeMode === 'LIVE' && (
+                      <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#dc2626' }}>
+                        Live mode places real orders. Ensure your risk limits are configured before starting.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
 

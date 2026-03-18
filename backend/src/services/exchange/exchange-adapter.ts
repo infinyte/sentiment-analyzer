@@ -58,6 +58,9 @@ export abstract class ExchangeAdapter {
 
   abstract authenticate(credentials: Record<string, unknown>): Promise<void>;
 
+  /** Gracefully close any open connections. No-op for stateless HTTP adapters. */
+  async disconnect(): Promise<void> { /* no-op by default */ }
+
   abstract getAccount(): Promise<ExchangeAccount>;
 
   abstract getPrice(symbol: string): Promise<ExchangePrice>;

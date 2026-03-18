@@ -19,7 +19,9 @@
       "Read(//c/Users/kmitc/.claude/projects/C--work-sentiment-analyzer/memory/**)",
       "Bash(npx jest:*)",
       "Bash(npx tsc:*)",
-      "Bash(find C:worksentiment-analyzer -type f \\\\\\(-name TODO* -o -name ROADMAP* -o -name PHASES* -o -name PLAN* \\\\\\))"
+      "Bash(find C:worksentiment-analyzer -type f \\\\\\(-name TODO* -o -name ROADMAP* -o -name PHASES* -o -name PLAN* \\\\\\))",
+      "Bash(xargs -I {} basename {} .ts)",
+      "Bash(git:*)"
     ]
   }
 }
