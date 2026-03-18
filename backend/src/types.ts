@@ -48,6 +48,7 @@ export interface Sentiment {
   scored_items?: ScoredSentimentItem[];
   source_breakdown?: SentimentSourceBreakdown[];
   collection_stats?: SentimentCollectionStats;
+  feature_attribution?: Record<string, number>;
 }
 
 export type SentimentContentSource = 'newsapi' | 'reddit' | 'x';
@@ -72,6 +73,7 @@ export interface ScoredSentimentItem {
   sarcasm_flagged?: boolean;
   /** True when ABSA context window was used instead of full text. */
   context_window_used?: boolean;
+  feature_attribution?: Record<string, number>;
 }
 
 export interface SentimentSourceBreakdown {

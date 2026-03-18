@@ -549,6 +549,31 @@ export class StorageService {
 
       CREATE INDEX IF NOT EXISTS idx_agent_competitions_agent ON agent_competitions (agent_id, completed_at DESC);
       CREATE INDEX IF NOT EXISTS idx_agent_competitions_comp  ON agent_competitions (competition_id);
+
+      -- ── Phase 2: Genealogy & Genome ──────────────────────────────────────────
+
+      CREATE TABLE IF NOT EXISTS agent_genealogy (
+        id                  TEXT PRIMARY KEY,
+        agent_id            TEXT NOT NULL REFERENCES agent_registry(id),
+        parent_1_id         TEXT REFERENCES agent_registry(id),
+        parent_2_id         TEXT REFERENCES agent_registry(id),
+        breeding_date       TEXT NOT NULL DEFAULT (datetime('now')),
+        breeding_generation INTEGER NOT NULL DEFAULT 0,
+        inherited_genes     TEXT,    -- JSON: {param: "parent1"|"parent2"|"blend"}
+        mutations_applied   TEXT,    -- JSON: [{param, old, new}]
+        mutation_severity   REAL    NOT NULL DEFAULT 0,
+        offspring_count     INTEGER NOT NULL DEFAULT 0
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_genealogy_agent  ON agent_genealogy (agent_id);
+      CREATE INDEX IF NOT EXISTS idx_genealogy_p1     ON agent_genealogy (parent_1_id);
+      CREATE INDEX IF NOT EXISTS idx_genealogy_p2     ON agent_genealogy (parent_2_id);
+
+      CREATE TABLE IF NOT EXISTS agent_genomes (
+        agent_id   TEXT PRIMARY KEY REFERENCES agent_registry(id),
+        genome     TEXT NOT NULL,    -- JSON blob of AgentGenome
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
   }
 

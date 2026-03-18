@@ -67,6 +67,8 @@ export interface ScoredSocialItem extends SocialMediaItem {
   /** True when ABSA context-window extraction was applied to focus scoring
    *  on the target coin mention rather than the full text. */
   context_window_used?: boolean;
+  /** Weighted contribution of each component to score_composite. */
+  feature_attribution?: Record<string, number>;
 }
 
 // ── Trending topic ────────────────────────────────────────────────────────────

@@ -261,6 +261,7 @@ describe('GET /api/coins/:symbol', () => {
     expect(res.body).toHaveProperty('scored_items');
     expect(res.body.coin.symbol).toBe('BTC');
     expect(res.body.sentiment_today.trending_score).toBe(42);
+    expect(res.body.sentiment_today.feature_attribution).toBeDefined();
     expect(res.body.scored_items[0]).toMatchObject({
       source: 'newsapi',
       title: 'Bitcoin surges',

@@ -91,6 +91,31 @@ describe('analyzeAdvancedSentimentAsync', () => {
     expect(result.confidence).toBeGreaterThanOrEqual(0);
     expect(result.confidence).toBeLessThanOrEqual(1);
     expect(['LOW', 'MEDIUM', 'HIGH']).toContain(result.risk_level);
+    expect(result.feature_attribution).toBeDefined();
+  });
+
+  it('returns feature attribution that sums to the advanced composite within tolerance', async () => {
+    const result = await analyzer.analyzeAdvancedSentimentAsync(
+      makeMarket(),
+      makeNews(['Bitcoin breakout adoption rally'], { sentiment_score: 'BULL', sentiment_confidence: 0.7 }),
+      undefined,
+      makeUnavailableFinBert(),
+      makeOnChain()
+    );
+
+    const attributionSum = Object.values(result.feature_attribution).reduce((sum, value) => sum + value, 0);
+    // The composite uses: baseWeights.volatility * (-volatility_score) where baseWeights.volatility = -0.10
+    // so volatility contributes: -0.10 * (-vol) = +0.10 * vol (high vol is negative pressure, inverted in signal)
+    // With onChainWeight=0.15 and techWeight=0, scale = 1/(0.30+0.25+0.10+0.20+0.15) = 1.0
+    const composite =
+      0.30 * result.news_score +
+      0.25 * result.momentum_score +
+      0.10 * result.volatility_score +
+      0.20 * result.volume_score +
+      0.15 * result.rsi_score +
+      0.15 * (result.on_chain_score ?? 0);
+
+    expect(attributionSum).toBeCloseTo(composite, 3);
   });
 
   it('uses FinBERT score when available and result is not null', async () => {
@@ -395,5 +420,92 @@ describe('generateTradingSignalsAsync', () => {
     expect(withMomentum.reasoning).toMatch(/Social sentiment momentum is deteriorating/);
     expect(withMomentum.strength).toBeGreaterThan(withoutMomentum.strength);
     expect(['SELL', 'HOLD']).toContain(withMomentum.signal);
+  });
+});
+
+// ── feature_attribution ───────────────────────────────────────────────────────
+
+describe('feature_attribution (SHAP-style)', () => {
+  it('analyzeAdvancedSentiment returns feature_attribution field', () => {
+    const result = analyzer.analyzeAdvancedSentiment(makeMarket(), makeNews());
+    expect(result.feature_attribution).toBeDefined();
+    expect(typeof result.feature_attribution).toBe('object');
+  });
+
+  it('feature_attribution values are all numbers', () => {
+    const result = analyzer.analyzeAdvancedSentiment(makeMarket(), makeNews(['Bitcoin rally surge']));
+    for (const value of Object.values(result.feature_attribution)) {
+      expect(typeof value).toBe('number');
+      expect(isFinite(value)).toBe(true);
+    }
+  });
+
+  it('feature_attribution keys include news, momentum, volatility, volume (no technical/on_chain when not provided)', () => {
+    const result = analyzer.analyzeAdvancedSentiment(makeMarket(), makeNews());
+    const keys = Object.keys(result.feature_attribution);
+    expect(keys).toContain('news');
+    expect(keys).toContain('momentum');
+    expect(keys).toContain('volatility');
+    expect(keys).toContain('volume');
+    expect(keys).not.toContain('technical');
+    expect(keys).not.toContain('on_chain');
+  });
+
+  it('feature_attribution values sum to composite score (within ±0.001)', () => {
+    const market = makeMarket({ price_change_24h_percent: 5, price_change_7d_percent: 12, volatility_24h: 8, volatility_7d: 12 });
+    const news = makeNews(['Bitcoin surge'], { sentiment_score: 'BULL', sentiment_confidence: 0.7 });
+    const result = analyzer.analyzeAdvancedSentiment(market, news);
+
+    // Re-derive composite from individual scores using same formula
+    const baseWeights = { news: 0.30, momentum: 0.25, volatility: -0.10, volume: 0.20 };
+    const techWeight = 0; // no technical
+    const onChainWeight = 0; // no on_chain
+    const scale = 1 / (0.30 + 0.25 + 0.10 + 0.20 + techWeight + onChainWeight);
+    const composite =
+      (baseWeights.news * result.news_score +
+        baseWeights.momentum * result.momentum_score +
+        baseWeights.volatility * (-result.volatility_score) +
+        baseWeights.volume * result.volume_score) * scale;
+
+    const attrSum = Object.values(result.feature_attribution).reduce((s, v) => s + v, 0);
+    expect(attrSum).toBeCloseTo(composite, 3);
+  });
+
+  it('with on_chain data, on_chain appears in feature_attribution', () => {
+    const result = analyzer.analyzeAdvancedSentiment(makeMarket(), makeNews(), undefined, makeOnChain());
+    expect(result.feature_attribution).toHaveProperty('on_chain');
+    expect(typeof result.feature_attribution['on_chain']).toBe('number');
+  });
+
+  it('with technical data, technical appears in feature_attribution', () => {
+    const result = analyzer.analyzeAdvancedSentiment(makeMarket(), makeNews(), { rsi_14: 60 });
+    expect(result.feature_attribution).toHaveProperty('technical');
+    expect(typeof result.feature_attribution['technical']).toBe('number');
+  });
+
+  it('analyzeAdvancedSentimentAsync also returns feature_attribution', async () => {
+    const result = await analyzer.analyzeAdvancedSentimentAsync(
+      makeMarket(), makeNews(), undefined, makeUnavailableFinBert()
+    );
+    expect(result.feature_attribution).toBeDefined();
+    expect(typeof result.feature_attribution).toBe('object');
+    expect(Object.keys(result.feature_attribution).length).toBeGreaterThan(0);
+  });
+
+  it('async feature_attribution values sum to composite score (within ±0.001)', async () => {
+    const market = makeMarket({ price_change_24h_percent: -3, price_change_7d_percent: -8 });
+    const news = makeNews(['Bitcoin crash'], { sentiment_score: 'BEAR', sentiment_confidence: 0.6 });
+    const result = await analyzer.analyzeAdvancedSentimentAsync(market, news, undefined, makeUnavailableFinBert());
+
+    const baseWeights = { news: 0.30, momentum: 0.25, volatility: -0.10, volume: 0.20 };
+    const scale = 1 / (0.30 + 0.25 + 0.10 + 0.20);
+    const composite =
+      (baseWeights.news * result.news_score +
+        baseWeights.momentum * result.momentum_score +
+        baseWeights.volatility * (-result.volatility_score) +
+        baseWeights.volume * result.volume_score) * scale;
+
+    const attrSum = Object.values(result.feature_attribution).reduce((s, v) => s + v, 0);
+    expect(attrSum).toBeCloseTo(composite, 3);
   });
 });

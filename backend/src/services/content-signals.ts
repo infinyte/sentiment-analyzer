@@ -7,6 +7,7 @@ import type {
 import logger from '../logger.js';
 import { NewsAPIService } from './newsapi.js';
 import { detectSarcasm } from './social-media/scoring/sarcasm-detector.js';
+import { normalizeText } from './social-media/scoring/normalize-text.js';
 
 type NormalizedSourceItem = {
   id: string;
@@ -225,7 +226,7 @@ export class ContentSignalService {
   }
 
   private scoreItem(item: NormalizedSourceItem, topic: string, symbol: string, targetCoin?: string): ScoredSentimentItem {
-    const combinedText = `${item.title} ${item.body}`.trim().toLowerCase();
+    const combinedText = normalizeText(`${item.title} ${item.body}`.trim()).toLowerCase();
 
     // ── ABSA: extract context window around the target coin mention ────────────
     let scoringText = combinedText;

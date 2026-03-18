@@ -100,6 +100,7 @@ interface CoinSentimentDetail {
   source_breakdown: SentimentSourceBreakdown[];
   collection_stats?: SentimentCollectionStats;
   trending_sentiment?: TrendingSentiment;
+  feature_attribution?: Record<string, number>;
 }
 
 interface CoinDetail extends Coin {
@@ -613,6 +614,39 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                   </p>
                 )}
               </div>
+
+              {/* Score Attribution */}
+              {detail.sentiment_today?.feature_attribution &&
+               Object.keys(detail.sentiment_today.feature_attribution).length > 0 && (() => {
+                const fa = detail.sentiment_today!.feature_attribution!;
+                const total = Object.values(fa).reduce((s, v) => s + Math.abs(v), 0);
+                const entries = Object.entries(fa);
+                return (
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', borderLeft: '4px solid #8b5cf6' }}>
+                    <h3 style={{ margin: '0 0 0.875rem 0', fontSize: '1rem', fontWeight: '700' }}>Score Attribution</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.625rem' }}>
+                      {entries.map(([key, value]) => {
+                        const barPct = total > 0 ? Math.abs(value) / total * 100 : 0;
+                        const barColor = value >= 0 ? '#3b82f6' : '#ef4444';
+                        const label = key.charAt(0).toUpperCase() + key.slice(1);
+                        return (
+                          <div key={key}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.2rem' }}>
+                              <span>{label}</span>
+                              <span style={{ fontWeight: '700', color: value >= 0 ? '#3b82f6' : '#ef4444' }}>
+                                {(value >= 0 ? '+' : '') + value.toFixed(3)}
+                              </span>
+                            </div>
+                            <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                              <div style={{ height: '100%', width: `${Math.min(barPct, 100)}%`, backgroundColor: barColor, borderRadius: '3px' }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Multi-Source Trending Signal */}
               {detail.sentiment_today?.trending_sentiment && (() => {

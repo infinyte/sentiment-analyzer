@@ -166,6 +166,12 @@ router.get('/api/social-media/item/:id', (req, res) => {
         score_composite:     item.score_composite,
         context_window_used: item.context_window_used ?? false,
         weights: { sentiment: '30%', engagement: '25%', authority: '25%', recency: '20%' },
+        feature_attribution: {
+          sentiment:  parseFloat((item.score_sentiment  * 0.30).toFixed(4)),
+          engagement: parseFloat((item.score_engagement * 0.25).toFixed(4)),
+          authority:  parseFloat((item.score_authority  * 0.25).toFixed(4)),
+          recency:    parseFloat((item.score_recency    * 0.20).toFixed(4)),
+        },
       },
     });
   } catch (err) {

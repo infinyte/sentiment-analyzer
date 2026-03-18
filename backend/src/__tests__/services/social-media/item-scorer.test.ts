@@ -14,7 +14,9 @@ jest.mock('../../../services/finbert', () => ({
   finBertService: { isAvailable: () => false, analyze: jest.fn(), toSentimentScore: jest.fn() },
 }));
 
+import { performance } from 'node:perf_hooks';
 import { scoreItem, scoreItems, scoreItemAsync } from '../../../services/social-media/scoring/item-scorer';
+import { normalizeText } from '../../../services/social-media/scoring/normalize-text';
 import type { SocialMediaItem } from '../../../types/social-media';
 
 function makeItem(overrides: Partial<SocialMediaItem> = {}): SocialMediaItem {
@@ -128,6 +130,13 @@ describe('scoreItem', () => {
     expect(scored.score_composite).toBeCloseTo(expected, 1);
   });
 
+  it('includes feature attribution that sums to composite score', () => {
+    const scored = scoreItem(makeItem());
+    const attributionSum = Object.values(scored.feature_attribution ?? {}).reduce((sum, value) => sum + value, 0);
+    // score_composite is toFixed(2)-rounded; attribution values use toFixed(3), so allow ±0.05 tolerance
+    expect(attributionSum).toBeCloseTo(scored.score_composite, 1);
+  });
+
   // ── Coin extraction fallback ─────────────────────────────────────────────────
 
   it('populates coins_mentioned from content if the field was empty', () => {
@@ -187,6 +196,7 @@ describe('scoreItemAsync — context_window_used (ABSA)', () => {
     expect(scored.score_recency).toBeGreaterThanOrEqual(0);
     expect(scored.score_authority).toBeGreaterThanOrEqual(0);
     expect(scored.score_composite).toBeGreaterThanOrEqual(0);
+    expect(scored.feature_attribution).toBeDefined();
   });
 
   it('multi-coin post: scores based on context window around primary coin', async () => {
@@ -207,5 +217,31 @@ describe('scoreItemAsync — context_window_used (ABSA)', () => {
     // Both should have used context windows
     expect(btcScored.context_window_used).toBe(true);
     expect(ethScored.context_window_used).toBe(true);
+  });
+});
+
+describe('normalizeText', () => {
+  it('normalizes NFKC lookalike characters', () => {
+    expect(normalizeText('ＢＴＣ ｓｕｒｇｅ')).toBe('BTC surge');
+  });
+
+  it('collapses repeated characters', () => {
+    expect(normalizeText('mooooon')).toBe('moon');
+  });
+
+  it('maps crypto slang from the configured dictionary', () => {
+    expect(normalizeText('hodl BTC wen moon gm')).toBe('hold BTC when moon good morning');
+  });
+
+  it('preserves clean text', () => {
+    expect(normalizeText('Bitcoin rally today')).toBe('Bitcoin rally today');
+  });
+
+  it('processes text in under 5ms per item on average', () => {
+    const samples = Array.from({ length: 500 }, () => 'ＢＴＣ mooooon hodl wen gm https://example.com @trader');
+    const start = performance.now();
+    for (const sample of samples) normalizeText(sample);
+    const avgMs = (performance.now() - start) / samples.length;
+    expect(avgMs).toBeLessThan(5);
   });
 });

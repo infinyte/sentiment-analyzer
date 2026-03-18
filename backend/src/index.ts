@@ -400,6 +400,26 @@ app.get('/api/coins/:symbol', async (req, res) => {
     const trendRecord = buildTrendingMap().get(symbol.toUpperCase());
     const trendingSentiment = trendRecord ? trendRecordToSentiment(trendRecord) : undefined;
 
+    // Compute feature attribution from available market data
+    const marketForAttrib: MarketData = {
+      symbol: coin.symbol,
+      price_usd: coin.price_usd,
+      price_change_24h_percent: coin.price_change_24h_percent,
+      price_change_7d_percent: coin.price_change_7d_percent,
+      volatility_24h: coin.volatility_24h,
+      volatility_7d: coin.volatility_24h * 1.5,
+      volume_24h_usd: coin.volume_24h_usd,
+      market_cap_usd: coin.market_cap_usd,
+      market_rank: coin.market_rank,
+    };
+    const newsForAttrib: NewsData = {
+      headlines,
+      sentiment_score: sentimentData.sentiment_score,
+      sentiment_confidence: sentimentData.confidence,
+      sentiment_summary: sentimentData.summary,
+    };
+    const featureAttribution = analyzer.analyzeAdvancedSentiment(marketForAttrib, newsForAttrib, undefined, onChainMetrics).feature_attribution;
+
     res.json({
       coin: trendingSentiment
         ? { ...coin, sentiment_score: trendingSentiment.sentiment, sentiment_confidence: trendingSentiment.composite_score / 100, trending_sentiment: trendingSentiment }
@@ -417,6 +437,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
         source_breakdown: sentimentData.source_breakdown ?? [],
         collection_stats: sentimentData.collection_stats,
         trending_sentiment: trendingSentiment,
+        feature_attribution: featureAttribution,
       },
       scored_items: sentimentData.scored_items ?? [],
       headlines: headlines.slice(0, 10),

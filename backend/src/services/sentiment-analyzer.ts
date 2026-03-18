@@ -52,6 +52,7 @@ export interface AdvancedAnalysisResult {
   on_chain_score?: number; // –1 to 1 (net exchange flows + activity + whale proxy)
   summary: string;
   risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  feature_attribution: Record<string, number>;
 }
 
 export interface TradingSignal {
@@ -169,6 +170,15 @@ export class SentimentAnalyzerEngine {
     const sentiment = this.scoreToSentiment(composite);
     const confidence = Math.min(Math.abs(composite) * 1.5, 1);
 
+    const feature_attribution: Record<string, number> = {
+      news:       baseWeights.news * news_score * scale,
+      momentum:   baseWeights.momentum * momentum_score * scale,
+      volatility: baseWeights.volatility * (-volatility_score) * scale,
+      volume:     baseWeights.volume * volume_score * scale,
+    };
+    if (techWeight > 0)    feature_attribution['technical'] = techWeight * rsi_score * scale;
+    if (onChainWeight > 0) feature_attribution['on_chain']  = onChainWeight * (on_chain_score ?? 0) * scale;
+
     return {
       symbol: market.symbol,
       sentiment,
@@ -181,6 +191,7 @@ export class SentimentAnalyzerEngine {
       on_chain_score,
       summary: this.buildAdvancedSummary(market.symbol, sentiment, composite, risk_level, on_chain_score),
       risk_level,
+      feature_attribution,
     };
   }
 
@@ -364,6 +375,15 @@ export class SentimentAnalyzerEngine {
     const sentiment = this.scoreToSentiment(composite);
     const confidence = Math.min(Math.abs(composite) * 1.5, 1);
 
+    const feature_attribution: Record<string, number> = {
+      news:       baseWeights.news * news_score * scale,
+      momentum:   baseWeights.momentum * momentum_score * scale,
+      volatility: baseWeights.volatility * (-volatility_score) * scale,
+      volume:     baseWeights.volume * volume_score * scale,
+    };
+    if (techWeight > 0)    feature_attribution['technical'] = techWeight * rsi_score * scale;
+    if (onChainWeight > 0) feature_attribution['on_chain']  = onChainWeight * (on_chain_score ?? 0) * scale;
+
     return {
       symbol: market.symbol,
       sentiment,
@@ -376,6 +396,7 @@ export class SentimentAnalyzerEngine {
       on_chain_score,
       summary: this.buildAdvancedSummary(market.symbol, sentiment, composite, risk_level, on_chain_score),
       risk_level,
+      feature_attribution,
     };
   }
 

@@ -14,6 +14,7 @@
 import { SentimentAnalyzerEngine } from '../../sentiment-analyzer.js';
 import { extractCoins } from './coin-extractor.js';
 import { detectSarcasm } from './sarcasm-detector.js';
+import { normalizeText } from './normalize-text.js';
 import { finBertService } from '../../finbert.js';
 import type { SocialMediaItem, ScoredSocialItem, SocialSource } from '../../../types/social-media.js';
 
@@ -172,6 +173,15 @@ function scoreAuthority(item: SocialMediaItem): number {
 
 const WEIGHTS = { sentiment: 0.30, engagement: 0.25, authority: 0.25, recency: 0.20 };
 
+function buildFeatureAttribution(scoreSentiment: number, scoreEngagement: number, scoreAuthority: number, scoreRecency: number): Record<string, number> {
+  return {
+    sentiment: Number((scoreSentiment * WEIGHTS.sentiment).toFixed(3)),
+    engagement: Number((scoreEngagement * WEIGHTS.engagement).toFixed(3)),
+    authority: Number((scoreAuthority * WEIGHTS.authority).toFixed(3)),
+    recency: Number((scoreRecency * WEIGHTS.recency).toFixed(3)),
+  };
+}
+
 function buildBotAuditRecord(item: SocialMediaItem, coins: string[]): ScoredSocialItem {
   return {
     ...item,
@@ -183,6 +193,12 @@ function buildBotAuditRecord(item: SocialMediaItem, coins: string[]): ScoredSoci
     score_recency: 0,
     score_authority: 0,
     score_composite: 0,
+    feature_attribution: {
+      sentiment: 15,
+      engagement: 0,
+      authority: 0,
+      recency: 0,
+    },
     last_updated: new Date().toISOString(),
   };
 }
@@ -190,7 +206,7 @@ function buildBotAuditRecord(item: SocialMediaItem, coins: string[]): ScoredSoci
 // ── Public API ─────────────────────────────────────────────────────────────────
 
 export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
-  const fullText = [item.title, item.content].filter(Boolean).join(' ');
+  const fullText = normalizeText([item.title, item.content].filter(Boolean).join(' '));
   const coins = item.coins_mentioned.length
     ? item.coins_mentioned
     : extractCoins(fullText);
@@ -210,6 +226,7 @@ export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
     authScore         * WEIGHTS.authority +
     recScore          * WEIGHTS.recency
   ).toFixed(2));
+  const feature_attribution = buildFeatureAttribution(sentResult.score, engScore, authScore, recScore);
 
   return {
     ...item,
@@ -221,6 +238,7 @@ export function scoreItem(item: SocialMediaItem): ScoredSocialItem {
     score_recency:    recScore,
     score_authority:  authScore,
     score_composite:  composite,
+    feature_attribution,
     last_updated: new Date().toISOString(),
   };
 }
@@ -292,7 +310,7 @@ function extractContextWindow(text: string, target: string, windowSize = 50): st
  * The sync scoreItem() is unchanged so existing callers keep working.
  */
 export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocialItem> {
-  const fullText = [item.title, item.content].filter(Boolean).join(' ');
+  const fullText = normalizeText([item.title, item.content].filter(Boolean).join(' '));
   const coins = item.coins_mentioned.length ? item.coins_mentioned : extractCoins(fullText);
 
   if ((item.bot_score ?? 0) >= 0.8) {
@@ -368,6 +386,7 @@ export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocia
     authScore         * WEIGHTS.authority +
     recScore          * WEIGHTS.recency
   ).toFixed(2));
+  const feature_attribution = buildFeatureAttribution(sentResult.score, engScore, authScore, recScore);
 
   return {
     ...item,
@@ -380,6 +399,7 @@ export async function scoreItemAsync(item: SocialMediaItem): Promise<ScoredSocia
     score_recency:    recScore,
     score_authority:  authScore,
     score_composite:  composite,
+    feature_attribution,
     sarcasm_flagged:  sarcasmResult.sarcastic,
     finbert_used,
     context_window_used,

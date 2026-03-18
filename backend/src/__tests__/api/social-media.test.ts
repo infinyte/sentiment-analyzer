@@ -243,6 +243,12 @@ describe('Social Media API routes', () => {
           score_recency: 90,
           score_authority: 40,
           score_composite: 82,
+          feature_attribution: {
+            sentiment: 21,
+            engagement: 12.5,
+            authority: 10,
+            recency: 18,
+          },
           last_updated: '2026-03-17T11:05:00.000Z',
         },
       ],
@@ -250,6 +256,37 @@ describe('Social Media API routes', () => {
       limit: 1,
       offset: 0,
       nextCursor: 'opaque-cursor-token',
+    });
+
+    socialStoreMock.getItem.mockReturnValue({
+      id: 'item-1',
+      source: 'reddit',
+      source_id: 'post-1',
+      content: 'BTC is trending',
+      title: 'BTC is trending',
+      author: 'trader',
+      engagement_likes: 20,
+      engagement_shares: 4,
+      engagement_comments: 3,
+      content_created_at: '2026-03-17T11:00:00.000Z',
+      fetched_at: '2026-03-17T11:05:00.000Z',
+      url: 'https://example.com/post-1',
+      coins_mentioned: ['BTC'],
+      metadata: {},
+      sentiment_score: 0.5,
+      sentiment_confidence: 0.9,
+      score_sentiment: 70,
+      score_engagement: 50,
+      score_recency: 90,
+      score_authority: 40,
+      score_composite: 61.5,
+      feature_attribution: {
+        sentiment: 21,
+        engagement: 12.5,
+        authority: 10,
+        recency: 18,
+      },
+      last_updated: '2026-03-17T11:05:00.000Z',
     });
   });
 
@@ -297,6 +334,18 @@ describe('Social Media API routes', () => {
       h24_avg: 55,
       roc_1h: 5,
       roc_6h: 8,
+    });
+  });
+
+  it('returns feature attribution on the item endpoint', async () => {
+    const res = await request(app).get('/api/social-media/item/item-1');
+
+    expect(res.status).toBe(200);
+    expect(res.body.scoring_breakdown.feature_attribution).toMatchObject({
+      sentiment: 21,
+      engagement: 12.5,
+      authority: 10,
+      recency: 18,
     });
   });
 });
