@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Sentiment Analyzer — Showcase</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <img src="iturn0image31" alt="Sentiment Analyzer logo" class="logo" />
+    <h1>Sentiment Analyzer</h1>
+    <p class="tagline">Real-time crypto sentiment, MARL tournaments, and social media intelligence.</p>
+    <p class="ctas">
+      <a class="btn" href="https://github.com/your-org/your-repo" target="_blank" rel="noopener">View Repo</a>
+      <a class="btn ghost" href="#quickstart">Quick Start</a>
+    </p>
+  </header>
+
+  <main class="container">
+    <section id="about">
+      <h2>What it does</h2>
+      <p>Real-time cryptocurrency sentiment analysis platform combining market data, news, and social signals into Bull / Neutral / Bear outputs and trend reports.</p>
+      <p class="quote">"Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence."</p>
+    </section>
+
+    <section id="features">
+      <h2>Key features</h2>
+      <ul>
+        <li><strong>Live market data</strong> — CoinGecko OHLCV and price feeds</li>
+        <li><strong>Social intelligence</strong> — 7-source scraper, sarcasm detection, FinBERT optional</li>
+        <li><strong>MARL</strong> — Multi-agent tournaments, evolutionary orchestrator, paper/live broker adapters</li>
+        <li><strong>Backtesting</strong> — Day-by-day simulation and equity curves</li>
+      </ul>
+    </section>
+
+    <section id="quickstart">
+      <h2>Quick Start</h2>
+      <pre><code># Backend (localhost:3000)
+cd backend
+npm install
+cp .env.example .env
+npm run dev
+
+# Frontend (localhost:5173)
+cd frontend
+npm install
+npm run dev
+</code></pre>
+    </section>
+
+    <section id="api">
+      <h2>API highlights</h2>
+      <p>Core endpoints: <code>/api/coins</code>, <code>/api/coins/:symbol</code>, <code>/api/sentiment/:symbol</code>, <code>/api/marl/competition/start</code>.</p>
+      <details>
+        <summary>Example: start a SINGLE tournament</summary>
+        <pre><code>curl -s -X POST http://localhost:3000/api/marl/competition/start \
+  -H "Content-Type: application/json" \
+  -d '{ "mode":"SINGLE", "agents":[{"id":"alpha","riskProfile":"AGGRESSIVE"}], "symbols":["BTC"], "duration":200 }'</code></pre>
+      </details>
+    </section>
+
+    <section id="architecture">
+      <h2>Architecture & Project Structure</h2>
+      <img src="iturn0image1" alt="Architecture diagram" class="diagram" />
+      <pre class="filetree"><code>sentiment-analyzer/
+├── backend/
+├── frontend/
+├── docs/
+└── .github/</code></pre>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <p>Cost note: daily sentiment batch for 50 coins ~ $6–15/month (Claude API). See DEPLOYMENT_GUIDE.md for Azure steps.</p>
+    <p><a href="https://github.com/your-org/your-repo" rel="noopener">Repository</a> · License: MIT</p>
+  </footer>
+
+  <script src="script.js"></script>
+</body>
+</html>
