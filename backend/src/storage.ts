@@ -574,6 +574,17 @@ export class StorageService {
         genome     TEXT NOT NULL,    -- JSON blob of AgentGenome
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+
+      -- ── Phase 2: Evolutionary Tournaments ────────────────────────────────────
+
+      CREATE TABLE IF NOT EXISTS evolutionary_tournaments (
+        id         TEXT PRIMARY KEY,
+        name       TEXT NOT NULL,
+        started_at TEXT NOT NULL,
+        payload    TEXT NOT NULL    -- full TournamentRecord JSON (incl. generations)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_evo_tournaments_started ON evolutionary_tournaments (started_at DESC);
     `);
   }
 

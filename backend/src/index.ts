@@ -25,6 +25,8 @@ import marlRoutes from './routes/marl-competition.js';
 import marlRealTradingRoutes from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
+import { createEvolutionaryRouter } from './routes/evolutionary.js';
+import { createTradingRouter }      from './routes/trading.js';
 import { brokerRegistry } from './services/brokers/broker-registry.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
@@ -946,9 +948,13 @@ app.use(socialMediaRoutes);
 // Agent stats routes — requires an active DB connection
 if (storage.isHealthy()) {
   app.use(createAgentStatsRouter(storage.getDb()));
+  app.use(createEvolutionaryRouter(storage.getDb()));
 } else {
   logger.warn('agent-stats routes skipped (storage not connected)');
 }
+
+// Trading routes (paper / sandbox / live exchange)
+app.use('/api/trading', createTradingRouter());
 
 // 404 handler
 app.use((req, res) => {
