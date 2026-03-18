@@ -4,24 +4,37 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Sentiment Analyzer — Showcase</title>
+  <meta name="description" content="Sentiment Analyzer — real-time crypto sentiment, MARL tournaments, and social media intelligence." />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
   <header class="hero">
-    <img src="iturn0image31" alt="Sentiment Analyzer logo" class="logo" />
+    <!-- Inline SVG placeholder logo (replaces broken image reference) -->
+    <svg class="logo" width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="Sentiment Analyzer logo placeholder" xmlns="http://www.w3.org/2000/svg">
+      <rect x="2" y="2" width="68" height="68" rx="14" fill="currentColor" opacity="0.12" />
+      <path d="M18 44 L30 32 L40 40 L54 26" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+      <circle cx="18" cy="44" r="3" fill="currentColor" />
+      <circle cx="30" cy="32" r="3" fill="currentColor" />
+      <circle cx="40" cy="40" r="3" fill="currentColor" />
+      <circle cx="54" cy="26" r="3" fill="currentColor" />
+    </svg>
+
     <h1>Sentiment Analyzer</h1>
     <p class="tagline">Real-time crypto sentiment, MARL tournaments, and social media intelligence.</p>
-    <p class="ctas">
-      <a class="btn" href="https://github.com/your-org/your-repo" target="_blank" rel="noopener">View Repo</a>
+
+    <nav class="ctas" aria-label="Primary">
+      <a class="btn" href="https://github.com/infinyte/sentiment-analyzer" target="_blank" rel="noopener">View Repo</a>
       <a class="btn ghost" href="#quickstart">Quick Start</a>
-    </p>
+    </nav>
   </header>
 
-  <main class="container">
+  <main id="main" class="container">
     <section id="about">
       <h2>What it does</h2>
       <p>Real-time cryptocurrency sentiment analysis platform combining market data, news, and social signals into Bull / Neutral / Bear outputs and trend reports.</p>
-      <p class="quote">"Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence."</p>
+      <p class="quote">“Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence.”</p>
     </section>
 
     <section id="features">
@@ -56,24 +69,53 @@ npm run dev
         <summary>Example: start a SINGLE tournament</summary>
         <pre><code>curl -s -X POST http://localhost:3000/api/marl/competition/start \
   -H "Content-Type: application/json" \
-  -d '{ "mode":"SINGLE", "agents":[{"id":"alpha","riskProfile":"AGGRESSIVE"}], "symbols":["BTC"], "duration":200 }'</code></pre>
+  -d '{ "mode":"SINGLE", "agents":[{"id":"alpha","riskProfile":"AGGRESSIVE"}], "symbols":["BTC"], "duration":200 }'
+</code></pre>
       </details>
     </section>
 
     <section id="architecture">
-      <h2>Architecture & Project Structure</h2>
-      <img src="iturn0image1" alt="Architecture diagram" class="diagram" />
+      <h2>Architecture &amp; Project Structure</h2>
+
+      <!-- Inline SVG placeholder diagram (replaces broken image reference) -->
+      <svg class="diagram" viewBox="0 0 900 260" role="img" aria-label="Architecture diagram placeholder" xmlns="http://www.w3.org/2000/svg">
+        <rect x="1" y="1" width="898" height="258" rx="18" fill="currentColor" opacity="0.06" stroke="currentColor" stroke-opacity="0.25" />
+
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-opacity="0.35">
+          <line x1="260" y1="130" x2="360" y2="130" />
+          <line x1="540" y1="130" x2="640" y2="130" />
+        </g>
+
+        <g fill="currentColor">
+          <rect x="80" y="80" width="180" height="100" rx="12" opacity="0.12" />
+          <rect x="360" y="80" width="180" height="100" rx="12" opacity="0.12" />
+          <rect x="640" y="80" width="180" height="100" rx="12" opacity="0.12" />
+        </g>
+
+        <g fill="currentColor" opacity="0.85" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-size="18">
+          <text x="170" y="125" text-anchor="middle">Sources</text>
+          <text x="170" y="150" text-anchor="middle" font-size="14" opacity="0.75">News / Social / Market</text>
+
+          <text x="450" y="125" text-anchor="middle">Backend API</text>
+          <text x="450" y="150" text-anchor="middle" font-size="14" opacity="0.75">Sentiment + MARL</text>
+
+          <text x="730" y="125" text-anchor="middle">Frontend</text>
+          <text x="730" y="150" text-anchor="middle" font-size="14" opacity="0.75">Dashboard</text>
+        </g>
+      </svg>
+
       <pre class="filetree"><code>sentiment-analyzer/
 ├── backend/
 ├── frontend/
 ├── docs/
-└── .github/</code></pre>
+└── .github/
+</code></pre>
     </section>
   </main>
 
   <footer class="site-footer">
     <p>Cost note: daily sentiment batch for 50 coins ~ $6–15/month (Claude API). See DEPLOYMENT_GUIDE.md for Azure steps.</p>
-    <p><a href="https://github.com/your-org/your-repo" rel="noopener">Repository</a> · License: MIT</p>
+    <p><a href="https://github.com/infinyte/sentiment-analyzer" target="_blank" rel="noopener">Repository</a> · License: MIT</p>
   </footer>
 
   <script src="script.js"></script>
