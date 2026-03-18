@@ -355,6 +355,15 @@ export function AgentManagementDashboard() {
   const [customizationForm, setCustomizationForm] = useState<CustomizationFormState>(buildCustomizationForm(null));
   const [refreshNonce, setRefreshNonce] = useState(0);
 
+  // Keep dashboard data moving during ongoing competitions without manual refresh.
+  useEffect(() => {
+    const interval = window.setInterval(() => {
+      setRefreshNonce(value => value + 1);
+    }, 5000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   useEffect(() => {
     const loadOverview = async () => {
       try {
@@ -440,7 +449,7 @@ export function AgentManagementDashboard() {
     };
 
     void loadDetail();
-  }, [selectedAgentId]);
+  }, [selectedAgentId, refreshNonce]);
 
   useEffect(() => {
     setCustomizationForm(buildCustomizationForm(selectedAgent));
