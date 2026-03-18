@@ -1,7 +1,13 @@
-import { useState, useEffect, type CSSProperties, type FormEvent } from 'react';
+import { useState, useEffect, useCallback, type CSSProperties, type FormEvent } from 'react';
 import { Line } from 'react-chartjs-2';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
-import type { CompetitionConfig, CompetitionAgent as CompetitionAgentSpec } from '../types/marl';
+import type {
+  CompetitionConfig,
+  CompetitionAgent as CompetitionAgentSpec,
+  SymbolSelectionMode,
+  CoinUniverseResponse,
+  ScoredCoinEntry,
+} from '../types/marl';
 
 type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
@@ -160,6 +166,11 @@ export function MarlCompetitionViewer() {
     { id: 'bear', riskProfile: 'CONSERVATIVE', initialCapital: 10000 },
   ]);
   const [symbolInput, setSymbolInput] = useState('BTC,ETH');
+  const [symbolSelectionMode, setSymbolSelectionMode] = useState<SymbolSelectionMode>('MANUAL');
+  const [autoUniverseSize, setAutoUniverseSize] = useState(50);
+  const [autoCoinsPerAgent, setAutoCoinsPerAgent] = useState(3);
+  const [coinUniverse, setCoinUniverse] = useState<CoinUniverseResponse | null>(null);
+  const [universeLoading, setUniverseLoading] = useState(false);
   const [duration, setDuration] = useState(200);
   const [evolutionaryRounds, setEvolutionaryRounds] = useState(3);
   const [learningEnabled, setLearningEnabled] = useState(true);
@@ -175,11 +186,16 @@ export function MarlCompetitionViewer() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    const symbols = symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const symbols = symbolSelectionMode === 'MANUAL'
+      ? symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+      : [];
     const config: CompetitionConfig = {
       mode,
       agents,
       symbols,
+      symbolSelectionMode,
+      autoUniverseSize: symbolSelectionMode === 'AUTO' ? autoUniverseSize : undefined,
+      autoCoinsPerAgent: symbolSelectionMode === 'AUTO' ? autoCoinsPerAgent : undefined,
       duration,
       refreshInterval: 1000,
       evolutionaryRounds: mode === 'EVOLUTIONARY' ? evolutionaryRounds : undefined,
@@ -187,6 +203,22 @@ export function MarlCompetitionViewer() {
     };
     startCompetition(config);
   };
+
+  const previewUniverse = useCallback(async () => {
+    setUniverseLoading(true);
+    setCoinUniverse(null);
+    try {
+      const agentsParam = JSON.stringify(agents.map(a => ({ id: a.id, riskProfile: a.riskProfile })));
+      const url = `/api/marl/coin-universe?agents=${encodeURIComponent(agentsParam)}&universeSize=${autoUniverseSize}&coinsPerAgent=${autoCoinsPerAgent}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Failed to load coin universe');
+      setCoinUniverse(await res.json() as CoinUniverseResponse);
+    } catch {
+      // non-fatal — preview is optional
+    } finally {
+      setUniverseLoading(false);
+    }
+  }, [agents, autoUniverseSize, autoCoinsPerAgent]);
 
   const handleCompare = (e: FormEvent) => {
     e.preventDefault();
@@ -306,9 +338,59 @@ export function MarlCompetitionViewer() {
                   <option value="CONTINUOUS">Continuous Learning</option>
                 </select>
               </div>
-              <div>
-                <label style={label}>Symbols (comma-separated)</label>
-                <input style={input} value={symbolInput} onChange={e => setSymbolInput(e.target.value)} placeholder="BTC,ETH,SOL" />
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={label}>Coin Selection Mode</label>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  {(['MANUAL', 'AUTO'] as SymbolSelectionMode[]).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => { setSymbolSelectionMode(m); setCoinUniverse(null); }}
+                      style={{
+                        ...btn(symbolSelectionMode === m ? '#2563eb' : '#e5e7eb'),
+                        color: symbolSelectionMode === m ? '#fff' : '#374151',
+                        fontSize: '0.8rem',
+                        padding: '0.35rem 1rem',
+                      }}
+                    >
+                      {m === 'MANUAL' ? 'Manual' : 'Auto (Agent-Driven)'}
+                    </button>
+                  ))}
+                </div>
+
+                {symbolSelectionMode === 'MANUAL' ? (
+                  <div>
+                    <label style={label}>Symbols (comma-separated)</label>
+                    <input style={input} value={symbolInput} onChange={e => setSymbolInput(e.target.value)} placeholder="BTC,ETH,SOL" />
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto', gap: '0.75rem', alignItems: 'end' }}>
+                    <div>
+                      <label style={label}>Universe Size (top N coins)</label>
+                      <input
+                        type="number" style={input}
+                        value={autoUniverseSize} min={10} max={200} step={10}
+                        onChange={e => setAutoUniverseSize(Number(e.target.value))}
+                      />
+                    </div>
+                    <div>
+                      <label style={label}>Coins Per Agent</label>
+                      <input
+                        type="number" style={input}
+                        value={autoCoinsPerAgent} min={1} max={10}
+                        onChange={e => setAutoCoinsPerAgent(Number(e.target.value))}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={previewUniverse}
+                      disabled={universeLoading}
+                      style={{ ...btn('#7c3aed'), opacity: universeLoading ? 0.6 : 1 }}
+                    >
+                      {universeLoading ? 'Loading…' : 'Preview'}
+                    </button>
+                  </div>
+                )}
               </div>
               <div>
                 <label style={label}>Duration (steps)</label>
@@ -455,6 +537,114 @@ export function MarlCompetitionViewer() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── AUTO coin universe preview ───────────────────────────────────── */}
+      {symbolSelectionMode === 'AUTO' && coinUniverse && !loading && !results && (
+        <div style={{ ...card, backgroundColor: '#f8f5ff', border: '1px solid #ddd6fe' }}>
+          <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.9rem', fontWeight: '700', color: '#5b21b6' }}>
+            Agent Coin Selections Preview
+          </h4>
+
+          {/* Per-agent picks */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            {coinUniverse.agentSelections.map(sel => (
+              <div
+                key={sel.agentId}
+                style={{
+                  background: '#fff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '0.5rem',
+                  padding: '0.6rem 0.9rem',
+                  minWidth: '160px',
+                }}
+              >
+                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#374151', marginBottom: '0.3rem' }}>
+                  {sel.agentId}
+                  <span style={{
+                    marginLeft: '0.4rem',
+                    fontSize: '0.65rem',
+                    padding: '0.1rem 0.35rem',
+                    borderRadius: '9999px',
+                    backgroundColor:
+                      sel.riskProfile === 'AGGRESSIVE' ? '#fef2f2' :
+                      sel.riskProfile === 'CONSERVATIVE' ? '#f0fdf4' : '#fffbeb',
+                    color:
+                      sel.riskProfile === 'AGGRESSIVE' ? '#dc2626' :
+                      sel.riskProfile === 'CONSERVATIVE' ? '#16a34a' : '#d97706',
+                  }}>
+                    {sel.riskProfile}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                  {sel.selectedSymbols.map(sym => (
+                    <span key={sym} style={{
+                      fontSize: '0.7rem',
+                      fontWeight: '600',
+                      padding: '0.15rem 0.4rem',
+                      background: '#ede9fe',
+                      color: '#5b21b6',
+                      borderRadius: '0.25rem',
+                    }}>
+                      {sym}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Resolved union */}
+          <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '1rem' }}>
+            <span style={{ fontWeight: '600', color: '#374151' }}>Competition symbols: </span>
+            {coinUniverse.resolvedSymbols.join(', ')}
+          </div>
+
+          {/* Top 10 scored coins table */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+              <thead>
+                <tr style={{ backgroundColor: '#ede9fe', textAlign: 'left' }}>
+                  {['#', 'Symbol', 'Name', '7d %', 'Vol 24h %', 'Sentiment', 'Conservative', 'Aggressive', 'Scalping'].map(h => (
+                    <th key={h} style={{ padding: '0.4rem 0.6rem', fontWeight: '600', color: '#5b21b6' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {coinUniverse.topCoins.slice(0, 10).map((c: ScoredCoinEntry) => (
+                  <tr key={c.symbol} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                    <td style={{ padding: '0.35rem 0.6rem', color: '#9ca3af' }}>{c.market_rank}</td>
+                    <td style={{ padding: '0.35rem 0.6rem', fontWeight: '700' }}>{c.symbol}</td>
+                    <td style={{ padding: '0.35rem 0.6rem', color: '#6b7280' }}>{c.name}</td>
+                    <td style={{ padding: '0.35rem 0.6rem', color: c.price_change_7d_percent >= 0 ? '#16a34a' : '#dc2626' }}>
+                      {c.price_change_7d_percent >= 0 ? '+' : ''}{c.price_change_7d_percent.toFixed(1)}%
+                    </td>
+                    <td style={{ padding: '0.35rem 0.6rem' }}>{c.volatility_24h.toFixed(1)}%</td>
+                    <td style={{ padding: '0.35rem 0.6rem' }}>
+                      <span style={{
+                        fontSize: '0.65rem',
+                        padding: '0.1rem 0.35rem',
+                        borderRadius: '9999px',
+                        fontWeight: '600',
+                        backgroundColor:
+                          c.sentiment_score === 'BULL' ? '#f0fdf4' :
+                          c.sentiment_score === 'BEAR' ? '#fef2f2' : '#f9fafb',
+                        color:
+                          c.sentiment_score === 'BULL' ? '#16a34a' :
+                          c.sentiment_score === 'BEAR' ? '#dc2626' : '#6b7280',
+                      }}>
+                        {c.sentiment_score}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.35rem 0.6rem' }}>{c.scores.CONSERVATIVE.toFixed(3)}</td>
+                    <td style={{ padding: '0.35rem 0.6rem' }}>{c.scores.AGGRESSIVE.toFixed(3)}</td>
+                    <td style={{ padding: '0.35rem 0.6rem' }}>{c.scores.SCALPING.toFixed(3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 

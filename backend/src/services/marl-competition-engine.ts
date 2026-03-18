@@ -15,6 +15,10 @@ import type { AgentConfig, AgentMetrics } from './trading-agent.js';
 import { SentimentAnalyzerEngine } from './sentiment-analyzer.js';
 import type { TradingSignal, MarketData, NewsData } from './sentiment-analyzer.js';
 import { CoinGeckoService } from './coingecko.js';
+import type { Coin } from '../types.js';
+import { exchangeRegistry } from './exchange/exchange-registry.js';
+import { RiskManager } from './exchange/risk-manager.js';
+import type { RiskManagerConfig } from './exchange/risk-manager.js';
 import { storage } from '../storage.js';
 import logger from '../logger.js';
 
@@ -85,20 +89,58 @@ export interface CompetitionAgentSpec {
   initialCapital?: number;
 }
 
+export type SymbolSelectionMode = 'MANUAL' | 'AUTO';
+
 export interface CompetitionConfig {
   mode: 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
   agents: CompetitionAgentSpec[];
+  /**
+   * Symbols to trade. Required when symbolSelectionMode is 'MANUAL' (default).
+   * Ignored when symbolSelectionMode is 'AUTO' — agents choose coins autonomously.
+   */
   symbols: string[];
   duration: number;       // milliseconds for real-time; steps for simulation
   refreshInterval: number;
   evolutionaryRounds?: number;
   learningEnabled: boolean;
+  /**
+   * 'MANUAL' (default): caller supplies symbols explicitly.
+   * 'AUTO': each agent independently scores the live coin universe and the engine
+   *         resolves the union of their top picks before the competition starts.
+   */
+  symbolSelectionMode?: SymbolSelectionMode;
+  /**
+   * When symbolSelectionMode is 'AUTO': how many top coins (by market cap) to
+   * consider as the candidate universe. Default 50, max 200.
+   */
+  autoUniverseSize?: number;
+  /**
+   * When symbolSelectionMode is 'AUTO': how many coins each agent picks from the
+   * universe based on its risk profile scoring. Default 3, max 10.
+   */
+  autoCoinsPerAgent?: number;
   /** If set to 'PAPER' or 'LIVE', real orders are placed via the broker adapter. Defaults to 'SIMULATED'. */
   exchangeMode?: 'SIMULATED' | 'PAPER' | 'LIVE';
   /** Credential ID (from broker_credentials table) required when exchangeMode is PAPER or LIVE. */
   brokerCredentialId?: string;
   /** Risk limits applied when exchangeMode is PAPER or LIVE. Safe defaults used if omitted. */
   riskConfig?: import('../types/broker.js').RiskConfig;
+  /**
+   * ID of a connected ExchangeAdapter registered in the ExchangeRegistry.
+   * When set, the competition fetches live prices from the exchange each step
+   * instead of using CoinGecko-seeded Brownian-motion simulation.
+   *
+   * Combined with exchangeAdapterMode:
+   *   PAPER           → live prices, simulated order book (no real orders)
+   *   PAPER_CONNECTED → live prices from exchange sandbox, simulated orders
+   *   LIVE_MICRO      → live prices + real orders, hard-capped at $1/trade by RiskManager
+   *   LIVE_FULL       → live prices + real orders, RiskManager limits still apply
+   */
+  exchangeAdapterId?: string;
+  /** AccountMode of the registered ExchangeAdapter. Required when exchangeAdapterId is set. */
+  exchangeAdapterMode?: import('./exchange/exchange-adapter.js').AccountMode;
+  /** RiskManager config applied when exchangeAdapterId is set. Safe defaults used if omitted. */
+  exchangeRiskConfig?: Partial<RiskManagerConfig>;
 }
 
 export interface FinalRanking {
@@ -151,6 +193,37 @@ export interface CompetitionRecord {
   result?: CompetitionResult;
   progress: number; // 0-100
   topPerformerId?: string;
+}
+
+// ─── Coin Universe Selection ──────────────────────────────────────────────────
+
+/** A scored coin entry returned by getCoinUniverse() / resolveSymbols(). */
+export interface ScoredCoinEntry {
+  symbol: string;
+  name: string;
+  market_rank: number;
+  price_usd: number;
+  price_change_7d_percent: number;
+  volatility_24h: number;
+  sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
+  sentiment_confidence: number;
+  /** Composite scores per risk profile (0-1 scale, higher = more attractive). */
+  scores: {
+    CONSERVATIVE: number;
+    AGGRESSIVE: number;
+    SCALPING: number;
+  };
+}
+
+/** Result returned by getCoinUniverse() — a scored universe + per-agent selections. */
+export interface CoinUniverseResult {
+  universe: ScoredCoinEntry[];
+  agentSelections: Array<{
+    agentId: string;
+    riskProfile: CompetitionAgentSpec['riskProfile'];
+    selectedSymbols: string[];
+  }>;
+  resolvedSymbols: string[];
 }
 
 // ─── Policy Network ───────────────────────────────────────────────────────────
@@ -913,6 +986,145 @@ export class MarlCompetitionEngine {
     }
   }
 
+  // ── Autonomous coin selection ─────────────────────────────────────────────
+
+  /**
+   * Score a single coin for a given risk profile.
+   * Returns a value in [-1, 1] — higher means more attractive for that profile.
+   */
+  private scoreCoinForProfile(
+    coin: Coin,
+    profile: CompetitionAgentSpec['riskProfile'],
+  ): number {
+    const sentimentVal =
+      coin.sentiment_score === 'BULL' ? 1 :
+      coin.sentiment_score === 'BEAR' ? -1 : 0;
+
+    const momentumRaw  = coin.price_change_7d_percent / 100;   // e.g. 0.05 = 5%
+    const momentum     = Math.max(-0.5, Math.min(0.5, momentumRaw)); // clamp
+    const vol          = Math.min(coin.volatility_24h / 100, 1);     // 0-1
+    const rankScore    = Math.max(0, 1 - (coin.market_rank - 1) / 200); // top coin = 1
+    const logVol       = Math.log10(coin.volume_24h_usd + 1);
+    const volScore     = Math.min(logVol / 12, 1);                   // ~1 at $1T volume
+    const confWeight   = coin.sentiment_confidence;
+
+    switch (profile) {
+      case 'CONSERVATIVE':
+        // Wants: positive/neutral sentiment, high market cap, low volatility, mild uptrend
+        return (
+          sentimentVal * confWeight * 0.40 +
+          rankScore                 * 0.30 +
+          (momentum > 0 ? momentum * 0.15 : momentum * 0.05) +
+          volScore                  * 0.10 -
+          vol                       * 0.05
+        );
+
+      case 'AGGRESSIVE':
+        // Wants: strong bull signal, strong momentum, accepts high volatility
+        return (
+          sentimentVal * confWeight * 0.40 +
+          momentum                  * 0.30 +
+          vol                       * 0.15 +
+          rankScore                 * 0.10 +
+          volScore                  * 0.05
+        );
+
+      case 'SCALPING':
+        // Wants: high volatility + volume, any strong directional signal
+        return (
+          Math.abs(sentimentVal) * confWeight * 0.15 +
+          vol                                 * 0.40 +
+          Math.abs(momentum)                  * 0.25 +
+          volScore                            * 0.20
+        );
+    }
+  }
+
+  /**
+   * Fetch the scored coin universe and compute per-agent selections.
+   * Called when symbolSelectionMode === 'AUTO'.
+   */
+  async getCoinUniverse(
+    agentSpecs: CompetitionAgentSpec[],
+    universeSize = 50,
+    coinsPerAgent = 3,
+  ): Promise<CoinUniverseResult> {
+    const limit = Math.min(Math.max(universeSize, 10), 200);
+    const coins = await this.coinGecko.getTopCoins(limit);
+
+    // Build scored universe
+    const universe: ScoredCoinEntry[] = coins.map(coin => ({
+      symbol:                  coin.symbol.toUpperCase(),
+      name:                    coin.name,
+      market_rank:             coin.market_rank,
+      price_usd:               coin.price_usd,
+      price_change_7d_percent: coin.price_change_7d_percent,
+      volatility_24h:          coin.volatility_24h,
+      sentiment_score:         coin.sentiment_score,
+      sentiment_confidence:    coin.sentiment_confidence,
+      scores: {
+        CONSERVATIVE: this.scoreCoinForProfile(coin, 'CONSERVATIVE'),
+        AGGRESSIVE:   this.scoreCoinForProfile(coin, 'AGGRESSIVE'),
+        SCALPING:     this.scoreCoinForProfile(coin, 'SCALPING'),
+      },
+    }));
+
+    // Per-agent: sort by profile score, pick top K
+    const k = Math.min(Math.max(coinsPerAgent, 1), 10);
+    const agentSelections = agentSpecs.map(spec => {
+      const sorted = [...universe].sort(
+        (a, b) => b.scores[spec.riskProfile] - a.scores[spec.riskProfile],
+      );
+      return {
+        agentId:         spec.id,
+        riskProfile:     spec.riskProfile,
+        selectedSymbols: sorted.slice(0, k).map(c => c.symbol),
+      };
+    });
+
+    // Union of all selections (deduplicated, ordered by earliest appearance)
+    const seen = new Set<string>();
+    const resolvedSymbols: string[] = [];
+    for (const sel of agentSelections) {
+      for (const sym of sel.selectedSymbols) {
+        if (!seen.has(sym)) {
+          seen.add(sym);
+          resolvedSymbols.push(sym);
+        }
+      }
+    }
+
+    logger.info('marl auto coin selection', {
+      universeSize: universe.length,
+      coinsPerAgent: k,
+      resolvedSymbols,
+      agentSelections: agentSelections.map(s => `${s.agentId}(${s.riskProfile}): ${s.selectedSymbols.join(',')}`),
+    });
+
+    return { universe, agentSelections, resolvedSymbols };
+  }
+
+  /**
+   * Resolve the working symbol list for a competition config.
+   * Returns config.symbols unchanged for MANUAL mode; auto-selects for AUTO mode.
+   */
+  async resolveSymbols(config: CompetitionConfig): Promise<string[]> {
+    if (config.symbolSelectionMode !== 'AUTO') return config.symbols;
+
+    const { resolvedSymbols } = await this.getCoinUniverse(
+      config.agents,
+      config.autoUniverseSize ?? 50,
+      config.autoCoinsPerAgent ?? 3,
+    );
+
+    if (resolvedSymbols.length === 0) {
+      logger.warn('marl auto selection returned 0 symbols — falling back to BTC,ETH');
+      return ['BTC', 'ETH'];
+    }
+
+    return resolvedSymbols;
+  }
+
   /**
    * Fetch live prices for the given symbols from CoinGecko.
    * Falls back to 1000 per symbol on any error.
@@ -1388,17 +1600,27 @@ export class MarlCompetitionEngine {
     onProgress?: (progress: number) => void,
     competitionId?: string
   ): Promise<CompetitionResult> {
-    // Route to real-trading path when exchangeMode is PAPER or LIVE
-    if (config.exchangeMode === 'PAPER' || config.exchangeMode === 'LIVE') {
-      return this.runSingleTournamentReal(config, onProgress, competitionId);
+    // Resolve symbols first — auto-selection fetches live data before the tournament starts
+    const resolvedConfig: CompetitionConfig = config.symbolSelectionMode === 'AUTO'
+      ? { ...config, symbols: await this.resolveSymbols(config) }
+      : config;
+
+    // Route to exchange-adapter path (Phase 3) when an adapter is registered
+    if (resolvedConfig.exchangeAdapterId) {
+      return this.runWithExchangeAdapter(resolvedConfig, onProgress, competitionId);
     }
-    switch (config.mode) {
+
+    // Route to real-trading path when exchangeMode is PAPER or LIVE (broker adapter)
+    if (resolvedConfig.exchangeMode === 'PAPER' || resolvedConfig.exchangeMode === 'LIVE') {
+      return this.runSingleTournamentReal(resolvedConfig, onProgress, competitionId);
+    }
+    switch (resolvedConfig.mode) {
       case 'EVOLUTIONARY':
-        return this.runEvolutionaryTournament(config, onProgress, competitionId);
+        return this.runEvolutionaryTournament(resolvedConfig, onProgress, competitionId);
       case 'CONTINUOUS':
-        return this.runContinuousLearning(config, onProgress, competitionId);
+        return this.runContinuousLearning(resolvedConfig, onProgress, competitionId);
       default:
-        return this.runSingleTournament(config, onProgress, competitionId);
+        return this.runSingleTournament(resolvedConfig, onProgress, competitionId);
     }
   }
 

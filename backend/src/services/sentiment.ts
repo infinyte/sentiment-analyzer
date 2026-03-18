@@ -61,11 +61,14 @@ export class SentimentService {
         .map(item => item.title);
       const sourceLabels = Array.from(new Set(scoredItems.map(item => item.source_label))).slice(0, 3);
       const sourceText = sourceLabels.length > 0 ? ` across ${sourceLabels.join(', ')}` : '';
+      const priceDesc = priceChange7d >= 0
+        ? `up ${priceChange7d.toFixed(1)}% over the past week`
+        : `down ${Math.abs(priceChange7d).toFixed(1)}% over the past week`;
       const summary = sentiment_score === 'BULL'
-        ? `${symbol} is showing bullish signals from recent market momentum${headlines.length ? ' and scored content activity' : ''}${sourceText}.`
+        ? `${symbol} is showing bullish signals, ${priceDesc}${headlines.length ? ' with supportive content activity' : ''}${sourceText}. Momentum appears constructive and buying interest has been building. Near-term continuation looks probable if current market conditions hold.`
         : sentiment_score === 'BEAR'
-          ? `${symbol} is showing bearish pressure from recent market weakness${headlines.length ? ' and negative scored content flow' : ''}${sourceText}.`
-          : `${symbol} sentiment is neutral based on current price action${headlines.length ? ' and mixed scored content' : ''}${sourceText}.`;
+          ? `${symbol} is under bearish pressure, ${priceDesc}${headlines.length ? ' with negative sentiment across tracked sources' : ''}${sourceText}. Selling pressure has been persistent and confidence remains subdued. Near-term recovery will need a clear catalyst to reverse the trend.`
+          : `${symbol} sentiment is neutral, ${priceDesc}${headlines.length ? ' with mixed signals across tracked sources' : ''}${sourceText}. There are no dominant bullish or bearish drivers at the moment. Price is likely to remain range-bound until a clearer narrative emerges.`;
 
       return {
         symbol,
@@ -102,7 +105,7 @@ Respond with ONLY this JSON (no markdown, no explanation):
 {
   "sentiment_score": "BULL" | "NEUTRAL" | "BEAR",
   "confidence": 0.5,
-  "summary": "Brief 1-2 sentence summary",
+  "summary": "2-3 sentence narrative story covering the current market mood, key drivers, and near-term outlook for ${symbol}",
   "key_catalysts": ["positive factor 1", "positive factor 2"],
   "risk_factors": ["risk 1", "risk 2"],
   "short_term_outlook": "1-2 sentence forecast",

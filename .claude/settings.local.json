@@ -17,7 +17,8 @@
       "Bash(npm ci:*)",
       "Read(//c/Users/kmitc/.claude/projects/C--work-sentiment-analyzer/memory//**)",
       "Read(//c/Users/kmitc/.claude/projects/C--work-sentiment-analyzer/memory/**)",
-      "Bash(npx jest:*)"
+      "Bash(npx jest:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

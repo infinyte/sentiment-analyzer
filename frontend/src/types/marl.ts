@@ -5,6 +5,7 @@
 
 export type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 export type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
+export type SymbolSelectionMode = 'MANUAL' | 'AUTO';
 
 export interface CompetitionAgent {
   id: string;
@@ -16,10 +17,39 @@ export interface CompetitionConfig {
   mode: CompetitionMode;
   agents: CompetitionAgent[];
   symbols: string[];
+  symbolSelectionMode?: SymbolSelectionMode;
+  autoUniverseSize?: number;
+  autoCoinsPerAgent?: number;
   duration: number;
   refreshInterval: number;
   evolutionaryRounds?: number;
   learningEnabled: boolean;
+}
+
+export interface ScoredCoinEntry {
+  symbol: string;
+  name: string;
+  market_rank: number;
+  price_usd: number;
+  price_change_7d_percent: number;
+  volatility_24h: number;
+  sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
+  sentiment_confidence: number;
+  scores: { CONSERVATIVE: number; AGGRESSIVE: number; SCALPING: number };
+}
+
+export interface AgentSelection {
+  agentId: string;
+  riskProfile: RiskProfile;
+  selectedSymbols: string[];
+}
+
+export interface CoinUniverseResponse {
+  universeSize: number;
+  coinsPerAgent: number;
+  resolvedSymbols: string[];
+  agentSelections: AgentSelection[];
+  topCoins: ScoredCoinEntry[];
 }
 
 export interface FinalRanking {

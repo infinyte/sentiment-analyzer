@@ -362,7 +362,7 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
           lineHeight: '1.4',
           color: '#1f2937',
           display: '-webkit-box',
-          WebkitLineClamp: 2,
+          WebkitLineClamp: 3,
           WebkitBoxOrient: 'vertical',
           overflow: 'hidden',
         }}

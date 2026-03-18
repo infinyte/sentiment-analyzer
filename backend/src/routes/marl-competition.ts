@@ -13,7 +13,7 @@
 
 import { NextFunction, Request, Response, Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
-import type { CompetitionConfig, CompetitionAgentSpec } from '../services/marl-competition-engine.js';
+import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } from '../services/marl-competition-engine.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
 import logger from '../logger.js';
@@ -147,6 +147,11 @@ export function resetMarlRateLimitersForTests(): void {
 
 const VALID_MODES = ['SINGLE', 'EVOLUTIONARY', 'CONTINUOUS'] as const;
 const VALID_RISK_PROFILES = ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'] as const;
+const VALID_SELECTION_MODES = ['MANUAL', 'AUTO'] as const;
+
+function isValidSelectionMode(m: unknown): m is SymbolSelectionMode {
+  return typeof m === 'string' && (VALID_SELECTION_MODES as readonly string[]).includes(m);
+}
 
 function isValidMode(m: unknown): m is CompetitionConfig['mode'] {
   return typeof m === 'string' && (VALID_MODES as readonly string[]).includes(m);
@@ -195,6 +200,9 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       mode?: unknown;
       agents?: unknown;
       symbols?: unknown;
+      symbolSelectionMode?: unknown;
+      autoUniverseSize?: unknown;
+      autoCoinsPerAgent?: unknown;
       duration?: unknown;
       refreshInterval?: unknown;
       evolutionaryRounds?: unknown;
@@ -237,18 +245,37 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       });
     }
 
-    if (!Array.isArray(body.symbols) || body.symbols.length === 0) {
-      return res.status(400).json({ error: '"symbols" must be a non-empty array' });
+    // ─── Symbol selection mode ─────────────────────────────────────────────
+    const symbolSelectionMode: SymbolSelectionMode =
+      body.symbolSelectionMode !== undefined
+        ? isValidSelectionMode(body.symbolSelectionMode)
+          ? body.symbolSelectionMode
+          : (() => { res.status(400).json({ error: `"symbolSelectionMode" must be one of: ${VALID_SELECTION_MODES.join(', ')}` }); return null as unknown as SymbolSelectionMode; })()
+        : 'MANUAL';
+
+    if (!symbolSelectionMode) return;
+
+    let symbols: string[] = [];
+    if (symbolSelectionMode === 'MANUAL') {
+      if (!Array.isArray(body.symbols) || body.symbols.length === 0) {
+        return res.status(400).json({ error: '"symbols" must be a non-empty array when symbolSelectionMode is "MANUAL"' });
+      }
+      symbols = (body.symbols as unknown[])
+        .filter(s => typeof s === 'string')
+        .map(s => (s as string).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
+        .slice(0, 20);
+      if (symbols.length === 0) {
+        return res.status(400).json({ error: 'No valid symbols provided' });
+      }
     }
 
-    const symbols: string[] = (body.symbols as unknown[])
-      .filter(s => typeof s === 'string')
-      .map(s => (s as string).toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10))
-      .slice(0, 20);
+    const autoUniverseSize = typeof body.autoUniverseSize === 'number'
+      ? Math.min(Math.max(Math.floor(body.autoUniverseSize), 10), 200)
+      : 50;
 
-    if (symbols.length === 0) {
-      return res.status(400).json({ error: 'No valid symbols provided' });
-    }
+    const autoCoinsPerAgent = typeof body.autoCoinsPerAgent === 'number'
+      ? Math.min(Math.max(Math.floor(body.autoCoinsPerAgent), 1), 10)
+      : 3;
 
     const duration = typeof body.duration === 'number' && body.duration > 0
       ? Math.min(Math.max(Math.floor(body.duration), 50), 100000)
@@ -336,6 +363,9 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       mode: body.mode,
       agents: agentSpecs,
       symbols,
+      symbolSelectionMode,
+      autoUniverseSize,
+      autoCoinsPerAgent,
       duration,
       refreshInterval,
       evolutionaryRounds,
@@ -389,11 +419,14 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       status: 'STARTED',
       mode: config.mode,
       exchangeMode,
+      symbolSelectionMode,
       agentCount: agentSpecs.length,
-      symbols,
+      symbols: symbolSelectionMode === 'AUTO' ? '(resolved at runtime)' : symbols,
       duration,
       learningEnabled,
-      message: `Tournament started. Poll /api/marl/competition/${competitionId}/status for updates.`,
+      message: symbolSelectionMode === 'AUTO'
+        ? `Tournament started with AUTO coin selection. Agents will choose from the top ${autoUniverseSize} coins (${autoCoinsPerAgent} per agent). Poll /api/marl/competition/${competitionId}/status for updates.`
+        : `Tournament started. Poll /api/marl/competition/${competitionId}/status for updates.`,
     });
   } catch (err) {
     logger.error('competition start error', { error: String(err) });
@@ -696,6 +729,66 @@ router.delete('/api/marl/agents/:agentId/learning', (req, res) => {
   });
 });
 
+// ─── GET /api/marl/coin-universe ──────────────────────────────────────────────
+/**
+ * Preview the scored coin universe and per-agent selections for AUTO mode.
+ * Useful for displaying which coins agents would pick before starting a competition.
+ *
+ * Query params:
+ *   agents     - JSON array of { id, riskProfile } objects (required)
+ *   universeSize  - number of top coins to score (default 50, max 200)
+ *   coinsPerAgent - coins each agent picks (default 3, max 10)
+ *
+ * Example:
+ *   curl "http://localhost:3000/api/marl/coin-universe?agents=[{\"id\":\"bull\",\"riskProfile\":\"AGGRESSIVE\"}]&universeSize=50&coinsPerAgent=3"
+ */
+router.get('/api/marl/coin-universe', competitionReadRateLimit, async (req, res) => {
+  try {
+    const agentsRaw = req.query.agents;
+    if (typeof agentsRaw !== 'string') {
+      return res.status(400).json({ error: '"agents" query param (JSON array) is required' });
+    }
+
+    let agentSpecs: CompetitionAgentSpec[];
+    try {
+      const parsed = JSON.parse(agentsRaw) as unknown;
+      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error();
+      agentSpecs = (parsed as Array<{ id?: unknown; riskProfile?: unknown }>)
+        .filter(a => typeof a.id === 'string' && isValidRiskProfile(a.riskProfile))
+        .map(a => ({
+          id: sanitizeAgentId(a.id as string),
+          riskProfile: a.riskProfile as CompetitionAgentSpec['riskProfile'],
+        }));
+      if (agentSpecs.length === 0) throw new Error();
+    } catch {
+      return res.status(400).json({
+        error: '"agents" must be a valid JSON array of { id, riskProfile } objects',
+      });
+    }
+
+    const universeSize = typeof req.query.universeSize === 'string'
+      ? Math.min(Math.max(parseInt(req.query.universeSize, 10) || 50, 10), 200)
+      : 50;
+
+    const coinsPerAgent = typeof req.query.coinsPerAgent === 'string'
+      ? Math.min(Math.max(parseInt(req.query.coinsPerAgent, 10) || 3, 1), 10)
+      : 3;
+
+    const result = await engine.getCoinUniverse(agentSpecs, universeSize, coinsPerAgent);
+
+    return res.json({
+      universeSize: result.universe.length,
+      coinsPerAgent,
+      resolvedSymbols: result.resolvedSymbols,
+      agentSelections: result.agentSelections,
+      topCoins: result.universe.slice(0, 20),  // return top 20 scored coins for display
+    });
+  } catch (err) {
+    logger.error('coin-universe error', { error: String(err) });
+    return res.status(500).json({ error: 'Failed to compute coin universe' });
+  }
+});
+
 // ─── GET /api/marl/info ───────────────────────────────────────────────────────
 /**
  * Documentation endpoint.
@@ -743,7 +836,22 @@ router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
       'GET    /api/marl/competitions': 'List all competitions',
       'GET    /api/marl/agents/learning': 'List all persisted agent learning states',
       'DELETE /api/marl/agents/:agentId/learning': 'Reset agent learning (requires x-api-key). Query: ?riskProfile=',
+      'GET    /api/marl/coin-universe': 'Preview AUTO coin selection — scored universe + per-agent picks. Query: agents (JSON), universeSize, coinsPerAgent',
       'GET    /api/marl/info': 'This documentation',
+    },
+    coinSelection: {
+      MANUAL: 'Default. Caller supplies symbols[] explicitly.',
+      AUTO: 'Agents autonomously score and select coins from the live CoinGecko universe before the competition starts.',
+      params: {
+        symbolSelectionMode: '"MANUAL" | "AUTO"',
+        autoUniverseSize: 'Number of top coins to consider (default 50, max 200)',
+        autoCoinsPerAgent: 'Coins each agent picks from the universe (default 3, max 10)',
+      },
+      scoring: {
+        CONSERVATIVE: 'Weights: sentiment×confidence 40%, market rank 30%, momentum 15%, volume 10%, penalises volatility 5%',
+        AGGRESSIVE:   'Weights: sentiment×confidence 40%, momentum 30%, volatility bonus 15%, market rank 10%, volume 5%',
+        SCALPING:     'Weights: volatility 40%, absolute momentum 25%, volume 20%, |sentiment|×confidence 15%',
+      },
     },
     learningPersistence: {
       storage: 'SQLite agent_learning_states table — Q-table + policy weights + epsilon survive restarts',
