@@ -380,6 +380,7 @@ npm run dev
     <p><a href="https://github.com/infinyte/sentiment-analyzer" target="_blank" rel="noopener">Repository</a> · License: MIT</p>
   </footer>
 
+<<<<<<< Updated upstream
   <!-- Inline JS (no external script.js needed) -->
   <script>
     // Smooth scroll for in-page anchors + brief focus highlight
@@ -416,5 +417,40 @@ npm run dev
       }, { passive: false });
     })();
   </script>
+=======
+  <script>
+  // Smooth scroll for same-page anchors + brief focus highlight
+  (function () {
+    function isAnchor(a) {
+      const href = a && a.getAttribute && a.getAttribute('href');
+      return href && href.startsWith('#') && href.length > 1;
+    }
+
+    document.addEventListener('click', function (e) {
+      const a = e.target && e.target.closest ? e.target.closest('a') : null;
+      if (!isAnchor(a)) return;
+
+      const id = a.getAttribute('href').slice(1);
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      e.preventDefault();
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+      const prev = el.getAttribute('tabindex');
+      if (!prev) el.setAttribute('tabindex', '-1');
+
+      setTimeout(() => {
+        el.focus({ preventScroll: true });
+        el.classList.add('flash-focus');
+        setTimeout(() => el.classList.remove('flash-focus'), 950);
+        if (!prev) el.removeAttribute('tabindex');
+      }, 300);
+
+      history.pushState(null, '', '#' + id);
+    }, { passive: false });
+  })();
+</script>
+>>>>>>> Stashed changes
 </body>
 </html>
