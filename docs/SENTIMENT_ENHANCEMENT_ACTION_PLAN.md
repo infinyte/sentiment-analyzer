@@ -7,6 +7,12 @@ Each item maps to the existing codebase (`backend/src/services/`, `backend/src/r
 
 ## Group A — Model Quality (NLP Upgrades)
 
+Current status on this branch:
+- #1 is partially implemented: `FinBertService` exists and the async social/item scoring path uses it, but `analyzeAdvancedSentiment()` is not yet wired to call it directly.
+- #2 is implemented in both content scoring and async social scoring.
+- #3 is partially implemented: context-window extraction exists in `ContentSignalService`, but the main `/api/coins/:symbol` flow does not yet pass `targetCoin` through.
+- #4 is partially implemented: language detection and persistence are live, but translation / multilingual routing is still pending.
+
 ---
 
 ### 1. Integrate FinBERT / Crypto-Fine-Tuned Transformer for Local Sentiment Scoring
@@ -15,12 +21,12 @@ Each item maps to the existing codebase (`backend/src/services/`, `backend/src/r
 Replace (or supplement) the current Claude API call in `SentimentService` (`services/sentiment.ts`) with a locally hosted or API-proxied call to a FinBERT or `finetuned-finbert-crypto` model (e.g., via Hugging Face Inference API or a self-hosted ONNX runtime). FinBERT achieves 82–90% F1 on crypto text vs ~60–70% for lexicon-based approaches, and eliminates per-request token costs. The existing `SentimentAnalyzerEngine` (`services/sentiment-analyzer.ts`) `ADVANCED` mode should be wired to call this model for per-item scoring.
 
 **Acceptance Criteria:**
-- [ ] A new `FinBertService` (or adapter) in `services/` wraps the Hugging Face Inference API (or ONNX runtime) and returns `{ label: 'positive' | 'neutral' | 'negative', score: number }` per text input.
+- [x] A new `FinBertService` (or adapter) in `services/` wraps the Hugging Face Inference API (or ONNX runtime) and returns `{ label: 'positive' | 'neutral' | 'negative', score: number }` per text input.
 - [ ] `SentimentAnalyzerEngine.analyzeAdvancedSentiment()` calls `FinBertService` for news/social items when `ADVANCED` or `SMART` mode is requested.
 - [ ] Fallback to the existing Claude API path when `FinBertService` is unavailable (network error / env var `FINBERT_API_URL` not set).
-- [ ] Unit tests cover the new service: happy path, fallback path, and malformed API response.
+- [x] Unit tests cover the new service: happy path, fallback path, and malformed API response.
 - [ ] Average latency per item does not exceed 300 ms under normal conditions.
-- [ ] `npm run build` and `npm test` pass with no regressions.
+- [x] `npm run build` and `npm test` pass with no regressions.
 
 ---
 
@@ -30,11 +36,11 @@ Replace (or supplement) the current Claude API call in `SentimentService` (`serv
 Social media posts frequently use irony, memes, and sarcasm that flip the true sentiment (e.g., "great,  another 20% dump 🙄"). Add a lightweight sarcasm-detection step in the `ContentSignalService` (`services/content-signals.ts`) scoring pipeline that down-weights or inverts confidence on flagged items before the sentiment score is aggregated. A fine-tuned DistilBERT sarcasm classifier or a rule-based heuristic (emoji patterns, punctuation features) is acceptable for v1.
 
 **Acceptance Criteria:**
-- [ ] A `detectSarcasm(text: string): { sarcastic: boolean; confidence: number }` function is added to `ContentSignalService` or a new `sarcasm-detector.ts` utility.
-- [ ] When sarcasm is detected with confidence ≥ 0.7, the sentiment polarity of that item is inverted and its overall weight reduced by 50%.
-- [ ] The `scored_items` response field in `GET /api/coins/:symbol` includes a `sarcasm_flagged: boolean` property per item.
-- [ ] Unit tests cover: clearly sarcastic text, earnest text, edge cases (all-caps, heavy emoji).
-- [ ] Existing `ContentSignalService` tests continue to pass.
+- [x] A `detectSarcasm(text: string): { sarcastic: boolean; confidence: number }` function is added to `ContentSignalService` or a new `sarcasm-detector.ts` utility.
+- [x] When sarcasm is detected with confidence ≥ 0.7, the sentiment polarity of that item is inverted and its overall weight reduced by 50%.
+- [x] The `scored_items` response field in `GET /api/coins/:symbol` includes a `sarcasm_flagged: boolean` property per item.
+- [x] Unit tests cover: clearly sarcastic text, earnest text, edge cases (all-caps, heavy emoji).
+- [x] Existing `ContentSignalService` tests continue to pass.
 
 ---
 
@@ -44,11 +50,11 @@ Social media posts frequently use irony, memes, and sarcasm that flip the true s
 Current document-level sentiment treats an entire post as having a single polarity. Many posts mention multiple coins or events. Implement ABSA in `ContentSignalService` so that only sentiment directed at the target coin is extracted. Use the existing `coin-extractor.ts` entity detection to identify the target mention, then score only the surrounding context window (±50 tokens). For v1, a span-extraction heuristic is sufficient; a full ASQP model can follow in a later iteration.
 
 **Acceptance Criteria:**
-- [ ] `ContentSignalService.scoreItem()` accepts an optional `targetCoin` parameter and applies contextual sentiment extraction when provided.
+- [x] `ContentSignalService.scoreItem()` accepts an optional `targetCoin` parameter and applies contextual sentiment extraction when provided.
 - [ ] `GET /api/coins/:symbol` passes `targetCoin: symbol` through the scoring pipeline so cross-coin posts yield accurate per-coin scores.
 - [ ] A `context_window_used: boolean` flag is present in the `scoring_breakdown` of `GET /api/social-media/item/:id`.
 - [ ] Benchmark: at least 5 manually verified multi-coin posts score correctly (verified in tests with fixture data).
-- [ ] `npm test` passes.
+- [x] `npm test` passes.
 
 ---
 
@@ -58,12 +64,12 @@ Current document-level sentiment treats an entire post as having a single polari
 Crypto communities are global; non-English posts are currently scored with English-trained models, degrading accuracy. Add a pre-processing step in the social scraper pipeline (`services/social-media/scoring/item-scorer.ts`) that detects language (using `franc` or `langdetect`) and, when non-English, either (a) translates the text via a translation API before scoring or (b) routes it to a multilingual model (DistilBERT-multilingual). Language tag should be persisted on the `SocialMediaItem`.
 
 **Acceptance Criteria:**
-- [ ] `SocialMediaItem` type (`services/social-media/`) includes a `language: string` field (ISO 639-1 code).
-- [ ] Language detection runs as the first step of `item-scorer.ts` before sentiment scoring.
+- [x] `SocialMediaItem` type (`services/social-media/`) includes a `language: string` field (ISO 639-1 code).
+- [x] Language detection runs as the first step of `item-scorer.ts` before sentiment scoring.
 - [ ] Non-English items are either translated (when `TRANSLATION_API_KEY` env var is set) or routed to a multilingual model; otherwise, a `language_unsupported: true` flag is set and the item's score weight is halved.
-- [ ] SQLite schema updated to include the `language` column (`sqlite-social-store.ts`).
+- [x] SQLite schema updated to include the `language` column (`sqlite-social-store.ts`).
 - [ ] Unit tests for detection (English, Spanish, Chinese, unknown) pass.
-- [ ] `npm run build` and `npm test` pass with no regressions.
+- [x] `npm run build` and `npm test` pass with no regressions.
 
 ---
 

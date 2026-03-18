@@ -31,6 +31,15 @@ const mockAnalyzeAdvanced = jest.fn().mockReturnValue({
   rsi_score:        0.3,
 });
 
+jest.mock('../../storage.js', () => ({
+  storage: {
+    saveAgentLearningState: jest.fn(),
+    getAgentLearningState:  jest.fn().mockReturnValue(null),
+    getAllAgentLearningStates: jest.fn().mockReturnValue([]),
+    deleteAgentLearningState: jest.fn().mockReturnValue(true),
+  },
+}));
+
 jest.mock('../../services/coingecko', () => ({
   CoinGeckoService: jest.fn().mockImplementation(() => ({
     getTopCoins:    mockGetTopCoins,

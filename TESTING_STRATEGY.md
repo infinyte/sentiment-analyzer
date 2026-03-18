@@ -2,15 +2,17 @@
 
 ## Executive Summary
 
-This document outlines a comprehensive testing strategy for the Sentiment Analyzer project covering unit tests, integration tests, component tests, and end-to-end tests. The strategy addresses the current gap in test coverage and provides prioritized, actionable tasks with clear acceptance criteria.
+This document outlines a comprehensive testing strategy for the Sentiment Analyzer project covering unit tests, integration tests, component tests, and end-to-end tests. It captures the current implemented coverage and the remaining testing backlog.
+
+> Note: this is a strategy and backlog document, not the canonical suite inventory. For the current implementation snapshot and exact suite list, use `docs/PROJECT_STATUS.md`.
 
 **Current State:**
 - ✅ Postman integration tests exist (manual/CLI)
-- ✅ Jest configured in backend (17 suites, 200 tests total)
-- ✅ Backend unit tests: Cache, CoinGeckoService, NewsAPIService, SentimentService, content scoring, MARL engine, coin extractor, item scorer, SQLite social store, trending discovery, multi-source calculator
+- ✅ Jest configured in backend (20 suites, 291 tests total)
+- ✅ Backend unit tests: Cache, CoinGeckoService, NewsAPIService, SentimentService, content scoring, FinBERT service, sarcasm detector, MARL engine, coin extractor, item scorer, SQLite social store, trending discovery, multi-source calculator
 - ✅ Backend API integration tests: core routes, MARL routes, social media routes (all 6 Phase 3 endpoints)
 - ✅ ESLint + TypeScript type-check pass clean on both backend and frontend
-- ✅ Frontend Vitest + React Testing Library configured (3 suites, 35 tests total)
+- ✅ Frontend Vitest + React Testing Library configured (3 suites, 36 tests total)
 - ✅ Frontend component/integration tests: `MarlCompetitionViewer`, `App.test.tsx` (detail modal), `useMarlCompetition` hook
 - ❌ No E2E tests (Playwright not yet configured)
 

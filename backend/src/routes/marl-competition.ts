@@ -367,7 +367,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
           completedAt: new Date(),
           result,
           progress: 100,
-          topPerformerId: result.finalRankings[0]?.agentId,
+          topPerformerId: result.finalRankings?.[0]?.agentId,
         });
       })
       .catch(err => {

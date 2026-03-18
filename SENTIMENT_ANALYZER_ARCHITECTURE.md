@@ -5,7 +5,7 @@
 Real-time cryptocurrency sentiment analysis platform combining:
 - Market data polling on demand (CoinGecko, cached 5 min)
 - Daily sentiment analysis batch using Claude AI (cached 24 hr)
-- Normalized content scoring across news and social sources
+- Normalized content scoring across news and social sources, including sarcasm handling and optional target-coin context windows
 - Social scraping and trending-topic discovery APIs
 - Interactive React dashboard with price history charts
 - Deployed on Azure Free Tier (~$6–15/month)
@@ -38,7 +38,7 @@ CoinGecko   NewsAPI   Claude API    Social Scrapers
 
 ## 2. Backend Architecture (`backend/src/index.ts`)
 
-All backend logic lives in a single file. Key classes:
+Route registration and cron bootstrap live in `index.ts`; the application logic is split across service files under `backend/src/services/`. Key classes:
 
 ### CoinGeckoService
 - `getTopCoins(limit)` — fetches `/coins/markets` from CoinGecko, calculates `volatility_24h` from `high_24h`/`low_24h`
@@ -51,12 +51,14 @@ All backend logic lives in a single file. Key classes:
 ### ContentSignalService
 - Collects normalized items from NewsAPI, Reddit, and an X-ready adapter
 - Scores each item using keyword polarity, recency, relevance, engagement, and source weights
+- Supports optional ABSA-style context windows around a target coin mention via `extractContextWindow()`
+- Applies sarcasm detection before final keyword sentiment weighting and surfaces `sarcasm_flagged` / `context_window_used`
 - Produces `scored_items`, `source_breakdown`, and `collection_stats`
 
 ### SocialScraperService + TrendingTopicsEngine
 - `GET /api/scrape/social` and `POST /api/scrape/batch` collect normalized posts from Reddit, Stocktwits, and X (when bearer token is configured)
 - `GET /api/trending` ranks topics by volume, velocity, source diversity, and aggregate sentiment
-- A scheduled trending scrape job ingests social posts every 30 minutes for the top cached symbols
+- A scheduled trending scrape job ingests social posts hourly for the top cached symbols
 
 ### SocialMediaScraperManager (Phase 3)
 - Orchestrates 7 source adapters: `TwitterScraper`, `RedditScraper`, `RssScraper`, `DiscordScraper`, `TelegramScraper`, `YouTubeScraper`, `TikTokScraper`
@@ -67,6 +69,8 @@ All backend logic lives in a single file. Key classes:
 ### ItemScorer (Phase 3)
 - 4-signal pipeline per item: `score_sentiment (30%) + score_engagement (25%) + score_authority (25%) + score_recency (20%)`
 - Platform-specific engagement weights; source authority baselines (rss=75, youtube=65, twitter=45, discord=40, reddit=35, telegram=30, tiktok=25)
+- Async path (`scoreItemAsync`) optionally uses `FinBertService`, runs sarcasm detection, and records `finbert_used` / `sarcasm_flagged`
+- `detectLanguage()` uses a Unicode-script heuristic to store ISO 639-1 language codes on social items without adding an ESM-only runtime dependency
 
 ### TrendingDiscoveryEngine (Phase 3)
 - Extracts coins, hashtags, and keywords from all items in the time window
@@ -79,6 +83,7 @@ All backend logic lives in a single file. Key classes:
 
 ### SocialStore (Phase 3)
 - `better-sqlite3` synchronous SQLite; 4 tables: `social_media_items`, `trending_topics`, `trending_topic_history`, `source_metadata`
+- Social item rows also persist `language` and `sarcasm_flagged` with guarded SQLite migrations for existing databases
 - Cursor-based pagination via base64url-encoded `{sort, primary, fetched_at, id}` payloads
 - Bulk upsert via transactions; `pruneOldItems`, `resetDailyCounters`, `getStats`
 

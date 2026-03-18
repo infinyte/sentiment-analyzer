@@ -1,6 +1,6 @@
 # Sentiment Analyzer
 
-Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local scoring heuristics to generate Bull/Neutral/Bear sentiment for the top coins. Displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence.
+Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence.
 
 ## Quick Start
 
@@ -42,7 +42,7 @@ Set these in `backend/.env`:
 
 Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`.
 
-### Phase 3 — Social Media & Telemetry Variables
+### Social Media, NLP & Telemetry Variables
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -57,33 +57,44 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 | `TELEGRAM_CHANNEL_USERNAMES` | No | Comma-separated public channel names |
 | `YOUTUBE_API_KEY` | No | YouTube Data API v3 (~101 quota units/coin) |
 | `RAPIDAPI_KEY` | No | TikTok via RapidAPI |
+| `FINBERT_API_URL` | No | Hugging Face inference endpoint for FinBERT-compatible sentiment scoring |
+| `HUGGINGFACE_API_TOKEN` | No | Hugging Face token used with `FINBERT_API_URL` |
+| `TRANSLATION_API_KEY` | No | Reserved for future multilingual translation routing; language detection is already active without it |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Azure Application Insights telemetry |
 | `SOCIAL_SCRAPE_CRON` | No | Cron for hourly scrape (default: `0 * * * *`) |
 | `TRENDING_MIN_MENTIONS` | No | Min mentions to appear in trending (default: `3`) |
 
 ## Architecture
 
-Backend is `backend/src/index.ts` (routes + cron) with services split into `backend/src/services/`. Single-file frontend (`frontend/src/App.tsx`) with all components and hooks.
+Backend bootstrap lives in `backend/src/index.ts` (routes + cron) with services split into `backend/src/services/`. The frontend is a multi-file React app rooted at `frontend/src/App.tsx` with components, hooks, and types separated under `frontend/src/`.
 
 ```
 React Dashboard (polling every 10 min)
     ↓ /api/*
 Express Backend (port 3000)
     ├── CoinGeckoService           → market data, OHLCV history
-    ├── ContentSignalService       → normalized NewsAPI + Reddit + X-ready scoring pipeline
+    ├── ContentSignalService       → normalized NewsAPI + Reddit + X-ready scoring pipeline with sarcasm handling and optional context-window extraction
     ├── NewsAPIService             → structured news articles
     ├── SocialScraperService       → Reddit / Stocktwits / X scraping
     ├── TrendingTopicsEngine       → cross-source topic ranking and trending endpoints
     ├── SentimentService           → Claude API (BULL/NEUTRAL/BEAR + summary) with local fallback
-    ├── SentimentAnalyzerEngine    → 4-mode local analysis engine
+    ├── SentimentAnalyzerEngine    → 4-mode local analysis engine + async text scoring helper
+    ├── FinBertService             → optional Hugging Face-backed sentiment scoring for async social/item paths
     ├── TradingAgent (×3)          → RuleBased / MLBased / Hybrid agents
     ├── BacktestingEngine          → historical simulation + metrics
-    ├── SocialMediaScraperManager  → 7-source scraper (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok)
+    ├── SocialMediaScraperManager  → 7-source scraper (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok) + async item scoring
     ├── TrendingDiscoveryEngine    → entity aggregation, velocity scoring, SQLite persistence
     ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison
-    ├── SocialStore (SQLite)       → social_media_items, trending_topics, trending_topic_history, source_metadata
+    ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
     └── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
 ```
+
+**NLP scoring enhancements:**
+
+- `scoreItemAsync()` in the social-media pipeline prefers FinBERT when `FINBERT_API_URL` is configured, then falls back to the local keyword scorer.
+- `detectSarcasm()` can invert and down-weight strong sarcastic sentiment in both content and social scoring flows.
+- `detectLanguage()` stores ISO 639-1 language codes for social items using a Unicode-script heuristic with no external runtime dependency.
+- `ContentSignalService` supports target-coin context windows for aspect-based sentiment scoring, although the core `/api/coins/:symbol` flow is not yet passing `targetCoin` through every call site.
 
 **Scheduled jobs:**
 
