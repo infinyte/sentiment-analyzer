@@ -22,8 +22,12 @@ vi.mock('chart.js', () => ({
 
 describe('Agent management dashboard', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
+  let breedTriggered: boolean;
+  let retireTriggered: boolean;
 
   beforeEach(() => {
+    breedTriggered = false;
+    retireTriggered = false;
     mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
@@ -35,29 +39,73 @@ describe('Agent management dashboard', () => {
         return Promise.resolve({
           ok: true,
           json: async () => ({
-            agents: [
-              {
-                id: 'agent-1',
-                agent_type: 'MOMENTUM',
-                risk_profile: 'AGGRESSIVE',
-                status: 'ACTIVE',
-                custom_name: 'Signal Hunter',
-                emoji: '🚀',
-                color: '#00FF00',
-                biography: 'Tracks breakout regimes and adapts quickly.',
-                nickname: 'Hunter',
-                age_iterations: 14,
-                generation_number: 3,
-                created_at: '2026-03-17T09:00:00.000Z',
-                total_competitions: 12,
-                total_wins: 8,
-                total_losses: 4,
-                win_rate_percent: 66.7,
-                total_pnl: 1234.56,
-                sharpe_ratio: 1.42,
-                roi_percent: 18.4,
-              },
-            ],
+            agents: retireTriggered
+              ? []
+              : [
+                {
+                  id: 'agent-1',
+                  agent_type: 'MOMENTUM',
+                  risk_profile: 'AGGRESSIVE',
+                  status: 'ACTIVE',
+                  custom_name: 'Signal Hunter',
+                  emoji: '🚀',
+                  color: '#00FF00',
+                  biography: 'Tracks breakout regimes and adapts quickly.',
+                  nickname: 'Hunter',
+                  age_iterations: 14,
+                  generation_number: 3,
+                  created_at: '2026-03-17T09:00:00.000Z',
+                  total_competitions: 12,
+                  total_wins: 8,
+                  total_losses: 4,
+                  win_rate_percent: 66.7,
+                  total_pnl: 1234.56,
+                  sharpe_ratio: 1.42,
+                  roi_percent: 18.4,
+                },
+                {
+                  id: 'agent-2',
+                  agent_type: 'MEAN_REVERSION',
+                  risk_profile: 'CONSERVATIVE',
+                  status: 'ACTIVE',
+                  custom_name: 'Mean Reverter',
+                  emoji: '⚡',
+                  color: '#0099FF',
+                  biography: 'Prefers exhaustion and re-entry setups.',
+                  nickname: 'Reverter',
+                  age_iterations: 10,
+                  generation_number: 3,
+                  created_at: '2026-03-16T08:00:00.000Z',
+                  total_competitions: 11,
+                  total_wins: 6,
+                  total_losses: 5,
+                  win_rate_percent: 54.5,
+                  total_pnl: 640.25,
+                  sharpe_ratio: 1.11,
+                  roi_percent: 9.1,
+                },
+                ...(breedTriggered ? [{
+                  id: 'agent-child-1',
+                  agent_type: 'MOMENTUM',
+                  risk_profile: 'AGGRESSIVE',
+                  status: 'ACTIVE',
+                  custom_name: 'Child One',
+                  emoji: '🟢',
+                  color: '#00FF00',
+                  biography: 'Mutated child.',
+                  nickname: 'Child',
+                  age_iterations: 0,
+                  generation_number: 4,
+                  created_at: '2026-03-18T12:00:00.000Z',
+                  total_competitions: 0,
+                  total_wins: 0,
+                  total_losses: 0,
+                  win_rate_percent: 0,
+                  total_pnl: 0,
+                  sharpe_ratio: 0,
+                  roi_percent: 0,
+                }] : []),
+              ],
           }),
         });
       }
@@ -124,6 +172,39 @@ describe('Agent management dashboard', () => {
         });
       }
 
+      if (url.endsWith('/api/agents/agent-2')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'agent-2',
+            agent_type: 'MEAN_REVERSION',
+            risk_profile: 'CONSERVATIVE',
+            status: 'ACTIVE',
+            custom_name: 'Mean Reverter',
+            emoji: '⚡',
+            color: '#0099FF',
+            biography: 'Prefers exhaustion and re-entry setups.',
+            nickname: 'Reverter',
+            age_iterations: 10,
+            generation_number: 3,
+            created_at: '2026-03-16T08:00:00.000Z',
+            stats: {
+              total_competitions: 11,
+              total_wins: 6,
+              total_losses: 5,
+              win_rate_percent: 54.5,
+              total_pnl: 640.25,
+              max_drawdown_percent: 6.4,
+              sharpe_ratio: 1.11,
+              roi_percent: 9.1,
+              trades_executed: 54,
+              consistency_score: 76,
+              avg_trade_profit: 11.85,
+            },
+          }),
+        });
+      }
+
       if (url.includes('/api/agents/agent-1/history?limit=12')) {
         return Promise.resolve({
           ok: true,
@@ -182,6 +263,18 @@ describe('Agent management dashboard', () => {
         });
       }
 
+      if (url.includes('/api/agents/agent-2/history?limit=12')) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+
+      if (url.includes('/api/agents/agent-2/genome')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'agent-2', genome: { risk_bias: 0.42 } }) });
+      }
+
+      if (url.includes('/api/agents/agent-2/genealogy')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'agent-2', genealogy: [] }) });
+      }
+
       if (url.endsWith('/api/agents/agent-1/customize') && init?.method === 'PUT') {
         return Promise.resolve({
           ok: true,
@@ -194,6 +287,101 @@ describe('Agent management dashboard', () => {
             nickname: 'Vanguard',
           }),
         });
+      }
+
+      if (url.endsWith('/api/agents/agent-1/retire') && init?.method === 'POST') {
+        retireTriggered = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ retired: true, agent: { id: 'agent-1', status: 'RETIRED' } }),
+        });
+      }
+
+      if (url.endsWith('/api/agents/agent-2/retire') && init?.method === 'POST') {
+        retireTriggered = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ retired: true, agent: { id: 'agent-2', status: 'RETIRED' } }),
+        });
+      }
+
+      if (url.endsWith('/api/agents/agent-child-1/retire') && init?.method === 'POST') {
+        retireTriggered = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ retired: true, agent: { id: 'agent-child-1', status: 'RETIRED' } }),
+        });
+      }
+
+      if (url.endsWith('/api/evolutionary/breed') && init?.method === 'POST') {
+        breedTriggered = true;
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            parentIds: ['agent-1', 'agent-2'],
+            childCount: 1,
+            crossoverStrategy: 'UNIFORM',
+            mutationSeverity: 'MEDIUM',
+            children: [
+              {
+                id: 'agent-child-1',
+                agentType: 'MOMENTUM',
+                riskProfile: 'AGGRESSIVE',
+                generationNumber: 4,
+                status: 'ACTIVE',
+                parent1Id: 'agent-1',
+                parent2Id: 'agent-2',
+                mutationsApplied: ['position_size'],
+                mutationSeverity: 'MEDIUM',
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.endsWith('/api/agents/agent-child-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'agent-child-1',
+            agent_type: 'MOMENTUM',
+            risk_profile: 'AGGRESSIVE',
+            status: 'ACTIVE',
+            custom_name: 'Child One',
+            emoji: '🟢',
+            color: '#00FF00',
+            biography: 'Mutated child.',
+            nickname: 'Child',
+            age_iterations: 0,
+            generation_number: 4,
+            created_at: '2026-03-18T12:00:00.000Z',
+            stats: {
+              total_competitions: 0,
+              total_wins: 0,
+              total_losses: 0,
+              win_rate_percent: 0,
+              total_pnl: 0,
+              max_drawdown_percent: 0,
+              sharpe_ratio: 0,
+              roi_percent: 0,
+              trades_executed: 0,
+              consistency_score: 0,
+              avg_trade_profit: 0,
+            },
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/agent-child-1/history?limit=12')) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+
+      if (url.includes('/api/agents/agent-child-1/genome')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'agent-child-1', genome: { position_size: 0.14 } }) });
+      }
+
+      if (url.includes('/api/agents/agent-child-1/genealogy')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'agent-child-1', genealogy: [] }) });
       }
 
       return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
@@ -233,6 +421,41 @@ describe('Agent management dashboard', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents?limit=100');
+    });
+  }, 15000);
+
+  it('marks agents ready to evolve, breeds children, and retires weak agents', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+
+    await screen.findByText('Agent Management');
+    await screen.findByRole('button', { name: 'Mark Ready To Evolve' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mark Ready To Evolve' }));
+    fireEvent.click(screen.getByRole('button', { name: /Mean Reverter/i }));
+    await screen.findByText('Prefers exhaustion and re-entry setups.');
+    fireEvent.click(screen.getByRole('button', { name: 'Mark Ready To Evolve' }));
+
+    fireEvent.change(screen.getByLabelText('Children'), { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Mutated Children' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/evolutionary/breed', expect.objectContaining({ method: 'POST' }));
+    });
+
+    await screen.findByText('Created 1 child agents from 2 selected parents.');
+    await screen.findByText('Mutated child.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Kill Agent' }));
+
+    await screen.findByRole('dialog', { name: 'Confirm retirement for 🟢 Child One' });
+    expect(mockFetch).not.toHaveBeenCalledWith('/api/agents/agent-child-1/retire', expect.anything());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Kill Agent' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-child-1/retire', expect.objectContaining({ method: 'POST' }));
     });
   }, 15000);
 });

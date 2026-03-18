@@ -92,6 +92,29 @@ interface CustomizationFormState {
   nickname: string;
 }
 
+type BreedStrategy = 'UNIFORM' | 'BLENDED';
+type BreedMutationSeverity = 'LIGHT' | 'MEDIUM' | 'HEAVY';
+
+interface BreedResultChild {
+  id: string;
+  agentType: string;
+  riskProfile: string;
+  generationNumber: number;
+  status: string;
+  parent1Id: string | null;
+  parent2Id: string | null;
+  mutationsApplied: unknown[];
+  mutationSeverity: BreedMutationSeverity;
+}
+
+interface BreedResponse {
+  parentIds: string[];
+  childCount: number;
+  crossoverStrategy: BreedStrategy;
+  mutationSeverity: BreedMutationSeverity;
+  children: BreedResultChild[];
+}
+
 const EMOJI_OPTIONS = ['🟢', '🔴', '🟡', '💎', '🔥', '⚡', '🌟', '🎯', '🚀', '🏆'];
 const COLOR_OPTIONS = ['#00FF00', '#FF0000', '#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#800080', '#0099FF'];
 
@@ -209,6 +232,13 @@ interface CustomizationModalProps {
   onClose: () => void;
   onChange: (patch: Partial<CustomizationFormState>) => void;
   onSave: () => void;
+}
+
+interface RetireConfirmationModalProps {
+  agent: AgentDetail;
+  retiring: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
 }
 
 function CustomizationModal({ agent, formState, saving, error, onClose, onChange, onSave }: CustomizationModalProps) {
@@ -335,6 +365,67 @@ function CustomizationModal({ agent, formState, saving, error, onClose, onChange
   );
 }
 
+function RetireConfirmationModal({ agent, retiring, onCancel, onConfirm }: RetireConfirmationModalProps) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Confirm retirement for ${displayName(agent)}`}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.55)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        zIndex: 60,
+      }}
+    >
+      <div style={{ ...panelStyle, width: '100%', maxWidth: '32rem', padding: '1.5rem' }}>
+        <h3 style={{ margin: 0, fontSize: '1.2rem', color: '#7f1d1d' }}>Confirm Agent Retirement</h3>
+        <p style={{ margin: '0.9rem 0 0', color: '#334155', lineHeight: 1.6 }}>
+          {displayName(agent)} will be removed from the active agent pool and will no longer appear in future breeding or competition selections.
+        </p>
+        <p style={{ margin: '0.75rem 0 0', color: '#991b1b', fontWeight: 700 }}>
+          This action is intended for culling poor performers.
+        </p>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.5rem' }}>
+          <button
+            onClick={onCancel}
+            disabled={retiring}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.75rem',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              cursor: retiring ? 'not-allowed' : 'pointer',
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={retiring}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.75rem',
+              border: 'none',
+              backgroundColor: retiring ? '#fca5a5' : '#dc2626',
+              color: '#ffffff',
+              fontWeight: 700,
+              cursor: retiring ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {retiring ? 'Retiring...' : 'Confirm Kill Agent'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function AgentManagementDashboard() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentSummary[]>([]);
@@ -354,6 +445,16 @@ export function AgentManagementDashboard() {
   const [customizationSaving, setCustomizationSaving] = useState(false);
   const [customizationForm, setCustomizationForm] = useState<CustomizationFormState>(buildCustomizationForm(null));
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const [breedingPoolIds, setBreedingPoolIds] = useState<string[]>([]);
+  const [breedChildCount, setBreedChildCount] = useState(2);
+  const [breedStrategy, setBreedStrategy] = useState<BreedStrategy>('UNIFORM');
+  const [breedMutationSeverity, setBreedMutationSeverity] = useState<BreedMutationSeverity>('MEDIUM');
+  const [breedError, setBreedError] = useState<string | null>(null);
+  const [breedSuccess, setBreedSuccess] = useState<string | null>(null);
+  const [breeding, setBreeding] = useState(false);
+  const [retireError, setRetireError] = useState<string | null>(null);
+  const [retiring, setRetiring] = useState(false);
+  const [retireConfirmOpen, setRetireConfirmOpen] = useState(false);
 
   // Keep dashboard data moving during ongoing competitions without manual refresh.
   useEffect(() => {
@@ -455,6 +556,12 @@ export function AgentManagementDashboard() {
     setCustomizationForm(buildCustomizationForm(selectedAgent));
   }, [selectedAgent]);
 
+  useEffect(() => {
+    if (!selectedAgent || selectedAgent.status !== 'ACTIVE') {
+      setRetireConfirmOpen(false);
+    }
+  }, [selectedAgent]);
+
   const filteredAgents = [...agents]
     .filter(agent => {
       const normalizedQuery = query.trim().toLowerCase();
@@ -482,6 +589,29 @@ export function AgentManagementDashboard() {
   const averageRoi = totalAgents > 0 ? agents.reduce((sum, agent) => sum + agent.roi_percent, 0) / totalAgents : 0;
   const totalPnl = agents.reduce((sum, agent) => sum + agent.total_pnl, 0);
   const topSharpe = agents.reduce((max, agent) => Math.max(max, agent.sharpe_ratio), 0);
+  const breedingPoolAgents = breedingPoolIds
+    .map(id => agents.find(agent => agent.id === id) ?? (selectedAgent?.id === id ? normalizeAgentSummary({
+      id: selectedAgent.id,
+      agent_type: selectedAgent.agent_type,
+      risk_profile: selectedAgent.risk_profile,
+      status: selectedAgent.status,
+      custom_name: selectedAgent.custom_name,
+      emoji: selectedAgent.emoji,
+      color: selectedAgent.color,
+      biography: selectedAgent.biography,
+      nickname: selectedAgent.nickname,
+      age_iterations: selectedAgent.age_iterations,
+      generation_number: selectedAgent.generation_number,
+      created_at: selectedAgent.created_at,
+      total_competitions: selectedAgent.stats.total_competitions,
+      total_wins: selectedAgent.stats.total_wins,
+      total_losses: selectedAgent.stats.total_losses,
+      win_rate_percent: selectedAgent.stats.win_rate_percent,
+      total_pnl: selectedAgent.stats.total_pnl,
+      sharpe_ratio: selectedAgent.stats.sharpe_ratio,
+      roi_percent: selectedAgent.stats.roi_percent,
+    }) : null))
+    .filter((agent): agent is AgentSummary => !!agent);
 
   const handleRefresh = () => {
     setRefreshNonce(value => value + 1);
@@ -492,6 +622,79 @@ export function AgentManagementDashboard() {
     setCustomizationError(null);
     setCustomizationForm(buildCustomizationForm(selectedAgent));
     setCustomizing(true);
+  };
+
+  const toggleBreedingPool = (agentId: string) => {
+    setBreedError(null);
+    setBreedSuccess(null);
+    setBreedingPoolIds(current => current.includes(agentId)
+      ? current.filter(id => id !== agentId)
+      : [...current, agentId]);
+  };
+
+  const retireSelectedAgent = async () => {
+    if (!selectedAgent) return;
+
+    try {
+      setRetiring(true);
+      setRetireError(null);
+      setBreedSuccess(null);
+
+      const response = await fetch(`/api/agents/${selectedAgent.id}/retire`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(typeof errorData.error === 'string' ? errorData.error : `HTTP ${response.status}`);
+      }
+
+      setBreedingPoolIds(current => current.filter(id => id !== selectedAgent.id));
+      setSelectedAgentId(null);
+      setRetireConfirmOpen(false);
+      setBreedSuccess(`${displayName(selectedAgent)} retired from the active pool.`);
+      setRefreshNonce(value => value + 1);
+    } catch (error) {
+      setRetireError(error instanceof Error ? error.message : 'Failed to retire agent');
+    } finally {
+      setRetiring(false);
+    }
+  };
+
+  const breedSelectedAgents = async () => {
+    try {
+      setBreeding(true);
+      setBreedError(null);
+      setBreedSuccess(null);
+
+      const response = await fetch('/api/evolutionary/breed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          parentIds: breedingPoolIds,
+          childCount: breedChildCount,
+          crossoverStrategy: breedStrategy,
+          mutationSeverity: breedMutationSeverity,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(typeof errorData.error === 'string' ? errorData.error : `HTTP ${response.status}`);
+      }
+
+      const data = await response.json() as BreedResponse;
+      const firstChildId = data.children[0]?.id ?? null;
+      setBreedSuccess(`Created ${data.childCount} child agents from ${data.parentIds.length} selected parents.`);
+      setBreedingPoolIds([]);
+      setSelectedAgentId(firstChildId);
+      setRefreshNonce(value => value + 1);
+    } catch (error) {
+      setBreedError(error instanceof Error ? error.message : 'Failed to breed selected agents');
+    } finally {
+      setBreeding(false);
+    }
   };
 
   const saveCustomization = async () => {
@@ -703,6 +906,98 @@ export function AgentManagementDashboard() {
           </div>
 
           <div style={{ ...panelStyle, padding: '1rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Breeding Pool</h3>
+              <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{breedingPoolIds.length} selected</span>
+            </div>
+
+            <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+              {breedingPoolAgents.length === 0 ? (
+                <div style={{ color: '#64748b' }}>Select agents in the detail panel to mark them ready for evolution.</div>
+              ) : breedingPoolAgents.map(agent => (
+                <div key={agent.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.75rem' }}>
+                  <div>
+                    <div style={{ color: '#0f172a', fontWeight: 700 }}>{displayName(agent)}</div>
+                    <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.85rem' }}>{agent.agent_type} · Gen {agent.generation_number ?? 0}</div>
+                  </div>
+                  <button
+                    onClick={() => toggleBreedingPool(agent.id)}
+                    style={{ padding: '0.55rem 0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))', gap: '0.75rem' }}>
+              <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+                Children
+                <input
+                  type="number"
+                  min={1}
+                  max={20}
+                  value={breedChildCount}
+                  onChange={event => setBreedChildCount(Math.min(Math.max(Number(event.target.value) || 1, 1), 20))}
+                  style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+                Crossover
+                <select
+                  value={breedStrategy}
+                  onChange={event => setBreedStrategy(event.target.value as BreedStrategy)}
+                  style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+                >
+                  <option value="UNIFORM">Uniform</option>
+                  <option value="BLENDED">Blended</option>
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+                Mutation
+                <select
+                  value={breedMutationSeverity}
+                  onChange={event => setBreedMutationSeverity(event.target.value as BreedMutationSeverity)}
+                  style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+                >
+                  <option value="LIGHT">Light</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HEAVY">Heavy</option>
+                </select>
+              </label>
+            </div>
+
+            {breedError && (
+              <div role="alert" style={{ marginTop: '1rem', color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem' }}>
+                {breedError}
+              </div>
+            )}
+
+            {breedSuccess && (
+              <div style={{ marginTop: '1rem', color: '#166534', backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '0.75rem' }}>
+                {breedSuccess}
+              </div>
+            )}
+
+            <button
+              onClick={breedSelectedAgents}
+              disabled={breeding || breedingPoolIds.length < 2}
+              style={{
+                marginTop: '1rem',
+                padding: '0.8rem 1rem',
+                borderRadius: '0.85rem',
+                border: 'none',
+                backgroundColor: breeding || breedingPoolIds.length < 2 ? '#94a3b8' : '#2563eb',
+                color: '#ffffff',
+                fontWeight: 700,
+                cursor: breeding || breedingPoolIds.length < 2 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {breeding ? 'Breeding...' : 'Create Mutated Children'}
+            </button>
+          </div>
+
+          <div style={{ ...panelStyle, padding: '1rem' }}>
             <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Population Signals</h3>
             <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.75rem', color: '#334155' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem' }}>
@@ -755,22 +1050,62 @@ export function AgentManagementDashboard() {
                     {selectedAgent.biography || 'No biography set for this agent.'}
                   </p>
                 </div>
-                <button
-                  onClick={openCustomization}
-                  style={{
-                    alignSelf: 'start',
-                    padding: '0.75rem 1rem',
-                    borderRadius: '0.85rem',
-                    border: 'none',
-                    backgroundColor: '#0f172a',
-                    color: '#ffffff',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Customize
-                </button>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <button
+                    onClick={() => toggleBreedingPool(selectedAgent.id)}
+                    disabled={selectedAgent.status !== 'ACTIVE'}
+                    style={{
+                      alignSelf: 'start',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '0.85rem',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: breedingPoolIds.includes(selectedAgent.id) ? '#dbeafe' : '#ffffff',
+                      color: '#0f172a',
+                      fontWeight: 700,
+                      cursor: selectedAgent.status !== 'ACTIVE' ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {breedingPoolIds.includes(selectedAgent.id) ? 'Remove From Breeding Pool' : 'Mark Ready To Evolve'}
+                  </button>
+                  <button
+                    onClick={openCustomization}
+                    style={{
+                      alignSelf: 'start',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '0.85rem',
+                      border: 'none',
+                      backgroundColor: '#0f172a',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Customize
+                  </button>
+                  <button
+                    onClick={() => setRetireConfirmOpen(true)}
+                    disabled={retiring || selectedAgent.status !== 'ACTIVE'}
+                    style={{
+                      alignSelf: 'start',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '0.85rem',
+                      border: 'none',
+                      backgroundColor: retiring || selectedAgent.status !== 'ACTIVE' ? '#fca5a5' : '#dc2626',
+                      color: '#ffffff',
+                      fontWeight: 700,
+                      cursor: retiring || selectedAgent.status !== 'ACTIVE' ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {retiring ? 'Retiring...' : 'Kill Agent'}
+                  </button>
+                </div>
               </div>
+
+              {retireError && (
+                <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem' }}>
+                  {retireError}
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '0.9rem' }}>
                 {[
@@ -877,6 +1212,15 @@ export function AgentManagementDashboard() {
           onClose={() => setCustomizing(false)}
           onChange={patch => setCustomizationForm(current => ({ ...current, ...patch }))}
           onSave={saveCustomization}
+        />
+      )}
+
+      {retireConfirmOpen && selectedAgent && (
+        <RetireConfirmationModal
+          agent={selectedAgent}
+          retiring={retiring}
+          onCancel={() => setRetireConfirmOpen(false)}
+          onConfirm={retireSelectedAgent}
         />
       )}
     </section>

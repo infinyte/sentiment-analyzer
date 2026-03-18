@@ -6,6 +6,7 @@
  *   GET  /api/agents/stats/leaderboard    - top agents by win rate
  *   GET  /api/agents/:id                  - single agent with stats
  *   PUT  /api/agents/:id/customize        - update cosmetics
+ *   POST /api/agents/:id/retire           - manually retire an underperforming agent
  *   GET  /api/agents/:id/history          - competition history for one agent
  */
 
@@ -98,6 +99,29 @@ export function createAgentStatsRouter(db: Database.Database): Router {
       res.json(updated);
     } catch (error: unknown) {
       res.status(400).json({ error: String(error) });
+    }
+  });
+
+  // POST /api/agents/:id/retire — manually remove an active agent from the pool
+  router.post('/api/agents/:id/retire', (req, res) => {
+    try {
+      const { id } = req.params;
+
+      const existing = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id) as { status?: string } | undefined;
+      if (!existing) {
+        return res.status(404).json({ error: 'Agent not found' });
+      }
+
+      if (existing.status === 'RETIRED') {
+        return res.status(400).json({ error: 'Agent is already retired' });
+      }
+
+      db.prepare("UPDATE agent_registry SET status = 'RETIRED' WHERE id = ?").run(id);
+      const updated = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id);
+
+      res.json({ retired: true, agent: updated });
+    } catch (error: unknown) {
+      res.status(500).json({ error: String(error) });
     }
   });
 
