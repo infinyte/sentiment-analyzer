@@ -254,11 +254,11 @@ NLP sentiment models are vulnerable to adversarial inputs (intentional misspelli
 The current hourly cron in `index.ts` batches all scraping, creating latency spikes and uneven load. Refactor the social ingest pipeline to use an internal `EventEmitter`-based queue (Node.js `EventEmitter` or a lightweight in-process queue like `p-queue`) so that each scrape result is scored and stored immediately upon arrival rather than in a batch. This is the foundation for a future Kafka/Kinesis migration. RSS and Discord scrapers should be the first converted sources.
 
 **Acceptance Criteria:**
-- [ ] An `IngestQueue` class (`services/social-media/ingest-queue.ts`) wraps a concurrency-limited async queue and processes `SocialMediaItem[]` payloads through bot detection → normalisation → scoring → upsert, in that order.
-- [ ] `ScrapeManager.scrapeAll()` is refactored to push results to `IngestQueue` rather than awaiting bulk upsert directly.
-- [ ] The hourly cron now triggers scraping only; all processing flows through `IngestQueue`.
-- [ ] Queue depth and processing latency are logged via Winston at `debug` level.
-- [ ] No regression in existing social scraper tests; a new integration test verifies end-to-end flow through the queue.
+- [x] An `IngestQueue` class (`services/social-media/ingest-queue.ts`) wraps a concurrency-limited async queue and processes `SocialMediaItem[]` payloads through bot detection → normalisation → scoring → upsert, in that order.
+- [x] `ScrapeManager.scrapeAll()` is refactored to push results to `IngestQueue` rather than awaiting bulk upsert directly.
+- [x] The hourly cron now triggers scraping only; all processing flows through `IngestQueue`.
+- [x] Queue depth and processing latency are logged via Winston at `debug` level.
+- [x] No regression in existing social scraper tests; a new integration test verifies end-to-end flow through the queue.
 
 ---
 

@@ -10,6 +10,7 @@ jest.mock('../../storage.js', () => ({
     getSentiment: jest.fn().mockReturnValue(null),
     saveSentiment: jest.fn(),
     isHealthy: jest.fn().mockReturnValue(true),
+    getDb: jest.fn().mockReturnValue({}),
     saveBacktestResult: jest.fn(),
     getBacktestResult: jest.fn().mockReturnValue(null),
     listBacktestResults: jest.fn().mockReturnValue([]),
@@ -124,6 +125,15 @@ jest.mock('../../services/social-media/scraper/scraper-manager.js', () => ({
     refreshDiscordAll: jest.fn().mockResolvedValue(0),
     refreshTelegramAll: jest.fn().mockResolvedValue(0),
     fetchBatch: jest.fn().mockResolvedValue([]),
+    scrapeAll: jest.fn().mockResolvedValue({
+      rss_items: 0,
+      discord_items: 0,
+      telegram_items: 0,
+      coin_results: [],
+      total_items_scraped: 0,
+      total_items_stored: 0,
+      duration_ms: 0,
+    }),
   })),
 }));
 

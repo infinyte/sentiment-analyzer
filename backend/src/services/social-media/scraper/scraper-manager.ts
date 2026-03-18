@@ -51,6 +51,16 @@ export interface ScrapeRunResult {
   duration_ms: number;
 }
 
+export interface ScrapeAllResult {
+  rss_items: number;
+  discord_items: number;
+  telegram_items: number;
+  coin_results: ScrapeRunResult[];
+  total_items_scraped: number;
+  total_items_stored: number;
+  duration_ms: number;
+}
+
 // ── Manager ────────────────────────────────────────────────────────────────────
 
 export class SocialMediaScraperManager {
@@ -98,6 +108,47 @@ export class SocialMediaScraperManager {
     const results: ScrapeRunResult[] = [];
     for (const sym of symbols) results.push(await this.fetchForCoin(sym));
     return results;
+  }
+
+  /**
+   * End-to-end scrape orchestration used by cron and fire-and-forget refreshes.
+   * All scraped payloads flow through IngestQueue immediately after arrival.
+   */
+  async scrapeAll(symbols: string[] = []): Promise<ScrapeAllResult> {
+    const start = Date.now();
+
+    const [rss_items, discord_items, telegram_items, coin_results] = await Promise.all([
+      this.refreshRssAll(),
+      this.refreshDiscordAll(),
+      this.refreshTelegramAll(),
+      symbols.length > 0 ? this.fetchBatch(symbols) : Promise.resolve([]),
+    ]);
+
+    const total_items_scraped = rss_items + discord_items + telegram_items +
+      coin_results.reduce((sum, result) => sum + result.items_scraped, 0);
+    const total_items_stored = rss_items + discord_items + telegram_items +
+      coin_results.reduce((sum, result) => sum + result.items_stored, 0);
+    const duration_ms = Date.now() - start;
+
+    logger.info('scrape-manager: scrapeAll complete', {
+      symbols: symbols.length,
+      rss_items,
+      discord_items,
+      telegram_items,
+      total_items_scraped,
+      total_items_stored,
+      duration_ms,
+    });
+
+    return {
+      rss_items,
+      discord_items,
+      telegram_items,
+      coin_results,
+      total_items_scraped,
+      total_items_stored,
+      duration_ms,
+    };
   }
 
   // ── Bulk background fetches ────────────────────────────────────────────────

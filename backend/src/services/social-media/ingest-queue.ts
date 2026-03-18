@@ -4,8 +4,8 @@
  * A concurrency-limited async queue that processes SocialMediaItem[] payloads
  * through the full pipeline in a consistent order:
  *
- *   1. Normalisation  — populate coin mentions (extractCoins fallback + targetSymbol pinning)
- *   2. Bot detection  — BotDetectionService.scoreAll; attaches bot_score to each item
+ *   1. Bot detection  — BotDetectionService.scoreAll; attaches bot_score to each item
+ *   2. Normalisation  — populate coin mentions (extractCoins fallback + targetSymbol pinning)
  *   3. Scoring        — scoreItemsAsync (FinBERT / keyword + engagement + authority + recency)
  *   4. Upsert         — socialStore.upsertItems + incrementFetchCount per source
  *
@@ -170,7 +170,15 @@ export class IngestQueue extends EventEmitter {
       return { stored: 0, botFiltered: 0, latencyMs: 0 };
     }
 
-    // ── 1. Normalisation ────────────────────────────────────────────────────
+    // ── 1. Bot detection ────────────────────────────────────────────────────
+    const botScores = botDetectionService.scoreAll(items);
+    let botFiltered = 0;
+    for (const item of items) {
+      item.bot_score = botScores.get(item.id)?.score ?? null;
+      if ((item.bot_score ?? 0) >= 0.8) botFiltered++;
+    }
+
+    // ── 2. Normalisation ────────────────────────────────────────────────────
     // Populate missing coin mentions via CoinExtractor, then pin targetSymbol.
     for (const item of items) {
       if (item.coins_mentioned.length === 0) {
@@ -180,14 +188,6 @@ export class IngestQueue extends EventEmitter {
       if (targetSymbol && !item.coins_mentioned.includes(targetSymbol)) {
         item.coins_mentioned.unshift(targetSymbol);
       }
-    }
-
-    // ── 2. Bot detection ────────────────────────────────────────────────────
-    const botScores = botDetectionService.scoreAll(items);
-    let botFiltered = 0;
-    for (const item of items) {
-      item.bot_score = botScores.get(item.id)?.score ?? null;
-      if ((item.bot_score ?? 0) >= 0.8) botFiltered++;
     }
 
     // ── 3. Scoring ──────────────────────────────────────────────────────────

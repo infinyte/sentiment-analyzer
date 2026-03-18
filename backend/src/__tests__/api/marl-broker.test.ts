@@ -27,6 +27,7 @@ jest.mock('../../storage.js', () => ({
     getSentiment: jest.fn().mockReturnValue(null),
     saveSentiment: jest.fn(),
     isHealthy: jest.fn().mockReturnValue(true),
+    getDb: jest.fn().mockReturnValue({}),
     saveBacktestResult: jest.fn(),
     getBacktestResult: jest.fn().mockReturnValue(null),
     listBacktestResults: jest.fn().mockReturnValue([]),

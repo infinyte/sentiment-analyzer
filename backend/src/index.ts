@@ -24,6 +24,7 @@ import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
 import marlRealTradingRoutes from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
+import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { brokerRegistry } from './services/brokers/broker-registry.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
@@ -921,6 +922,13 @@ app.use(marlRoutes);
 app.use(marlRealTradingRoutes);
 app.use(socialMediaRoutes);
 
+// Agent stats routes — requires an active DB connection
+if (storage.isHealthy()) {
+  app.use(createAgentStatsRouter(storage.getDb()));
+} else {
+  logger.warn('agent-stats routes skipped (storage not connected)');
+}
+
 // 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
@@ -996,22 +1004,17 @@ const socialCronSchedule = process.env.SOCIAL_SCRAPE_CRON || '0 * * * *';
 cron.schedule(socialCronSchedule, async () => {
   try {
     const coins = cache.get<{ symbol: string }[]>('coins');
-
-    // RSS, Discord, and Telegram are always available (no per-coin filtering needed)
-    const [rssCount, discordCount, telegramCount] = await Promise.all([
-      socialScraperManager.refreshRssAll(),
-      socialScraperManager.refreshDiscordAll(),
-      socialScraperManager.refreshTelegramAll(),
-    ]);
-    logger.info('social cron: bulk refresh', { rss: rssCount, discord: discordCount, telegram: telegramCount });
-
-    // Per-coin scraping for top 10 coins (Twitter + Reddit)
-    if (coins && coins.length > 0) {
-      const top = coins.slice(0, 10).map(c => c.symbol);
-      const results = await socialScraperManager.fetchBatch(top);
-      const total = results.reduce((s, r) => s + r.items_scraped, 0);
-      logger.info('social cron: per-coin scrape', { symbols: top.length, total });
-    }
+    const top = coins?.slice(0, 10).map(c => c.symbol) ?? [];
+    const scrapeResult = await socialScraperManager.scrapeAll(top);
+    logger.info('social cron: scrape phase complete', {
+      symbols: top.length,
+      rss: scrapeResult.rss_items,
+      discord: scrapeResult.discord_items,
+      telegram: scrapeResult.telegram_items,
+      total_scraped: scrapeResult.total_items_scraped,
+      total_stored: scrapeResult.total_items_stored,
+      duration_ms: scrapeResult.duration_ms,
+    });
 
     // Log ingest queue health after scraping phase completes
     logger.debug('social cron: ingest queue stats', ingestQueue.getStats());

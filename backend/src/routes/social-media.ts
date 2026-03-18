@@ -224,14 +224,15 @@ router.post('/api/social-media/refresh', async (req, res) => {
           logger.info('social refresh: rss complete', { count });
         } else {
           const targets = symbols?.map(s => s.toUpperCase()) ?? [];
-          if (targets.length === 0) {
-            // Fallback: refresh RSS only when no symbols specified
-            await scraperManager.refreshRssAll();
-          } else {
-            const results = await scraperManager.fetchBatch(targets);
-            const total = results.reduce((s, r) => s + r.items_scraped, 0);
-            logger.info('social refresh: batch complete', { symbols: targets.length, total });
-          }
+          const result = await scraperManager.scrapeAll(targets);
+          logger.info('social refresh: scrape complete', {
+            symbols: targets.length,
+            total_scraped: result.total_items_scraped,
+            total_stored: result.total_items_stored,
+            rss: result.rss_items,
+            discord: result.discord_items,
+            telegram: result.telegram_items,
+          });
           // After scraping, update trending topics
           await discoveryEngine.discoverTrends();
         }

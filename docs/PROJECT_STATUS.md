@@ -187,7 +187,7 @@ See full roadmap in §4 below.
 | 12 | MARL state vector — sentiment features | ✅ Done |
 | 13 | SHAP-style feature attribution | ❌ Not started |
 | 14 | Adversarial robustness pre-processing | ❌ Not started |
-| 15 | Event-driven ingest pipeline | ❌ Not started |
+| 15 | Event-driven ingest pipeline | ✅ Done |
 | 16 | Sentiment model drift detection | ❌ Not started |
 | 17 | Sentiment backtesting evaluation | ❌ Not started |
 | 18 | Privacy & compliance layer | ❌ Not started |
@@ -360,8 +360,19 @@ Extend `normalizeText()` (from #10) with NFKC Unicode normalisation, repeated-ch
 
 ### Group F — Infrastructure & MLOps
 
-#### ❌ #15 — Event-Driven Ingest Pipeline
-`IngestQueue` class (`services/social-media/ingest-queue.ts`) wrapping a concurrency-limited async queue. `ScrapeManager.scrapeAll()` pushes results to queue instead of bulk awaiting. Pipeline order: bot detection → normalisation → scoring → upsert. Queue depth and latency logged at `debug` level.
+#### ✅ #15 — Event-Driven Ingest Pipeline
+The social ingest path is now queue-driven. `IngestQueue` wraps a concurrency-limited `EventEmitter`-based pipeline and processes raw `SocialMediaItem[]` payloads through bot detection, coin-mention normalization, scoring, and SQLite upsert. `SocialMediaScraperManager.scrapeAll()` orchestrates RSS, Discord, Telegram, and per-coin scraping while routing every scraped payload through the queue immediately rather than processing it inline.
+
+Implemented in:
+- `backend/src/services/social-media/ingest-queue.ts`
+- `backend/src/services/social-media/scraper/scraper-manager.ts`
+- `backend/src/routes/social-media.ts`
+- `backend/src/index.ts`
+
+Validation:
+- Queue depth and payload latency are logged via Winston at `debug` level.
+- Existing queue and social API tests pass without regression.
+- Integration coverage verifies `scrapeAll()` hands bulk and per-coin scrape payloads to `IngestQueue` end-to-end.
 
 #### ❌ #16 — Sentiment Model Drift Detection
 SQLite `model_metrics` table (`model_id`, `date`, `mean_confidence`, `item_count`). `SentimentService` and `FinBertService` record daily confidence averages. `GET /api/health` includes `model_drift` block. `POST /api/admin/reset-drift-baseline` (requires `x-api-key`) resets baseline.
