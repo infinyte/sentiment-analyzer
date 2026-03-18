@@ -6,8 +6,8 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** Phase 3 Complete / Phase 4 Planned
-**Latest Release:** v3.0.0
+**Phase:** Phase 3 Complete + Phase 5 Exchange Layer (partial) / Phase 4 Planned
+**Latest Release:** v3.1.0
 **Last Updated:** March 2026
 
 ---
@@ -75,8 +75,49 @@ Competitive multi-agent trading where AI agents compete for trading opportunitie
 - [x] `GET /api/marl/competitions` — list all competitions
 - [x] `GET /api/marl/info` — static documentation
 
+**Broker / Real Trading** (`routes/marl-real-trading.ts`):
+- [x] `POST /api/marl/broker/credentials` — store AES-256-GCM encrypted broker credentials
+- [x] `GET /api/marl/broker/credentials` — list metadata (no secrets)
+- [x] `GET /api/marl/broker/credentials/picker` — unauthenticated id/label/provider/mode list for UI
+- [x] `DELETE /api/marl/broker/credentials/:id` — remove stored credential
+- [x] `POST /api/marl/broker/connect/:id` — decrypt + connect adapter into registry
+- [x] `GET /api/marl/broker/connected` — list connected adapters
+- [x] `GET /api/marl/broker/orders/:competitionId` — order audit trail
+- [x] `POST /api/marl/broker/emergency-stop` — cancel all open orders
+
+**Agent Identity & Stats** (`routes/agent-stats.ts`):
+- [x] `GET /api/agents` — list active agents with pagination
+- [x] `GET /api/agents/stats/leaderboard` — top agents by win rate
+- [x] `GET /api/agents/:id` — single agent + stats
+- [x] `PUT /api/agents/:id/customize` — update cosmetics (name, emoji, color, bio)
+- [x] `GET /api/agents/:id/history` — competition history
+
+**Evolutionary Orchestrator** (`services/evolutionary/`):
+- [x] `EvolutionaryOrchestrator` — multi-generation loop: MARL → fitness → selection → crossover → mutation
+- [x] `FitnessCalculator` — 0–100 composite score
+- [x] `SelectionAlgorithm` — survival partitioning
+- [x] `GeneticCrossover` — UNIFORM / BLENDED strategies
+- [x] `MutationEngine` — LIGHT / MEDIUM / HEAVY severity
+- [x] `GenomeManager` — SQLite-backed genome CRUD
+- [x] `POST /api/evolutionary/tournament` — start multi-generation tournament
+- [x] `GET /api/evolutionary/tournament` — list tournaments
+- [x] `GET /api/evolutionary/tournament/:id` — full status + generation history
+- [x] `GET /api/agents/:id/genome` + `GET /api/agents/:id/genealogy`
+- [x] `evolutionary_tournaments` SQLite table
+
+**Exchange Layer** (`services/exchange/`):
+- [x] `ExchangeInterface` — shared `Order`, `Balance`, `PlaceOrderParams` types
+- [x] `PaperExchange` — in-memory paper trading, no real orders
+- [x] `CryptoComClient` — Crypto.com REST v2 with HMAC-SHA256 signing
+- [x] `CryptoComExchange` — ExchangeInterface adapter (default provider)
+- [x] `BinanceUSExchange` — ExchangeInterface adapter (opt-in via `TRADING_PROVIDER`)
+- [x] `TradingService` — 4 safety guards: kill switch, max positions, position size cap, $1 min notional
+- [x] `ExchangeFactory` — routes PAPER→PaperExchange, SANDBOX/LIVE→selected provider
+- [x] `GET/POST /api/trading/*` — 5 REST endpoints for exchange status, price, balances, orders, stats
+
 **MARL Frontend** (`components/MarlCompetitionViewer.tsx`):
 - [x] Competition configuration form (mode, agents, symbols, duration, learning)
+- [x] Trading mode selector (SIMULATED / PAPER / LIVE) with broker credential dropdown (auto-populated)
 - [x] Real-time progress bar and status polling
 - [x] Final rankings table, head-to-head metrics, competitor impact table
 - [x] Equity evolution chart (multi-agent Chart.js line chart)
@@ -130,8 +171,8 @@ Multi-source social scraping, normalized scoring, trending topic discovery, and 
 - [x] `SocialDashboard` component: trending topics table, trend score panel, items feed with filters, source health table
 
 **Tests:**
-- [x] 200 backend Jest tests across 17 suites (unit: coin extractor, item scorer, SQLite store, trending discovery, multi-source calculator; integration: all 6 Phase 3 endpoints)
-- [x] 35 frontend Vitest tests across 3 suites
+- [x] 567 backend Jest tests across 36 suites (unit + integration; includes exchange, trading service, evolutionary, MARL, social media, API routes)
+- [x] 36 frontend Vitest tests across 3 suites
 
 ---
 
@@ -209,13 +250,26 @@ Requires:
 
 Enable live trading and portfolio tracking.
 
-### Planned Features
+### ✅ Completed (Foundation)
 
-- [ ] **Exchange API Integration**
-  - Support for Binance, Kraken, Coinbase APIs
-  - API key management (encrypted storage)
-  - Portfolio data synchronization
-  - Estimated effort: 3-4 weeks
+- [x] **Exchange API Integration** (partial)
+  - Crypto.com REST v2 adapter (default) with HMAC-SHA256 auth
+  - Binance.US adapter (opt-in via `TRADING_PROVIDER=binance-us`)
+  - Coinbase + Binance adapters for MARL layer
+  - AES-256-GCM encrypted credential storage (`BROKER_MASTER_KEY`)
+  - Paper trading mode via `PaperExchange` (in-memory, zero risk)
+
+- [x] **Risk Management** (core guards)
+  - `TradingService`: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
+  - SELL orders bypass kill switch; only BUY orders blocked on loss threshold
+  - `RiskManager` for MARL layer: kill switch, daily-loss limit, order-size guard
+
+- [x] **Trade Execution** (foundation)
+  - `POST /api/trading/order` — places orders through TradingService safety guards
+  - Order audit trail via `GET /api/marl/broker/orders/:competitionId`
+  - Emergency stop: `POST /api/marl/broker/emergency-stop`
+
+### 📋 Remaining Planned Features
 
 - [ ] **Portfolio Tracker**
   - Import holdings from exchange
@@ -224,26 +278,19 @@ Enable live trading and portfolio tracking.
   - Tax reporting tools
   - Estimated effort: 2-3 weeks
 
-- [ ] **Trade Execution**
-  - Place limit/market orders
-  - Order history
-  - Trade analytics
-  - Backtest trading strategies
-  - Estimated effort: 4 weeks
-
-- [ ] **Risk Management**
-  - Position sizing calculator
-  - Stop-loss recommendations
-  - Portfolio allocation analysis
-  - Estimated effort: 2 weeks
+- [ ] **Extended Exchange Support**
+  - Kraken, additional providers
+  - Portfolio data synchronization
+  - Estimated effort: 2-3 weeks
 
 ### Security Considerations
 
-- Encrypted API key storage
-- Two-factor authentication (2FA)
-- Audit logging for all trades
-- Rate limiting on order placement
-- Paper trading mode for testing
+- ✅ Encrypted API key storage (AES-256-GCM)
+- ✅ Audit logging for all trades
+- ✅ Rate limiting on order placement
+- ✅ Paper trading mode for testing
+- [ ] Two-factor authentication (2FA)
+- [ ] Full order history UI
 
 ### Success Metrics
 
@@ -443,7 +490,15 @@ React with 👍 on feature requests to indicate interest. Roadmap priorities con
 - ✅ Multi-source trend report with historical comparison
 - ✅ Application Insights telemetry transport
 - ✅ Frontend Social Intel tab
-- ✅ 200 backend tests, 35 frontend tests
+- ✅ Active Sources count fix (per-source items_24h computed from social_media_items table)
+
+### Phase 2 Additions (Completed alongside Phase 3)
+- ✅ Broker credentials (encrypted storage, Alpaca adapter, emergency stop)
+- ✅ Agent identity + cosmetics + leaderboard (SQLite-backed)
+- ✅ EvolutionaryOrchestrator: genome evolution across multi-generation MARL tournaments
+- ✅ CryptoComExchange + TradingService with 4 safety guards
+- ✅ Broker credential dropdown in MarlCompetitionViewer (auto-populated from API)
+- ✅ 567 backend tests across 36 suites, 36 frontend tests across 3 suites
 
 ### Phase 4 (Planned)
 - 🎯 Trading volume > $1M/month

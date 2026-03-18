@@ -2,6 +2,7 @@
 // Main React component with dashboard, detail modal, and MARL competition view
 
 import { useEffect, useState } from 'react';
+import { AgentManagementDashboard } from './components/AgentManagementDashboard';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { SocialDashboard } from './components/SocialDashboard';
 import { Line } from 'react-chartjs-2';
@@ -913,7 +914,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'marl' | 'social';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
@@ -982,6 +983,9 @@ export default function App() {
           <button style={navTabStyle('dashboard')} onClick={() => setActiveView('dashboard')}>
             Dashboard
           </button>
+          <button style={navTabStyle('agents')} onClick={() => setActiveView('agents')}>
+            Agents
+          </button>
           <button style={navTabStyle('marl')} onClick={() => setActiveView('marl')}>
             MARL Competition
           </button>
@@ -1048,6 +1052,9 @@ export default function App() {
             lastUpdated={lastUpdated}
             onCoinSelect={setSelectedSymbol}
           />
+        )}
+        {activeView === 'agents' && (
+          <AgentManagementDashboard />
         )}
         {activeView === 'marl' && (
           <MarlCompetitionViewer />

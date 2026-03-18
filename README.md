@@ -40,7 +40,7 @@ Set these in `backend/.env`:
 | `API_SECRET_KEY` | Yes | Any string — used to authenticate `POST /api/refresh-sentiment` |
 | `COINGECKO_API_KEY` | No | Free tier works without it |
 
-Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`.
+Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`, `TRADING_PROVIDER`.
 
 ### Social Media, NLP & Telemetry Variables
 
@@ -62,6 +62,7 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 | `TRANSLATION_API_KEY` | No | Reserved for future multilingual translation routing; language detection is already active without it |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Azure Application Insights telemetry |
 | `BROKER_MASTER_KEY` | No | 64-hex or passphrase used to AES-256-GCM encrypt stored broker credentials; required for PAPER/LIVE exchange mode |
+| `TRADING_PROVIDER` | No | `crypto-com` (default) or `binance-us`; selects the real exchange for SANDBOX/LIVE trading mode |
 | `SOCIAL_SCRAPE_CRON` | No | Cron for hourly scrape (default: `0 * * * *`) |
 | `TRENDING_MIN_MENTIONS` | No | Min mentions to appear in trending (default: `3`) |
 
@@ -85,7 +86,11 @@ Express Backend (port 3000)
     ├── BacktestingEngine          → historical simulation + metrics
     ├── SocialMediaScraperManager  → 7-source scraper (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok) + async item scoring
     ├── TrendingDiscoveryEngine    → entity aggregation, velocity scoring, SQLite persistence
-    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison    ├── ExchangeAdapter framework  → CoinbaseAdapter + BinanceAdapter (sandbox / live); RiskManager (kill switch, daily-loss limit, order cap); ExchangeRegistry    ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
+    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison    ├── ExchangeAdapter framework  → CoinbaseAdapter + BinanceAdapter (MARL layer); RiskManager (kill switch, daily-loss, order cap)
+    ├── CryptoComExchange / BinanceUSExchange → ExchangeInterface adapters; CryptoComClient (HMAC-SHA256 REST v2)
+    ├── TradingService             → 4 safety guards: kill switch, max positions, position size cap, $1 min notional
+    ├── EvolutionaryOrchestrator   → multi-generation loop: MARL → fitness → selection → crossover → mutation
+    ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
     └── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
 ```
 
@@ -143,6 +148,44 @@ Express Backend (port 3000)
 | DELETE | `/api/marl/agents/:agentId/learning` | Reset agent learning state (requires `x-api-key`). Query: `?riskProfile=` |
 | GET | `/api/marl/coin-universe` | Compute per-agent coin selections from CoinGecko live data. Params: `agents` (JSON array), `universeSize`, `coinsPerAgent` |
 | GET | `/api/marl/info` | Documentation for modes, agent configs, order book, and learning persistence |
+| POST | `/api/marl/broker/credentials` | Store encrypted broker credentials (requires `x-api-key`) |
+| GET | `/api/marl/broker/credentials` | List stored credential metadata — no secrets (requires `x-api-key`) |
+| DELETE | `/api/marl/broker/credentials/:id` | Remove stored credential (requires `x-api-key`) |
+| POST | `/api/marl/broker/connect/:id` | Decrypt and connect a broker adapter into the in-process registry |
+| GET | `/api/marl/broker/connected` | List currently connected adapters |
+| GET | `/api/marl/broker/credentials/picker` | Unauthenticated — returns `id`, `label`, `provider`, `mode` for UI dropdowns |
+| GET | `/api/marl/broker/orders/:competitionId` | Order audit trail for a competition. Query: `?agentId=` |
+| POST | `/api/marl/broker/emergency-stop` | Cancel all open orders for a competition |
+
+### Agent Identity & Stats
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/agents` | List active agents (paginated) |
+| GET | `/api/agents/stats/leaderboard` | Top agents by win rate |
+| GET | `/api/agents/:id` | Single agent with stats |
+| PUT | `/api/agents/:id/customize` | Update agent cosmetics (name, emoji, color, bio) |
+| GET | `/api/agents/:id/history` | Competition history for an agent |
+| GET | `/api/agents/:id/genome` | Agent genome (evolutionary parameters) |
+| GET | `/api/agents/:id/genealogy` | Ancestry chain |
+
+### Evolutionary Tournaments
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/evolutionary/tournament` | Start a multi-generation evolutionary tournament (202 + `tournamentId`) |
+| GET | `/api/evolutionary/tournament` | List all tournaments (lightweight) |
+| GET | `/api/evolutionary/tournament/:id` | Full tournament status + generation history |
+
+### Trading Service
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/trading/exchange-status` | Exchange name and connection status |
+| GET | `/api/trading/price/:symbol` | Current price for a symbol |
+| GET | `/api/trading/balances` | All non-zero balances from the exchange |
+| POST | `/api/trading/order` | Place an order through `TradingService` safety guards |
+| GET | `/api/trading/stats` | Capital, PnL, trade counts, and max loss threshold |
 
 **Tournament Modes:**
 - `SINGLE` — one-shot tournament; all agents compete simultaneously on a shared order book
@@ -297,6 +340,10 @@ sentiment-analyzer/
 │   │   │   └── sqlite-social-store.ts        # Social media SQLite store (4 tables)
 │   │   ├── routes/
 │   │   │   ├── marl-competition.ts           # MARL competition API routes (Phase 2)
+│   │   │   ├── marl-real-trading.ts          # Broker credentials + emergency stop
+│   │   │   ├── agent-stats.ts                # Agent identity, leaderboard, cosmetics
+│   │   │   ├── evolutionary.ts               # Evolutionary tournament routes
+│   │   │   ├── trading.ts                    # TradingService REST wrapper
 │   │   │   └── social-media.ts               # Phase 3 social media API routes
 │   │   ├── telemetry/
 │   │   │   └── app-insights-transport.ts     # Azure Application Insights Winston transport
@@ -312,12 +359,27 @@ sentiment-analyzer/
 │   │       ├── trading-agent.ts              # Agent framework (Rule/ML/Hybrid)
 │   │       ├── backtesting-engine.ts         # Historical simulation engine
 │   │       ├── marl-competition-engine.ts    # Multi-agent competition engine (Phase 2)
-│   │       ├── exchange/                     # Real exchange adapter framework
-│   │       │   ├── exchange-adapter.ts        # Abstract base + AccountMode types
-│   │       │   ├── exchange-factory.ts        # Factory: COINBASE | BINANCE
+│   │       ├── exchange/                     # Exchange adapter framework
+│   │       │   ├── exchange-interface.ts      # Shared Order/Balance/PlaceOrderParams types
+│   │       │   ├── exchange-factory.ts        # Routes PAPER→PaperExchange, SANDBOX/LIVE→provider
+│   │       │   ├── paper-exchange.ts          # In-memory paper trading (no real orders)
+│   │       │   ├── crypto-com-client.ts       # Crypto.com REST v2 client (HMAC-SHA256)
+│   │       │   ├── crypto-com-exchange.ts     # ExchangeInterface adapter for Crypto.com
+│   │       │   ├── binance-us-exchange.ts     # ExchangeInterface adapter for Binance.US
+│   │       │   ├── trading-service.ts         # 4-guard safety layer over ExchangeInterface
+│   │       │   ├── exchange-adapter.ts        # Abstract base + AccountMode types (MARL)
 │   │       │   ├── exchange-registry.ts       # Process-lifetime adapter singleton
 │   │       │   ├── risk-manager.ts            # Kill switch + daily-loss + order size guard
 │   │       │   └── adapters/                  # coinbase-adapter.ts, binance-adapter.ts
+│   │       ├── evolutionary/                 # Genetic algorithm pipeline
+│   │       │   ├── evolutionary-orchestrator.ts  # Multi-generation tournament loop
+│   │       │   ├── fitness-calculator.ts         # 0–100 composite fitness
+│   │       │   ├── selection-algorithm.ts        # Survival partitioning
+│   │       │   ├── genetic-crossover.ts          # UNIFORM / BLENDED crossover
+│   │       │   ├── mutation-engine.ts            # LIGHT / MEDIUM / HEAVY mutation
+│   │       │   ├── genome-manager.ts             # SQLite-backed genome CRUD
+│   │       │   ├── agent-cosmetics-manager.ts    # Name / emoji / color / bio
+│   │       │   └── agent-statistics-manager.ts  # Win-rate, PnL, history
 │   │       ├── risk/
 │   │       │   └── risk-guard.ts              # Pre-trade circuit breaker (MARL layer)
 │   │       ├── brokers/                      # Alpaca adapter + broker registry + factory
@@ -369,6 +431,10 @@ Competitive multi-agent trading: multiple AI agents compete simultaneously on a 
 - **MarlTradingAgent** — Q-learning + epsilon-greedy exploration + experience replay; 50-feature state space; 5-action policy network (50→64→32→5)
 - **Tournament Modes** — SINGLE (one-shot), EVOLUTIONARY (mutation + replacement), CONTINUOUS (live learning loop)
 - **Risk Profiles** — CONSERVATIVE (1% risk/trade), AGGRESSIVE (5%), SCALPING (3%, short hold)
+- **Broker Integration** — PAPER / SANDBOX / LIVE modes; encrypted credential storage (AES-256-GCM); Alpaca adapter; emergency stop
+- **Agent Identity** — cosmetics (name, emoji, color, bio), competition history, win-rate leaderboard persisted in SQLite
+- **Evolutionary Orchestrator** — external genome-based evolution layer: FitnessCalculator → SelectionAlgorithm → GeneticCrossover → MutationEngine; results persisted in `evolutionary_tournaments` table
+- **Exchange Layer** — `CryptoComExchange` (default) and `BinanceUSExchange` behind a shared `ExchangeInterface`; `TradingService` adds 4 safety guards; `PaperExchange` for zero-risk simulation
 
 ### Documentation
 

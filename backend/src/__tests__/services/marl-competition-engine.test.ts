@@ -316,6 +316,49 @@ describe('MarlCompetitionEngine', () => {
     replaySpy.mockRestore();
   });
 
+  it('executes non-zero trades during a full single tournament when agents emit actionable orders', async () => {
+    const computeActionSpy = jest.spyOn(MarlTradingAgent.prototype, 'computeAction').mockImplementation(function (observation) {
+      const openPosition = observation.portfolio.find(position => position.symbol === observation.sentimentSignal.symbol && position.quantity > 0);
+
+      if (openPosition) {
+        return {
+          type: 'SELL',
+          symbol: openPosition.symbol,
+          quantity: openPosition.quantity,
+          price: observation.currentPrice,
+          reason: 'test close position',
+        };
+      }
+
+      return {
+        type: 'BUY',
+        symbol: observation.sentimentSignal.symbol,
+        quantity: 0.01,
+        price: observation.currentPrice,
+        reason: 'test open position',
+      };
+    });
+
+    const engine = new MarlCompetitionEngine();
+    const result = await engine.runSingleTournament({
+      mode: 'SINGLE',
+      agents: [
+        { id: 'alpha', riskProfile: 'AGGRESSIVE' },
+        { id: 'beta', riskProfile: 'CONSERVATIVE' },
+      ],
+      symbols: ['BTC'],
+      duration: 100,
+      refreshInterval: 1000,
+      learningEnabled: true,
+    });
+
+    expect(result.finalRankings.some(ranking => ranking.tradesExecuted > 0)).toBe(true);
+    expect(result.finalRankings.reduce((sum, ranking) => sum + ranking.tradesExecuted, 0)).toBeGreaterThan(0);
+    expect(result.equityEvolution.length).toBeGreaterThan(0);
+
+    computeActionSpy.mockRestore();
+  });
+
   it('persists learned state between competition runs for the same agent id', () => {
     const engine = new MarlCompetitionEngine() as unknown as {
       createAgentState: (
