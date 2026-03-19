@@ -1,21 +1,11 @@
 {
   "info": {
-    "_postman_id": "9fd9e4b7-95bf-4d0c-a1ad-31b0f2d8f444",
+    "_postman_id": "f9fd567c-7be7-40bd-80d5-68cc248de88a",
     "name": "Sentiment Analyzer - All Endpoints Suite",
     "description": "Comprehensive Postman suite covering all currently implemented API endpoints in the backend.",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "778319"
   },
-  "variable": [
-    { "key": "base_url", "value": "http://localhost:3000" },
-    { "key": "api_secret_key", "value": "" },
-    { "key": "symbol", "value": "BTC" },
-    { "key": "competition_id", "value": "" },
-    { "key": "agent_id", "value": "" },
-    { "key": "test_id", "value": "" },
-    { "key": "tournament_id", "value": "" },
-    { "key": "credential_id", "value": "" },
-    { "key": "social_item_id", "value": "" }
-  ],
   "item": [
     {
       "name": "Core",
@@ -24,15 +14,22 @@
           "name": "GET /api/health",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/health"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/coins",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/coins?limit=50"
-          },
           "event": [
             {
               "listen": "test",
@@ -42,81 +39,166 @@
                   "  const body = pm.response.json();",
                   "  if (body?.data?.length) pm.collectionVariables.set('symbol', body.data[0].symbol);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "coins"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/coins/:symbol",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/coins/{{symbol}}?days=7"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/{{symbol}}?days=7",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "coins",
+                "{{symbol}}"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "7"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/refresh-sentiment",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"]\n}"
             },
-            "url": "{{base_url}}/api/refresh-sentiment"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/refresh-sentiment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "refresh-sentiment"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/sentiment/:symbol",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/sentiment/{{symbol}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/{{symbol}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sentiment",
+                "{{symbol}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/sentiment/analyze",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"mode\": \"BASIC\",\n  \"headlines\": {\n    \"BTC\": [\"Bitcoin sentiment improves\", \"ETF inflows increase\"],\n    \"ETH\": [\"Ethereum upgrade announced\"]\n  }\n}"
             },
-            "url": "{{base_url}}/api/sentiment/analyze"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sentiment",
+                "analyze"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/agents/configure",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"agents\": [\n    {\n      \"name\": \"agent_rule\",\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    },\n    {\n      \"name\": \"agent_hybrid\",\n      \"type\": \"HYBRID\",\n      \"riskProfile\": \"AGGRESSIVE\",\n      \"initialCapital\": 10000\n    }\n  ]\n}"
             },
-            "url": "{{base_url}}/api/agents/configure"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/agents/configure",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "configure"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/backtest/run",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"startDate\": \"2025-12-01\",\n  \"endDate\": \"2025-12-31\",\n  \"agents\": [\n    {\n      \"name\": \"bt_rule\",\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    }\n  ]\n}"
-            },
-            "url": "{{base_url}}/api/backtest/run"
-          },
           "event": [
             {
               "listen": "test",
@@ -126,73 +208,221 @@
                   "  const body = pm.response.json();",
                   "  if (body?.testId) pm.collectionVariables.set('test_id', body.testId);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"startDate\": \"2025-12-01\",\n  \"endDate\": \"2025-12-31\",\n  \"agents\": [\n    {\n      \"name\": \"bt_rule\",\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/backtest/run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "backtest",
+                "run"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/backtest/results/:testId",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/backtest/results/{{test_id}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/backtest/results/{{test_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "backtest",
+                "results",
+                "{{test_id}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/rankings/top-coins",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/rankings/top-coins?limit=20&timeframe=1d"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rankings/top-coins?limit=20&timeframe=1d",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "rankings",
+                "top-coins"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "timeframe",
+                  "value": "1d"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/info/modes",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/info/modes"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/info/modes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "info",
+                "modes"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/scrape/social",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/scrape/social?symbol={{symbol}}&platforms=reddit,twitter"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/scrape/social?symbol={{symbol}}&platforms=reddit,twitter",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "scrape",
+                "social"
+              ],
+              "query": [
+                {
+                  "key": "symbol",
+                  "value": "{{symbol}}"
+                },
+                {
+                  "key": "platforms",
+                  "value": "reddit,twitter"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/scrape/batch",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\", \"SOL\"],\n  \"platforms\": [\"reddit\", \"twitter\"],\n  \"query\": \"sentiment\"\n}"
             },
-            "url": "{{base_url}}/api/scrape/batch"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/scrape/batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "scrape",
+                "batch"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/trending",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trending?window=4&limit=20&min_volume=2"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending?window=4&limit=20&min_volume=2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "4"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "min_volume",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/trending/ingest",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"posts\": [\n    {\n      \"id\": \"manual-1\",\n      \"platform\": \"reddit\",\n      \"author\": \"demo\",\n      \"content\": \"Strong momentum on BTC this week\",\n      \"created_at\": \"2026-03-18T00:00:00.000Z\",\n      \"symbol\": \"BTC\"\n    }\n  ]\n}"
             },
-            "url": "{{base_url}}/api/trending/ingest"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/trending/ingest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending",
+                "ingest"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -203,15 +433,33 @@
           "name": "GET /api/social-media/trending-topics",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/social-media/trending-topics?timeWindow=24&limit=20"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/trending-topics?timeWindow=24&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "trending-topics"
+              ],
+              "query": [
+                {
+                  "key": "timeWindow",
+                  "value": "24"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/social-media/items",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/social-media/items?sort=score&since_hours=24&limit=20"
-          },
           "event": [
             {
               "listen": "test",
@@ -221,45 +469,133 @@
                   "  const body = pm.response.json();",
                   "  if (body?.items?.length && body.items[0]?.id) pm.collectionVariables.set('social_item_id', body.items[0].id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/items?sort=score&since_hours=24&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "score"
+                },
+                {
+                  "key": "since_hours",
+                  "value": "24"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/social-media/item/:id",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/social-media/item/{{social_item_id}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/item/{{social_item_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "item",
+                "{{social_item_id}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/social-media/stats",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/social-media/stats"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "stats"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/trending-score/:symbol",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trending-score/{{symbol}}?interval=24"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending-score/{{symbol}}?interval=24",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending-score",
+                "{{symbol}}"
+              ],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "24"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/social-media/refresh",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"rss_only\": false\n}"
             },
-            "url": "{{base_url}}/api/social-media/refresh"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/social-media/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "refresh"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -268,17 +604,6 @@
       "item": [
         {
           "name": "POST /api/marl/competition/start",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    { \"id\": \"bull\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n    { \"id\": \"bear\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 }\n  ],\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 100,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}"
-            },
-            "url": "{{base_url}}/api/marl/competition/start"
-          },
           "event": [
             {
               "listen": "test",
@@ -288,8 +613,68 @@
                   "  const body = pm.response.json();",
                   "  if (body?.competitionId) pm.collectionVariables.set('competition_id', body.competitionId);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    { \"id\": \"bull\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n    { \"id\": \"bear\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 }\n  ],\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 100,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "start"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "POST /api/marl/competition/start",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    { \"id\": \"bull\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n    { \"id\": \"bear\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 }\n  ],\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 100,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/marl/competition/start",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "competition",
+                    "start"
+                  ]
+                }
+              },
+              "_postman_previewlanguage": null,
+              "header": null,
+              "cookie": [],
+              "body": null
             }
           ]
         },
@@ -297,87 +682,198 @@
           "name": "GET /api/marl/competition/:competitionId/status",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/competition/{{competition_id}}/status"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "{{competition_id}}",
+                "status"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/competition/:competitionId/results",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/competition/{{competition_id}}/results"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/results",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "{{competition_id}}",
+                "results"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/marl/agents/compare",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"agent1\": { \"id\": \"aggressive\", \"riskProfile\": \"AGGRESSIVE\", \"initialCapital\": 10000 },\n  \"agent2\": { \"id\": \"conservative\", \"riskProfile\": \"CONSERVATIVE\", \"initialCapital\": 10000 },\n  \"symbols\": [\"BTC\"],\n  \"rounds\": 3,\n  \"duration\": 100\n}"
             },
-            "url": "{{base_url}}/api/marl/agents/compare"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/compare",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "compare"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/competitions",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/competitions"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competitions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competitions"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/agents/learning",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/agents/learning"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/learning",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "learning"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "DELETE /api/marl/agents/:agentId/learning",
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
-            "url": "{{base_url}}/api/marl/agents/{{agent_id}}/learning?riskProfile=AGGRESSIVE"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/learning?riskProfile=AGGRESSIVE",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "{{agent_id}}",
+                "learning"
+              ],
+              "query": [
+                {
+                  "key": "riskProfile",
+                  "value": "AGGRESSIVE"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/coin-universe",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/coin-universe?agents=[{\"id\":\"bull\",\"riskProfile\":\"AGGRESSIVE\"},{\"id\":\"bear\",\"riskProfile\":\"CONSERVATIVE\"}]&universeSize=50&coinsPerAgent=3"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/coin-universe?agents=[{\"id\":\"bull\",\"riskProfile\":\"AGGRESSIVE\"},{\"id\":\"bear\",\"riskProfile\":\"CONSERVATIVE\"}]&universeSize=50&coinsPerAgent=3",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "coin-universe"
+              ],
+              "query": [
+                {
+                  "key": "agents",
+                  "value": "[{\"id\":\"bull\",\"riskProfile\":\"AGGRESSIVE\"},{\"id\":\"bear\",\"riskProfile\":\"CONSERVATIVE\"}]"
+                },
+                {
+                  "key": "universeSize",
+                  "value": "50"
+                },
+                {
+                  "key": "coinsPerAgent",
+                  "value": "3"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/info",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/info"
-          }
-        }
-      ]
-    },
-    {
-      "name": "MARL Broker Real Trading",
-      "item": [
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/info",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "info"
+              ]
+            }
+          },
+          "response": []
+        },
         {
           "name": "POST /api/marl/broker/credentials",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"label\": \"Alpaca Paper Demo\",\n  \"provider\": \"ALPACA\",\n  \"mode\": \"PAPER\",\n  \"apiKey\": \"REPLACE_ME\",\n  \"apiSecret\": \"REPLACE_ME\"\n}"
-            },
-            "url": "{{base_url}}/api/marl/broker/credentials"
-          },
           "event": [
             {
               "listen": "test",
@@ -387,82 +883,345 @@
                   "  const body = pm.response.json();",
                   "  if (body?.id) pm.collectionVariables.set('credential_id', body.id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
-        },
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Alpaca Paper Demo\",\n  \"provider\": \"ALPACA\",\n  \"mode\": \"PAPER\",\n  \"apiKey\": \"REPLACE_ME\",\n  \"apiSecret\": \"REPLACE_ME\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "MARL Broker Real Trading",
+      "item": [
         {
           "name": "GET /api/marl/broker/credentials",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
-            "url": "{{base_url}}/api/marl/broker/credentials"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/broker/credentials/picker",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/marl/broker/credentials/picker"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/picker",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials",
+                "picker"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/marl/broker/connect/:id",
+          "protocolProfileBehavior": {
+            "disabledSystemHeaders": {
+              "": true
+            }
+          },
           "request": {
             "method": "POST",
-            "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
-            ],
-            "url": "{{base_url}}/api/marl/broker/connect/{{credential_id}}"
-          }
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connect/{{credential_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "connect",
+                "{{credential_id}}"
+              ]
+            },
+            "description": "## POST /api/marl/broker/connect/:credential_id\n\nInitiates a broker connection for a given credential. This endpoint is part of the **MARL Broker Real Trading** workflow and establishes a live trading connection using the specified broker credentials.\n\n---\n\n### Request Details\n\n| Property | Value |\n|----------|-------|\n| **Method** | `POST` |\n| **Base URL** | `{{base_url}}` |\n| **Full URL** | `{{base_url}}/api/marl/broker/connect/{{credential_id}}` |\n| **Request Body** | None |\n\n---\n\n### Path Variables\n\n| Variable | Description |\n|----------|-------------|\n| `credential_id` | The unique identifier of the broker credentials to use when establishing the connection. This ID is typically obtained after creating credentials via the broker credentials endpoint. |\n\n---\n\n### Authentication\n\nThis request requires an **API Key** passed as a request header. The collection-level auth is configured to inject this automatically, but the header must be present and valid:\n\n```\nx-api-key: <your-api-key>\n```\n\n> **401 Unauthorized** is returned if the `x-api-key` header is missing or contains an invalid key.\n\n---\n\n### Error Responses\n\n| Status Code | Description |\n|-------------|-------------|\n| `401 Unauthorized` | The `x-api-key` header is missing or invalid. Ensure a valid API key is set in your environment or collection auth configuration. |"
+          },
+          "response": [
+            {
+              "name": "POST /api/marl/broker/connect/:id",
+              "originalRequest": {
+                "method": "POST",
+                "header": [],
+                "body": {
+                  "mode": "formdata",
+                  "formdata": []
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/marl/broker/connect/{{credential_id}}",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "broker",
+                    "connect",
+                    "{{credential_id}}"
+                  ]
+                }
+              },
+              "status": "Unauthorized",
+              "code": 401,
+              "_postman_previewlanguage": null,
+              "header": [
+                {
+                  "key": "Content-Security-Policy",
+                  "value": "default-src 'self';base-uri 'self';font-src 'self' https: data:;form-action 'self';frame-ancestors 'self';img-src 'self' data:;object-src 'none';script-src 'self';script-src-attr 'none';style-src 'self' https: 'unsafe-inline';upgrade-insecure-requests"
+                },
+                {
+                  "key": "Cross-Origin-Opener-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Cross-Origin-Resource-Policy",
+                  "value": "same-origin"
+                },
+                {
+                  "key": "Origin-Agent-Cluster",
+                  "value": "?1"
+                },
+                {
+                  "key": "Referrer-Policy",
+                  "value": "no-referrer"
+                },
+                {
+                  "key": "Strict-Transport-Security",
+                  "value": "max-age=15552000; includeSubDomains"
+                },
+                {
+                  "key": "X-Content-Type-Options",
+                  "value": "nosniff"
+                },
+                {
+                  "key": "X-DNS-Prefetch-Control",
+                  "value": "off"
+                },
+                {
+                  "key": "X-Download-Options",
+                  "value": "noopen"
+                },
+                {
+                  "key": "X-Frame-Options",
+                  "value": "SAMEORIGIN"
+                },
+                {
+                  "key": "X-Permitted-Cross-Domain-Policies",
+                  "value": "none"
+                },
+                {
+                  "key": "X-XSS-Protection",
+                  "value": "0"
+                },
+                {
+                  "key": "Access-Control-Allow-Origin",
+                  "value": "http://localhost:5173"
+                },
+                {
+                  "key": "Vary",
+                  "value": "Origin"
+                },
+                {
+                  "key": "Content-Type",
+                  "value": "application/json; charset=utf-8"
+                },
+                {
+                  "key": "Content-Length",
+                  "value": "47"
+                },
+                {
+                  "key": "ETag",
+                  "value": "W/\"2f-5Zro/683PNyIAJXLfpsEdCi1jgM\""
+                },
+                {
+                  "key": "Date",
+                  "value": "Thu, 19 Mar 2026 00:10:49 GMT"
+                },
+                {
+                  "key": "Connection",
+                  "value": "keep-alive"
+                },
+                {
+                  "key": "Keep-Alive",
+                  "value": "timeout=5"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n    \"error\": \"Unauthorized \u2014 x-api-key required\"\n}"
+            }
+          ]
         },
         {
           "name": "GET /api/marl/broker/connected",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
-            "url": "{{base_url}}/api/marl/broker/connected"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connected",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "connected"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/marl/broker/orders/:competitionId",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
-            "url": "{{base_url}}/api/marl/broker/orders/{{competition_id}}"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/orders/{{competition_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "orders",
+                "{{competition_id}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/marl/broker/emergency-stop",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"competitionId\": \"{{competition_id}}\",\n  \"credentialId\": \"{{credential_id}}\"\n}"
             },
-            "url": "{{base_url}}/api/marl/broker/emergency-stop"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/emergency-stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "emergency-stop"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "DELETE /api/marl/broker/credentials/:id",
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-api-key", "value": "{{api_secret_key}}" }
+              {
+                "key": "x-api-key",
+                "value": "{{api_secret_key}}"
+              }
             ],
-            "url": "{{base_url}}/api/marl/broker/credentials/{{credential_id}}"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/{{credential_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials",
+                "{{credential_id}}"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -471,10 +1230,6 @@
       "item": [
         {
           "name": "GET /api/agents",
-          "request": {
-            "method": "GET",
-            "url": "{{base_url}}/api/agents?limit=100"
-          },
           "event": [
             {
               "listen": "test",
@@ -484,73 +1239,208 @@
                   "  const body = pm.response.json();",
                   "  if (body?.agents?.length && body.agents[0]?.id) pm.collectionVariables.set('agent_id', body.agents[0].id);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents?limit=100",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "100"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/agents/stats/leaderboard",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/agents/stats/leaderboard?limit=20"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/stats/leaderboard?limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "stats",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/agents/:id",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/agents/{{agent_id}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "PUT /api/agents/:id/customize",
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"🚀\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
+              "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"\ud83d\ude80\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
             },
-            "url": "{{base_url}}/api/agents/{{agent_id}}/customize"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/customize",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}",
+                "customize"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "PUT /api/agents/:id/customize",
+              "originalRequest": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"\ud83d\ude80\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
+                },
+                "url": {
+                  "raw": "{{base_url}}/api/agents/{{agent_id}}/customize",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agents",
+                    "{{agent_id}}",
+                    "customize"
+                  ]
+                }
+              },
+              "_postman_previewlanguage": null,
+              "header": null,
+              "cookie": [],
+              "body": null
+            }
+          ]
         },
         {
           "name": "GET /api/agents/:id/history",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/agents/{{agent_id}}/history?limit=50"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/history?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/agents/:id/genome",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/agents/{{agent_id}}/genome"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/genome",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}",
+                "genome"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/agents/:id/genealogy",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/agents/{{agent_id}}/genealogy"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/genealogy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}",
+                "genealogy"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/evolutionary/tournament",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Postman Tournament\",\n  \"populationSize\": 6,\n  \"maxGenerations\": 3,\n  \"survivalPercent\": 30,\n  \"mutationRate\": 0.5,\n  \"mutationSeverity\": \"MEDIUM\",\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"retirementEnabled\": true,\n  \"competitionDuration\": 120,\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"initialCapital\": 10000,\n  \"riskProfiles\": [\"CONSERVATIVE\", \"AGGRESSIVE\", \"SCALPING\"]\n}"
-            },
-            "url": "{{base_url}}/api/evolutionary/tournament"
-          },
           "event": [
             {
               "listen": "test",
@@ -560,24 +1450,75 @@
                   "  const body = pm.response.json();",
                   "  if (body?.tournamentId) pm.collectionVariables.set('tournament_id', body.tournamentId);",
                   "}"
-                ]
+                ],
+                "type": "text/javascript"
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Tournament\",\n  \"populationSize\": 6,\n  \"maxGenerations\": 3,\n  \"survivalPercent\": 30,\n  \"mutationRate\": 0.5,\n  \"mutationSeverity\": \"MEDIUM\",\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"retirementEnabled\": true,\n  \"competitionDuration\": 120,\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"initialCapital\": 10000,\n  \"riskProfiles\": [\"CONSERVATIVE\", \"AGGRESSIVE\", \"SCALPING\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/evolutionary/tournament",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/evolutionary/tournament"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/evolutionary/tournament/:id",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/evolutionary/tournament/{{tournament_id}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament/{{tournament_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament",
+                "{{tournament_id}}"
+              ]
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -588,45 +1529,185 @@
           "name": "GET /api/trading/exchange-status",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trading/exchange-status"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/exchange-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "exchange-status"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/trading/price/:symbol",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trading/price/{{symbol}}"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/price/{{symbol}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "price",
+                "{{symbol}}"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/trading/balances",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trading/balances"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/balances",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "balances"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "POST /api/trading/order",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"symbol\": \"BTC_USDT\",\n  \"side\": \"BUY\",\n  \"size\": 1,\n  \"orderType\": \"MARKET\"\n}"
             },
-            "url": "{{base_url}}/api/trading/order"
-          }
+            "url": {
+              "raw": "{{base_url}}/api/trading/order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "order"
+              ]
+            }
+          },
+          "response": []
         },
         {
           "name": "GET /api/trading/stats",
           "request": {
             "method": "GET",
-            "url": "{{base_url}}/api/trading/stats"
-          }
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "stats"
+              ]
+            }
+          },
+          "response": []
         }
       ]
+    }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "Jb24QVjkNVDuUxMjQHUs1lmopssheZUnUocrbOUH5BY6IcGptSRjMz9ZxYI2J4F2",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "requests": {},
+        "exec": [
+          ""
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "api_secret_key",
+      "value": ""
+    },
+    {
+      "key": "symbol",
+      "value": "BTC"
+    },
+    {
+      "key": "competition_id",
+      "value": ""
+    },
+    {
+      "key": "agent_id",
+      "value": ""
+    },
+    {
+      "key": "test_id",
+      "value": ""
+    },
+    {
+      "key": "tournament_id",
+      "value": ""
+    },
+    {
+      "key": "credential_id",
+      "value": ""
+    },
+    {
+      "key": "social_item_id",
+      "value": ""
     }
   ]
 }
