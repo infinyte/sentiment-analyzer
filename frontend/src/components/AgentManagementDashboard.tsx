@@ -115,6 +115,111 @@ interface BreedResponse {
   children: BreedResultChild[];
 }
 
+interface EvolutionaryTournamentSummary {
+  tournamentId: string;
+  name: string;
+  status: string;
+  currentGeneration: number;
+  maxGenerations: number;
+  populationSize: number;
+  symbols: string[];
+  startedAt: string;
+  completedAt?: string;
+  generationCount: number;
+  latestTopFitness: number;
+  latestAvgFitness: number;
+  latestAvgPnl: number;
+  latestSurvivalRate: number;
+}
+
+interface EvolutionaryTimelineEntry {
+  generation: number;
+  topFitness: number;
+  avgFitness: number;
+  avgPnl: number;
+  survivalRate: number;
+  populationCount: number;
+  survivorCount: number;
+  offspringCount: number;
+  retiredCount: number;
+  completedAt: string;
+}
+
+interface EvolutionarySummaryResponse {
+  totals: {
+    totalTournaments: number;
+    completedTournaments: number;
+    runningTournaments: number;
+    failedTournaments: number;
+    totalGenerations: number;
+    averageTopFitness: number;
+    averageGenerationFitness: number;
+  };
+  crossTournament: {
+    bestTournament: {
+      tournamentId: string;
+      name: string;
+      status: string;
+      completedAt?: string;
+      symbols: string[];
+      generationCount: number;
+      latestTopFitness: number;
+      latestAvgFitness: number;
+      latestAvgPnl: number;
+      latestSurvivalRate: number;
+    } | null;
+    latestVsPrevious: {
+      latestTournamentId: string;
+      previousTournamentId: string;
+      topFitnessDelta: number;
+      avgFitnessDelta: number;
+      generationCountDelta: number;
+    } | null;
+    recentPerformance: Array<{
+      tournamentId: string;
+      name: string;
+      status: string;
+      completedAt?: string;
+      symbols: string[];
+      generationCount: number;
+      latestTopFitness: number;
+      latestAvgFitness: number;
+      latestAvgPnl: number;
+      latestSurvivalRate: number;
+    }>;
+  };
+  recentTournaments: EvolutionaryTournamentSummary[];
+  latestTournament: (EvolutionaryTournamentSummary & {
+    generationTimeline: EvolutionaryTimelineEntry[];
+  }) | null;
+}
+
+interface TournamentDetailResponse {
+  tournamentId: string;
+  name: string;
+  status: string;
+  currentGeneration: number;
+  startedAt: string;
+  completedAt?: string;
+  config: {
+    populationSize: number;
+    maxGenerations: number;
+    symbols: string[];
+  };
+  generations: Array<{
+    generation: number;
+    competitionId: string;
+    population: string[];
+    survivors: string[];
+    offspring: string[];
+    retired: string[];
+    topAgentId: string;
+    topFitness: number;
+    avgFitness: number;
+    completedAt: string;
+  }>;
+}
+
 const EMOJI_OPTIONS = ['🟢', '🔴', '🟡', '💎', '🔥', '⚡', '🌟', '🎯', '🚀', '🏆'];
 const COLOR_OPTIONS = ['#00FF00', '#FF0000', '#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#800080', '#0099FF'];
 
@@ -222,6 +327,96 @@ function buildCustomizationForm(agent: AgentDetail | null): CustomizationFormSta
     biography: agent?.biography ?? '',
     nickname: agent?.nickname ?? '',
   };
+}
+
+interface GenerationTrend {
+  generation: number;
+  agentCount: number;
+  averageWinRate: number;
+  averagePnl: number;
+  averageRoi: number;
+}
+
+function summarizeGenerationTrends(agentList: AgentSummary[]): GenerationTrend[] {
+  const grouped = new Map<number, AgentSummary[]>();
+
+  for (const agent of agentList) {
+    const generation = agent.generation_number ?? 0;
+    const bucket = grouped.get(generation);
+    if (bucket) bucket.push(agent);
+    else grouped.set(generation, [agent]);
+  }
+
+  return [...grouped.entries()]
+    .sort((left, right) => left[0] - right[0])
+    .map(([generation, generationAgents]) => ({
+      generation,
+      agentCount: generationAgents.length,
+      averageWinRate: generationAgents.reduce((sum, agent) => sum + agent.win_rate_percent, 0) / generationAgents.length,
+      averagePnl: generationAgents.reduce((sum, agent) => sum + agent.total_pnl, 0) / generationAgents.length,
+      averageRoi: generationAgents.reduce((sum, agent) => sum + agent.roi_percent, 0) / generationAgents.length,
+    }));
+}
+
+function buildSparklinePath(values: number[], width: number, height: number): string {
+  if (values.length === 0) return '';
+  if (values.length === 1) return `M 0 ${height / 2} L ${width} ${height / 2}`;
+
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+
+  return values
+    .map((value, index) => {
+      const x = (index / (values.length - 1)) * width;
+      const y = height - ((value - min) / range) * height;
+      return `${index === 0 ? 'M' : 'L'} ${x.toFixed(2)} ${y.toFixed(2)}`;
+    })
+    .join(' ');
+}
+
+function shortId(value: string | null): string {
+  return value ? value.slice(0, 8) : 'N/A';
+}
+
+function truncateLabel(value: string, maxLength: number): string {
+  return value.length > maxLength ? `${value.slice(0, Math.max(maxLength - 1, 1))}…` : value;
+}
+
+function summarizeMutationsApplied(mutationsApplied: unknown[]): string {
+  if (!Array.isArray(mutationsApplied) || mutationsApplied.length === 0) {
+    return 'No mutations';
+  }
+
+  const parts = mutationsApplied.map(item => {
+    if (typeof item === 'string') return item;
+    if (item && typeof item === 'object') {
+      try {
+        const serialized = JSON.stringify(item);
+        return serialized.length > 48 ? `${serialized.slice(0, 47)}…` : serialized;
+      } catch {
+        return 'mutation';
+      }
+    }
+
+    return String(item);
+  });
+
+  return parts.join(', ');
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
+function matchesTournamentFilters(
+  tournament: Pick<EvolutionaryTournamentSummary, 'status' | 'symbols'>,
+  statusFilter: string,
+  symbolFilter: string,
+): boolean {
+  const statusMatches = statusFilter === 'ALL' || tournament.status === statusFilter;
+  const symbolMatches = symbolFilter === 'ALL' || tournament.symbols.includes(symbolFilter);
+  return statusMatches && symbolMatches;
 }
 
 interface CustomizationModalProps {
@@ -426,6 +621,597 @@ function RetireConfirmationModal({ agent, retiring, onCancel, onConfirm }: Retir
   );
 }
 
+function GenerationTrendsPanel({ agents }: { agents: AgentSummary[] }) {
+  const generationTrends = summarizeGenerationTrends(agents);
+  const maxPopulation = generationTrends.reduce((max, trend) => Math.max(max, trend.agentCount), 1);
+  const maxAbsolutePnl = generationTrends.reduce((max, trend) => Math.max(max, Math.abs(trend.averagePnl)), 1);
+  const winRatePath = buildSparklinePath(generationTrends.map(trend => trend.averageWinRate), 220, 56);
+
+  return (
+    <div style={{ ...panelStyle, padding: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Generation Trends</h3>
+          <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>Population by generation using live registry and leaderboard metrics.</p>
+        </div>
+        <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{generationTrends.length} generations tracked</div>
+      </div>
+
+      {generationTrends.length === 0 ? (
+        <div style={{ marginTop: '1rem', color: '#64748b' }}>No generation data available.</div>
+      ) : (
+        <>
+          <div style={{ marginTop: '1rem', padding: '0.85rem 0.95rem', borderRadius: '0.9rem', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe' }}>
+            <div style={{ color: '#1d4ed8', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>Population win-rate curve</div>
+            <svg viewBox="0 0 220 56" style={{ width: '100%', height: '4rem', marginTop: '0.45rem' }} aria-label="Population win-rate curve">
+              <path d={winRatePath} fill="none" stroke="#2563eb" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+
+          <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+            {generationTrends.map(trend => {
+              const pnlWidth = `${Math.max((Math.abs(trend.averagePnl) / maxAbsolutePnl) * 100, 8)}%`;
+
+              return (
+                <div key={trend.generation} style={{ border: '1px solid #e2e8f0', borderRadius: '0.9rem', padding: '0.9rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong style={{ color: '#0f172a' }}>Generation {trend.generation}</strong>
+                    <span style={{ color: '#475569', fontSize: '0.85rem' }}>{trend.agentCount} active agents</span>
+                  </div>
+
+                  <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.55rem' }}>
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', fontSize: '0.83rem', color: '#475569' }}>
+                        <span>Population share</span>
+                        <span>{trend.agentCount}</span>
+                      </div>
+                      <div style={{ marginTop: '0.25rem', height: '0.55rem', backgroundColor: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                        <div style={{ width: `${(trend.agentCount / maxPopulation) * 100}%`, height: '100%', backgroundColor: '#0f766e' }} />
+                      </div>
+                    </div>
+
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', fontSize: '0.83rem', color: '#475569' }}>
+                        <span>Average win rate</span>
+                        <span>{formatPercent(trend.averageWinRate)}</span>
+                      </div>
+                      <div style={{ marginTop: '0.25rem', height: '0.55rem', backgroundColor: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                        <div style={{ width: `${Math.max(Math.min(trend.averageWinRate, 100), 0)}%`, height: '100%', backgroundColor: '#2563eb' }} />
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '0.75rem', alignItems: 'center' }}>
+                      <div>
+                        <div style={{ color: '#475569', fontSize: '0.83rem' }}>Average PnL</div>
+                        <div style={{ marginTop: '0.25rem', height: '0.55rem', backgroundColor: '#e2e8f0', borderRadius: '999px', overflow: 'hidden' }}>
+                          <div style={{ width: pnlWidth, height: '100%', backgroundColor: trend.averagePnl >= 0 ? '#16a34a' : '#dc2626' }} />
+                        </div>
+                      </div>
+                      <div style={{ color: trend.averagePnl >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700 }}>{formatCurrency(trend.averagePnl)}</div>
+                    </div>
+                  </div>
+
+                  <div style={{ marginTop: '0.75rem', color: '#64748b', fontSize: '0.82rem' }}>Average ROI {formatPercent(trend.averageRoi)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function EvolutionTournamentHistoryPanel({
+  summary,
+  selectedTournamentId,
+  onSelectTournament,
+  statusFilter,
+  symbolFilter,
+  onStatusFilterChange,
+  onSymbolFilterChange,
+}: {
+  summary: EvolutionarySummaryResponse | null;
+  selectedTournamentId: string | null;
+  onSelectTournament: (tournamentId: string) => void;
+  statusFilter: string;
+  symbolFilter: string;
+  onStatusFilterChange: (value: string) => void;
+  onSymbolFilterChange: (value: string) => void;
+}) {
+  if (!summary) {
+    return (
+      <div style={{ ...panelStyle, padding: '1rem' }}>
+        <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Tournament History</h3>
+        <div style={{ marginTop: '0.9rem', color: '#64748b' }}>No tournament summary available yet.</div>
+      </div>
+    );
+  }
+
+  const fitnessTimeline = summary.latestTournament?.generationTimeline ?? [];
+  const latestVsPrevious = summary.crossTournament.latestVsPrevious;
+  const availableStatuses = ['ALL', ...new Set(summary.recentTournaments.map(item => item.status))];
+  const availableSymbols = ['ALL', ...new Set(summary.recentTournaments.flatMap(item => item.symbols))];
+  const filteredTournaments = summary.recentTournaments.filter(tournament => matchesTournamentFilters(tournament, statusFilter, symbolFilter));
+  const fitnessPath = buildSparklinePath(summary.crossTournament.recentPerformance.map(item => item.latestTopFitness), 220, 56);
+  const pnlPath = buildSparklinePath(summary.crossTournament.recentPerformance.map(item => item.latestAvgPnl), 220, 56);
+  const survivalPath = buildSparklinePath(summary.crossTournament.recentPerformance.map(item => item.latestSurvivalRate), 220, 56);
+
+  return (
+    <div style={{ ...panelStyle, padding: '1rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Tournament History</h3>
+          <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>Recent evolutionary runs and per-generation fitness from persisted tournament records.</p>
+        </div>
+        <div style={{ color: '#64748b', fontSize: '0.85rem' }}>{summary.totals.totalTournaments} tournaments</div>
+      </div>
+
+      <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))', gap: '0.75rem' }}>
+        {[
+          { label: 'Completed', value: String(summary.totals.completedTournaments), accent: '#15803d' },
+          { label: 'Running', value: String(summary.totals.runningTournaments), accent: '#2563eb' },
+          { label: 'Avg top fitness', value: summary.totals.averageTopFitness.toFixed(1), accent: '#7c3aed' },
+          { label: 'Avg generation fitness', value: summary.totals.averageGenerationFitness.toFixed(1), accent: '#b45309' },
+        ].map(item => (
+          <div key={item.label} style={{ border: '1px solid #e2e8f0', borderTop: `4px solid ${item.accent}`, borderRadius: '0.9rem', padding: '0.85rem' }}>
+            <div style={{ color: '#64748b', fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</div>
+            <div style={{ marginTop: '0.4rem', color: '#0f172a', fontSize: '1.2rem', fontWeight: 800 }}>{item.value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '0.75rem' }}>
+        <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+          Status filter
+          <select
+            value={statusFilter}
+            onChange={event => onStatusFilterChange(event.target.value)}
+            aria-label="Filter tournaments by status"
+            style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+          >
+            {availableStatuses.map(option => (
+              <option key={option} value={option}>{option === 'ALL' ? 'All statuses' : option}</option>
+            ))}
+          </select>
+        </label>
+        <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+          Symbol filter
+          <select
+            value={symbolFilter}
+            onChange={event => onSymbolFilterChange(event.target.value)}
+            aria-label="Filter tournaments by symbol"
+            style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+          >
+            {availableSymbols.map(option => (
+              <option key={option} value={option}>{option === 'ALL' ? 'All symbols' : option}</option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
+        <h4 style={{ margin: 0, color: '#0f172a' }}>Cross-Tournament Comparison</h4>
+        <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.84rem' }}>Compare how the latest runs are moving across tournaments, not just within one tournament.</p>
+
+        <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))', gap: '0.75rem' }}>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+            <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Best tournament</div>
+            <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{summary.crossTournament.bestTournament?.name ?? 'N/A'}</div>
+            <div style={{ marginTop: '0.25rem', color: '#475569', fontSize: '0.82rem' }}>Top fitness {summary.crossTournament.bestTournament?.latestTopFitness.toFixed(1) ?? '0.0'}</div>
+            <div style={{ marginTop: '0.25rem', color: '#475569', fontSize: '0.82rem' }}>Avg PnL {formatCurrency(summary.crossTournament.bestTournament?.latestAvgPnl ?? 0)}</div>
+          </div>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+            <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Latest vs previous</div>
+            <div style={{ marginTop: '0.35rem', color: latestVsPrevious && latestVsPrevious.topFitnessDelta >= 0 ? '#15803d' : '#b91c1c', fontWeight: 700 }}>
+              {latestVsPrevious ? `${latestVsPrevious.topFitnessDelta >= 0 ? '+' : ''}${latestVsPrevious.topFitnessDelta.toFixed(1)} top fitness` : 'N/A'}
+            </div>
+            <div style={{ marginTop: '0.25rem', color: '#475569', fontSize: '0.82rem' }}>
+              {latestVsPrevious ? `${latestVsPrevious.avgFitnessDelta >= 0 ? '+' : ''}${latestVsPrevious.avgFitnessDelta.toFixed(1)} avg fitness` : 'Need 2 tournaments'}
+            </div>
+          </div>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+            <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Recent signals</div>
+            <div style={{ marginTop: '0.45rem', display: 'grid', gap: '0.55rem' }}>
+              {[
+                { label: 'Top fitness curve', path: fitnessPath, stroke: '#7c3aed' },
+                { label: 'PnL curve', path: pnlPath, stroke: '#16a34a' },
+                { label: 'Survival curve', path: survivalPath, stroke: '#ea580c' },
+              ].map(metric => (
+                <div key={metric.label}>
+                  <div style={{ color: '#475569', fontSize: '0.8rem' }}>{metric.label}</div>
+                  <svg viewBox="0 0 220 56" style={{ width: '100%', height: '3.25rem', marginTop: '0.2rem' }} aria-label={metric.label}>
+                    <path d={metric.path} fill="none" stroke={metric.stroke} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+        {filteredTournaments.length === 0 ? (
+          <div style={{ color: '#64748b' }}>No tournaments match the current filters.</div>
+        ) : filteredTournaments.map(tournament => (
+          <button
+            key={tournament.tournamentId}
+            onClick={() => onSelectTournament(tournament.tournamentId)}
+            style={{
+              textAlign: 'left',
+              border: selectedTournamentId === tournament.tournamentId ? '2px solid #2563eb' : '1px solid #e2e8f0',
+              borderRadius: '0.9rem',
+              padding: '0.9rem',
+              backgroundColor: '#ffffff',
+              cursor: 'pointer',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <strong style={{ color: '#0f172a' }}>{tournament.name}</strong>
+              <span style={{ color: tournament.status === 'COMPLETED' ? '#15803d' : '#2563eb', fontSize: '0.82rem', fontWeight: 700 }}>{tournament.status}</span>
+            </div>
+            <div style={{ marginTop: '0.45rem', color: '#64748b', fontSize: '0.84rem' }}>
+              {tournament.generationCount} generations · Population {tournament.populationSize} · {tournament.symbols.join(', ')}
+            </div>
+            <div style={{ marginTop: '0.3rem', color: '#475569', fontSize: '0.84rem' }}>
+              Top fitness {tournament.latestTopFitness.toFixed(1)} · Avg PnL {formatCurrency(tournament.latestAvgPnl)} · Survival {formatPercent(tournament.latestSurvivalRate)}
+            </div>
+          </button>
+        ))}
+      </div>
+
+      <div style={{ marginTop: '1rem', border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
+        <h4 style={{ margin: 0, color: '#0f172a' }}>Latest Tournament Fitness Distribution</h4>
+        <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.84rem' }}>
+          Top and average fitness per generation for the most recent persisted tournament.
+        </p>
+
+        {fitnessTimeline.length === 0 ? (
+          <div style={{ marginTop: '0.9rem', color: '#64748b' }}>No generation timeline is available yet.</div>
+        ) : (
+          <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.8rem' }}>
+            {fitnessTimeline.map(entry => (
+              <div key={entry.generation} style={{ borderBottom: '1px solid #e2e8f0', paddingBottom: '0.8rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <strong style={{ color: '#0f172a' }}>Generation {entry.generation}</strong>
+                  <span style={{ color: '#64748b', fontSize: '0.82rem' }}>{entry.populationCount} agents · {entry.offspringCount} offspring</span>
+                </div>
+
+                <div style={{ marginTop: '0.65rem', display: 'grid', gap: '0.55rem' }}>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', color: '#475569', fontSize: '0.82rem' }}>
+                      <span>Top fitness</span>
+                      <span>{entry.topFitness.toFixed(1)}</span>
+                    </div>
+                    <div style={{ marginTop: '0.25rem', height: '0.55rem', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(Math.min(entry.topFitness, 100), 0)}%`, height: '100%', backgroundColor: '#7c3aed' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', color: '#475569', fontSize: '0.82rem' }}>
+                      <span>Average fitness</span>
+                      <span>{entry.avgFitness.toFixed(1)}</span>
+                    </div>
+                    <div style={{ marginTop: '0.25rem', height: '0.55rem', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(Math.min(entry.avgFitness, 100), 0)}%`, height: '100%', backgroundColor: '#f59e0b' }} />
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', color: '#475569', fontSize: '0.82rem' }}>
+                      <span>Average PnL</span>
+                      <span>{formatCurrency(entry.avgPnl)}</span>
+                    </div>
+                    <div style={{ marginTop: '0.25rem', height: '0.55rem', borderRadius: '999px', backgroundColor: '#e2e8f0', overflow: 'hidden' }}>
+                      <div style={{ width: `${Math.max(Math.min(Math.abs(entry.avgPnl), 100), 8)}%`, height: '100%', backgroundColor: entry.avgPnl >= 0 ? '#16a34a' : '#dc2626' }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ marginTop: '0.55rem', color: '#64748b', fontSize: '0.81rem' }}>
+                  Survivors {entry.survivorCount} · Survival {formatPercent(entry.survivalRate)} · Retired {entry.retiredCount} · {formatDate(entry.completedAt)}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function TournamentDetailPanel({
+  tournament,
+  loading,
+  statusFilter,
+  symbolFilter,
+  generationRange,
+  onGenerationRangeChange,
+}: {
+  tournament: TournamentDetailResponse | null;
+  loading: boolean;
+  statusFilter: string;
+  symbolFilter: string;
+  generationRange: { start: number; end: number };
+  onGenerationRangeChange: (range: { start: number; end: number }) => void;
+}) {
+  const maxGeneration = tournament ? Math.max(...tournament.generations.map(generation => generation.generation), 1) : 1;
+  const startGeneration = clampNumber(generationRange.start, 1, maxGeneration);
+  const endGeneration = clampNumber(Math.max(generationRange.end, startGeneration), startGeneration, maxGeneration);
+  const matchesFilters = tournament
+    ? matchesTournamentFilters({ status: tournament.status, symbols: tournament.config.symbols }, statusFilter, symbolFilter)
+    : true;
+  const filteredGenerations = tournament
+    ? tournament.generations.filter(generation => generation.generation >= startGeneration && generation.generation <= endGeneration)
+    : [];
+
+  return (
+    <div style={{ ...panelStyle, padding: '1rem' }}>
+      <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Tournament Detail</h3>
+      <p style={{ margin: '0.35rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>Detailed generation-by-generation drill-down from the selected persisted tournament.</p>
+
+      {loading ? (
+        <div style={{ marginTop: '1rem', color: '#64748b' }}>Loading tournament detail...</div>
+      ) : !tournament ? (
+        <div style={{ marginTop: '1rem', color: '#64748b' }}>Select a tournament to inspect generation outcomes.</div>
+      ) : !matchesFilters ? (
+        <div style={{ marginTop: '1rem', color: '#64748b' }}>The selected tournament is excluded by the current status or symbol filters.</div>
+      ) : (
+        <>
+          <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))', gap: '0.75rem' }}>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Tournament</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{tournament.name}</div>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Symbols</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{tournament.config.symbols.join(', ')}</div>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Progress</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{tournament.currentGeneration}/{tournament.config.maxGenerations}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(11rem, 1fr))', gap: '0.75rem' }}>
+            <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+              Generation start
+              <input
+                type="number"
+                min={1}
+                max={maxGeneration}
+                value={startGeneration}
+                aria-label="Filter generations from"
+                onChange={event => {
+                  const nextStart = clampNumber(Number(event.target.value) || 1, 1, maxGeneration);
+                  onGenerationRangeChange({ start: nextStart, end: Math.max(nextStart, endGeneration) });
+                }}
+                style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.35rem', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+              Generation end
+              <input
+                type="number"
+                min={startGeneration}
+                max={maxGeneration}
+                value={endGeneration}
+                aria-label="Filter generations to"
+                onChange={event => {
+                  const nextEnd = clampNumber(Number(event.target.value) || maxGeneration, startGeneration, maxGeneration);
+                  onGenerationRangeChange({ start: startGeneration, end: nextEnd });
+                }}
+                style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+              />
+            </label>
+          </div>
+
+          <div style={{ marginTop: '1rem', display: 'grid', gap: '0.75rem' }}>
+            {filteredGenerations.map(generation => (
+              <div key={generation.generation} style={{ border: '1px solid #e2e8f0', borderRadius: '0.9rem', padding: '0.9rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <strong style={{ color: '#0f172a' }}>Generation {generation.generation}</strong>
+                  <span style={{ color: '#64748b', fontSize: '0.82rem' }}>{generation.competitionId}</span>
+                </div>
+                <div style={{ marginTop: '0.65rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(8rem, 1fr))', gap: '0.6rem' }}>
+                  {[
+                    { label: 'Top agent', value: shortId(generation.topAgentId) },
+                    { label: 'Top fitness', value: generation.topFitness.toFixed(1) },
+                    { label: 'Avg fitness', value: generation.avgFitness.toFixed(1) },
+                    { label: 'Survivors', value: String(generation.survivors.length) },
+                    { label: 'Offspring', value: String(generation.offspring.length) },
+                    { label: 'Retired', value: String(generation.retired.length) },
+                  ].map(item => (
+                    <div key={item.label} style={{ border: '1px solid #e2e8f0', borderRadius: '0.8rem', padding: '0.7rem' }}>
+                      <div style={{ color: '#64748b', fontSize: '0.73rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>{item.label}</div>
+                      <div style={{ marginTop: '0.3rem', color: '#0f172a', fontWeight: 700 }}>{item.value}</div>
+                    </div>
+                  ))}
+                </div>
+                <div style={{ marginTop: '0.6rem', color: '#64748b', fontSize: '0.81rem' }}>{formatDate(generation.completedAt)}</div>
+              </div>
+            ))}
+
+            {filteredGenerations.length === 0 && (
+              <div style={{ color: '#64748b' }}>No generations fall within the selected range.</div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function GenealogyTreePanel({
+  agent,
+  genealogy,
+  onNavigateToAgent,
+}: {
+  agent: AgentDetail;
+  genealogy: AgentGenealogyEntry[];
+  onNavigateToAgent: (agentId: string) => void;
+}) {
+  const [selectedGenealogyId, setSelectedGenealogyId] = useState<string | null>(null);
+
+  useEffect(() => {
+    setSelectedGenealogyId(genealogy[genealogy.length - 1]?.id ?? null);
+  }, [genealogy, agent.id]);
+
+  const selectedEvent = genealogy.find(entry => entry.id === selectedGenealogyId) ?? genealogy[genealogy.length - 1] ?? null;
+  const graphWidth = Math.max(320, genealogy.length * 220);
+  const graphHeight = 250;
+
+  return (
+    <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
+      <h4 style={{ margin: 0, color: '#0f172a' }}>Genealogy Tree</h4>
+      <p style={{ margin: '0.4rem 0 0', color: '#64748b', fontSize: '0.85rem', lineHeight: 1.5 }}>
+        Inspect the ancestry as a node-link graph, jump to parent agents, and review inherited genes and mutations.
+      </p>
+
+      {selectedEvent ? (
+        <>
+          <div style={{ marginTop: '1rem', padding: '1rem', borderRadius: '0.95rem', background: 'linear-gradient(180deg, #f8fafc, #eef2ff)', border: '1px solid #dbeafe', overflowX: 'auto' }}>
+            <svg viewBox={`0 0 ${graphWidth} ${graphHeight}`} style={{ width: '100%', minWidth: `${graphWidth}px`, height: '14rem' }} aria-label="Agent lineage graph">
+              {genealogy.map((entry, index) => {
+                const centerX = 110 + index * 220;
+                const parentY = 46;
+                const childY = 165;
+                const parentOffset = 62;
+                const isSelected = entry.id === selectedEvent.id;
+                const childLabel = entry.agentId === agent.id ? displayName(agent) : shortId(entry.agentId);
+                const mutationSummary = summarizeMutationsApplied(entry.mutationsApplied);
+                const mutationLabel = truncateLabel(mutationSummary, 18);
+
+                return (
+                  <g key={entry.id}>
+                    {[entry.parent1Id, entry.parent2Id].map((parentId, parentIndex) => {
+                      const parentX = centerX + (parentIndex === 0 ? -parentOffset : parentOffset);
+
+                      return (
+                        <g key={`${entry.id}-${parentIndex}`}>
+                          <line x1={parentX} y1={parentY + 22} x2={centerX} y2={childY - 26} stroke={isSelected ? '#2563eb' : '#94a3b8'} strokeWidth={isSelected ? 3 : 2} />
+                          <g
+                            role={parentId ? 'button' : undefined}
+                            tabIndex={parentId ? 0 : -1}
+                            onClick={() => parentId && onNavigateToAgent(parentId)}
+                            onKeyDown={event => {
+                              if (parentId && (event.key === 'Enter' || event.key === ' ')) {
+                                event.preventDefault();
+                                onNavigateToAgent(parentId);
+                              }
+                            }}
+                            aria-label={parentId ? `Navigate to parent ${parentIndex + 1}` : undefined}
+                            style={{ cursor: parentId ? 'pointer' : 'default' }}
+                          >
+                            <title>{parentId ? `Parent ${parentIndex + 1}: ${parentId}` : `Parent ${parentIndex + 1}: unavailable`}</title>
+                            <circle cx={parentX} cy={parentY} r={22} fill={parentId ? '#ffffff' : '#e2e8f0'} stroke={isSelected ? '#2563eb' : '#94a3b8'} strokeWidth={2} />
+                            <text x={parentX} y={parentY + 5} textAnchor="middle" fontSize="10" fontWeight="700" fill="#0f172a">{shortId(parentId)}</text>
+                          </g>
+                        </g>
+                      );
+                    })}
+
+                    <g role="button" tabIndex={0} onClick={() => setSelectedGenealogyId(entry.id)} onKeyDown={event => {
+                      if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        setSelectedGenealogyId(entry.id);
+                      }
+                    }} aria-label={`Select genealogy event generation ${entry.breedingGeneration}`} style={{ cursor: 'pointer' }}>
+                      <title>{`${childLabel}\n${mutationSummary}\n${formatDate(entry.breedingDate)}`}</title>
+                      <rect x={centerX - 56} y={childY - 26} width={112} height={54} rx={14} fill={isSelected ? '#0f172a' : '#ffffff'} stroke={isSelected ? '#0f172a' : '#94a3b8'} strokeWidth={2.5} />
+                      <text x={centerX} y={childY - 2} textAnchor="middle" fontSize="11" fontWeight="800" fill={isSelected ? '#f8fafc' : '#0f172a'}>{childLabel.slice(0, 16)}</text>
+                      <text x={centerX} y={childY + 14} textAnchor="middle" fontSize="10" fill={isSelected ? '#cbd5f5' : '#475569'}>Gen {entry.breedingGeneration}</text>
+                      <text x={centerX} y={childY + 38} textAnchor="middle" fontSize="10" fill="#475569">{mutationLabel}</text>
+                    </g>
+                  </g>
+                );
+              })}
+            </svg>
+          </div>
+
+          <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(10rem, 1fr))', gap: '0.75rem' }}>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Latest mutation</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>Severity {selectedEvent.mutationSeverity}</div>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Breeding date</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{formatDate(selectedEvent.breedingDate)}</div>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.8rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Offspring count</div>
+              <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700 }}>{selectedEvent.offspringCount}</div>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))', gap: '0.75rem' }}>
+            {[selectedEvent.parent1Id, selectedEvent.parent2Id].map((parentId, index) => (
+              <button
+                key={`${parentId ?? 'unknown'}-${index}`}
+                onClick={() => parentId && onNavigateToAgent(parentId)}
+                disabled={!parentId}
+                style={{
+                  padding: '0.85rem',
+                  borderRadius: '0.85rem',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  textAlign: 'center',
+                  cursor: parentId ? 'pointer' : 'not-allowed',
+                }}
+              >
+                <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Parent {index + 1}</div>
+                <div style={{ marginTop: '0.4rem', color: '#0f172a', fontWeight: 700 }}>{shortId(parentId)}</div>
+              </button>
+            ))}
+          </div>
+
+          <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))', gap: '0.75rem' }}>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Inherited genes</div>
+              <pre style={{ margin: '0.55rem 0 0', whiteSpace: 'pre-wrap', color: '#0f172a', fontSize: '0.8rem', lineHeight: 1.5 }}>{JSON.stringify(selectedEvent.inheritedGenes ?? {}, null, 2)}</pre>
+            </div>
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+              <div style={{ color: '#64748b', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Mutation log</div>
+              <pre style={{ margin: '0.55rem 0 0', whiteSpace: 'pre-wrap', color: '#0f172a', fontSize: '0.8rem', lineHeight: 1.5 }}>{JSON.stringify(selectedEvent.mutationsApplied ?? [], null, 2)}</pre>
+            </div>
+          </div>
+
+          <div style={{ marginTop: '1rem', display: 'grid', gap: '0.7rem' }}>
+            {genealogy.map(entry => (
+              <button
+                key={entry.id}
+                onClick={() => setSelectedGenealogyId(entry.id)}
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'auto 1fr',
+                  gap: '0.75rem',
+                  alignItems: 'start',
+                  border: selectedGenealogyId === entry.id ? '2px solid #2563eb' : '1px solid transparent',
+                  borderRadius: '0.85rem',
+                  padding: '0.35rem',
+                  backgroundColor: '#ffffff',
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <div style={{ minWidth: '4.75rem', padding: '0.55rem 0.65rem', borderRadius: '999px', backgroundColor: '#dbeafe', color: '#1d4ed8', fontSize: '0.78rem', fontWeight: 700, textAlign: 'center' }}>
+                  Gen {entry.breedingGeneration}
+                </div>
+                <div style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #e2e8f0' }}>
+                  <div style={{ color: '#0f172a', fontWeight: 700 }}>Parents {shortId(entry.parent1Id)} / {shortId(entry.parent2Id)}</div>
+                  <div style={{ marginTop: '0.25rem', color: '#64748b', fontSize: '0.84rem' }}>{formatDate(entry.breedingDate)}</div>
+                  <div style={{ marginTop: '0.3rem', color: '#475569', fontSize: '0.84rem' }}>Mutations applied: {entry.mutationsApplied.length}</div>
+                </div>
+              </button>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={{ marginTop: '0.9rem', color: '#64748b' }}>No genealogy records available.</div>
+      )}
+    </div>
+  );
+}
+
 export function AgentManagementDashboard() {
   const [agents, setAgents] = useState<AgentSummary[]>([]);
   const [leaderboard, setLeaderboard] = useState<AgentSummary[]>([]);
@@ -434,6 +1220,13 @@ export function AgentManagementDashboard() {
   const [history, setHistory] = useState<AgentHistoryEntry[]>([]);
   const [genome, setGenome] = useState<AgentGenomeResponse | null>(null);
   const [genealogy, setGenealogy] = useState<AgentGenealogyEntry[]>([]);
+  const [evolutionSummary, setEvolutionSummary] = useState<EvolutionarySummaryResponse | null>(null);
+  const [selectedTournamentId, setSelectedTournamentId] = useState<string | null>(null);
+  const [selectedTournament, setSelectedTournament] = useState<TournamentDetailResponse | null>(null);
+  const [tournamentStatusFilter, setTournamentStatusFilter] = useState('ALL');
+  const [tournamentSymbolFilter, setTournamentSymbolFilter] = useState('ALL');
+  const [generationRange, setGenerationRange] = useState({ start: 1, end: 1 });
+  const [loadingTournamentDetail, setLoadingTournamentDetail] = useState(false);
   const [loadingOverview, setLoadingOverview] = useState(true);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [overviewError, setOverviewError] = useState<string | null>(null);
@@ -472,9 +1265,10 @@ export function AgentManagementDashboard() {
         setLoadingOverview(true);
         setOverviewError(null);
 
-        const [agentsResponse, leaderboardResponse] = await Promise.all([
+        const [agentsResponse, leaderboardResponse, summaryResponse] = await Promise.all([
           fetch('/api/agents?limit=100'),
           fetch('/api/agents/stats/leaderboard?limit=10'),
+          fetch('/api/evolutionary/summary'),
         ]);
 
         if (!agentsResponse.ok) throw new Error(`Failed to load agents: HTTP ${agentsResponse.status}`);
@@ -488,6 +1282,13 @@ export function AgentManagementDashboard() {
 
         setAgents(normalizedAgents);
         setLeaderboard(normalizedLeaderboard);
+        if (summaryResponse.ok) {
+          const summaryData = await summaryResponse.json() as EvolutionarySummaryResponse;
+          setEvolutionSummary(summaryData);
+          setSelectedTournamentId(current => current ?? summaryData.latestTournament?.tournamentId ?? null);
+        } else {
+          setEvolutionSummary(null);
+        }
         setSelectedAgentId(current => current ?? normalizedAgents[0]?.id ?? null);
       } catch (error) {
         setOverviewError(error instanceof Error ? error.message : 'Failed to load agent data');
@@ -559,6 +1360,35 @@ export function AgentManagementDashboard() {
   }, [selectedAgentId, refreshNonce]);
 
   useEffect(() => {
+    if (!selectedTournamentId) {
+      setSelectedTournament(null);
+      return;
+    }
+
+    const loadTournament = async () => {
+      try {
+        setLoadingTournamentDetail(true);
+        const response = await fetch(`/api/evolutionary/tournament/${selectedTournamentId}`);
+        if (!response.ok) throw new Error(`Failed to load tournament: HTTP ${response.status}`);
+        setSelectedTournament(await response.json() as TournamentDetailResponse);
+      } catch {
+        setSelectedTournament(null);
+      } finally {
+        setLoadingTournamentDetail(false);
+      }
+    };
+
+    void loadTournament();
+  }, [selectedTournamentId, refreshNonce]);
+
+  useEffect(() => {
+    if (!selectedTournament) return;
+
+    const maxGeneration = Math.max(...selectedTournament.generations.map(generation => generation.generation), 1);
+    setGenerationRange({ start: 1, end: maxGeneration });
+  }, [selectedTournament?.tournamentId]);
+
+  useEffect(() => {
     if (!selectedAgent || selectedAgent.status !== 'ACTIVE') {
       setRetireConfirmOpen(false);
     }
@@ -585,6 +1415,24 @@ export function AgentManagementDashboard() {
       if (sortKey === 'competitions') return right.total_competitions - left.total_competitions;
       return right.win_rate_percent - left.win_rate_percent;
     });
+  const filteredRecentTournamentIds = evolutionSummary
+    ? evolutionSummary.recentTournaments
+      .filter(tournament => matchesTournamentFilters(tournament, tournamentStatusFilter, tournamentSymbolFilter))
+      .map(tournament => tournament.tournamentId)
+    : [];
+
+  useEffect(() => {
+    if (!evolutionSummary) return;
+
+    if (filteredRecentTournamentIds.length === 0) {
+      setSelectedTournamentId(null);
+      return;
+    }
+
+    if (!selectedTournamentId || !filteredRecentTournamentIds.includes(selectedTournamentId)) {
+      setSelectedTournamentId(filteredRecentTournamentIds[0] ?? null);
+    }
+  }, [evolutionSummary, selectedTournamentId, filteredRecentTournamentIds.join('|')]);
 
   const totalAgents = agents.length;
   const averageWinRate = totalAgents > 0 ? agents.reduce((sum, agent) => sum + agent.win_rate_percent, 0) / totalAgents : 0;
@@ -1020,6 +1868,27 @@ export function AgentManagementDashboard() {
               </div>
             </div>
           </div>
+
+          <GenerationTrendsPanel agents={agents} />
+
+          <EvolutionTournamentHistoryPanel
+            summary={evolutionSummary}
+            selectedTournamentId={selectedTournamentId}
+            onSelectTournament={setSelectedTournamentId}
+            statusFilter={tournamentStatusFilter}
+            symbolFilter={tournamentSymbolFilter}
+            onStatusFilterChange={setTournamentStatusFilter}
+            onSymbolFilterChange={setTournamentSymbolFilter}
+          />
+
+          <TournamentDetailPanel
+            tournament={selectedTournament}
+            loading={loadingTournamentDetail}
+            statusFilter={tournamentStatusFilter}
+            symbolFilter={tournamentSymbolFilter}
+            generationRange={generationRange}
+            onGenerationRangeChange={setGenerationRange}
+          />
         </div>
 
         <div style={{ ...panelStyle, padding: '1.25rem' }}>
@@ -1162,25 +2031,11 @@ export function AgentManagementDashboard() {
                     ))}
                   </div>
                 </div>
-
-                <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
-                  <h4 style={{ margin: 0, color: '#0f172a' }}>Genealogy</h4>
-                  <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.75rem' }}>
-                    {genealogy.length === 0 ? (
-                      <div style={{ color: '#64748b' }}>No genealogy records available.</div>
-                    ) : genealogy.map(entry => (
-                      <div key={entry.id} style={{ paddingBottom: '0.75rem', borderBottom: '1px solid #e2e8f0' }}>
-                        <div style={{ color: '#0f172a', fontWeight: 700 }}>Generation {entry.breedingGeneration}</div>
-                        <div style={{ marginTop: '0.3rem', color: '#475569', fontSize: '0.9rem' }}>
-                          Parents: {entry.parent1Id?.slice(0, 8) || 'N/A'} / {entry.parent2Id?.slice(0, 8) || 'N/A'}
-                        </div>
-                        <div style={{ marginTop: '0.3rem', color: '#64748b', fontSize: '0.85rem' }}>
-                          Severity {entry.mutationSeverity} · Offspring {entry.offspringCount}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <GenealogyTreePanel
+                  agent={selectedAgent}
+                  genealogy={genealogy}
+                  onNavigateToAgent={setSelectedAgentId}
+                />
               </div>
 
               <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>

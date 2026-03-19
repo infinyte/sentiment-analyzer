@@ -1,6 +1,6 @@
 # Sentiment Analyzer
 
-Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence.
+Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with MARL tournament tooling, social media intelligence, and agent-management views backed by the evolutionary system.
 
 ## Quick Start
 
@@ -176,6 +176,7 @@ Express Backend (port 3000)
 | POST | `/api/evolutionary/tournament` | Start a multi-generation evolutionary tournament (202 + `tournamentId`) |
 | GET | `/api/evolutionary/tournament` | List all tournaments (lightweight) |
 | GET | `/api/evolutionary/tournament/:id` | Full tournament status + generation history |
+| GET | `/api/evolutionary/summary` | Dashboard summary of recent tournaments and latest generation fitness timeline |
 
 ### Trading Service
 
@@ -394,6 +395,7 @@ sentiment-analyzer/
 │   │   ├── App.tsx               # Root component + hooks (useCoins, useCoinDetail)
 │   │   ├── main.tsx              # React entry point
 │   │   ├── components/
+│   │   │   ├── AgentManagementDashboard.tsx # Agent registry, breeding controls, lineage + generation trends
 │   │   │   ├── MarlCompetitionViewer.tsx   # MARL tournament UI
 │   │   │   └── SocialDashboard.tsx         # Social Intel tab
 │   │   ├── hooks/
@@ -436,12 +438,44 @@ Competitive multi-agent trading: multiple AI agents compete simultaneously on a 
 - **Evolutionary Orchestrator** — external genome-based evolution layer: FitnessCalculator → SelectionAlgorithm → GeneticCrossover → MutationEngine; results persisted in `evolutionary_tournaments` table
 - **Exchange Layer** — `CryptoComExchange` (default) and `BinanceUSExchange` behind a shared `ExchangeInterface`; `TradingService` adds 4 safety guards; `PaperExchange` for zero-risk simulation
 
+### Agent Management Dashboard
+
+The frontend now includes a dedicated agent-management view backed by the existing agent identity and evolutionary APIs.
+
+Current capabilities:
+- Registry of active agents with filtering and sorting
+- Leaderboard view based on persisted win rate and PnL
+- Agent detail view with stats, competition history, genome snapshot, and genealogy records
+- Cosmetic editing for name, emoji, color, biography, and nickname
+- Breeding-pool workflow for selecting parents and creating mutated children from the UI
+- Retirement flow for culling poor performers from the active pool
+- Tournament-history drill-down for persisted evolutionary runs
+- Cross-tournament comparison metrics for recent population improvement trends
+- Interactive lineage exploration with parent-agent navigation
+- First-pass evolutionary visualizations for lineage, generation-level population trends, and tournament fitness timelines
+
+Backed by these endpoints:
+- `GET /api/agents`
+- `GET /api/agents/stats/leaderboard`
+- `GET /api/agents/:id`
+- `PUT /api/agents/:id/customize`
+- `POST /api/agents/:id/retire`
+- `GET /api/agents/:id/history`
+- `GET /api/agents/:id/genome`
+- `GET /api/agents/:id/genealogy`
+- `POST /api/evolutionary/breed`
+
+Still intentionally lightweight:
+- Genealogy is now navigable, but still not a full free-form tree explorer yet.
+- Generation and tournament trends are available, but there is not yet a full standalone historical evolution workspace.
+
 ### Documentation
 
 See [`docs/phase2/`](./docs/phase2/) for full architecture, game theory analysis, and integration details:
 - [MARL Executive Summary](./docs/phase2/MARL_EXECUTIVE_SUMMARY.md)
 - [Detailed Architecture](./docs/phase2/MARL_ARCHITECTURE_DETAILED.md)
 - [Integration Guide](./docs/phase2/MARL_INTEGRATION_GUIDE.md)
+- [Evolutionary System Overview](./docs/EVOLUTIONARY_SYSTEM_OVERVIEW.md)
 
 ---
 

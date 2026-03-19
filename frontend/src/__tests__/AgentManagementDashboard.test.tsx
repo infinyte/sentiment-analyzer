@@ -139,6 +139,224 @@ describe('Agent management dashboard', () => {
         });
       }
 
+      if (url.includes('/api/evolutionary/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totals: {
+              totalTournaments: 2,
+              completedTournaments: 1,
+              runningTournaments: 1,
+              failedTournaments: 0,
+              totalGenerations: 3,
+              averageTopFitness: 84.5,
+              averageGenerationFitness: 66.1,
+            },
+            crossTournament: {
+              bestTournament: {
+                tournamentId: 'evo-2',
+                name: 'March Finals',
+                status: 'COMPLETED',
+                completedAt: '2026-03-18T10:15:00.000Z',
+                symbols: ['BTC', 'ETH'],
+                generationCount: 2,
+                latestTopFitness: 92,
+                latestAvgFitness: 71,
+                latestAvgPnl: 245.2,
+                latestSurvivalRate: 50,
+              },
+              latestVsPrevious: {
+                latestTournamentId: 'evo-2',
+                previousTournamentId: 'evo-1',
+                topFitnessDelta: 8,
+                avgFitnessDelta: 5,
+                generationCountDelta: 1,
+              },
+              recentPerformance: [
+                {
+                  tournamentId: 'evo-2',
+                  name: 'March Finals',
+                  status: 'COMPLETED',
+                  completedAt: '2026-03-18T10:15:00.000Z',
+                  symbols: ['BTC', 'ETH'],
+                  generationCount: 2,
+                  latestTopFitness: 92,
+                  latestAvgFitness: 71,
+                  latestAvgPnl: 245.2,
+                  latestSurvivalRate: 50,
+                },
+                {
+                  tournamentId: 'evo-1',
+                  name: 'March Warmup',
+                  status: 'RUNNING',
+                  completedAt: '2026-03-17T10:15:00.000Z',
+                  symbols: ['ETH'],
+                  generationCount: 1,
+                  latestTopFitness: 84,
+                  latestAvgFitness: 66,
+                  latestAvgPnl: 132.75,
+                  latestSurvivalRate: 75,
+                },
+              ],
+            },
+            recentTournaments: [
+              {
+                tournamentId: 'evo-2',
+                name: 'March Finals',
+                status: 'COMPLETED',
+                currentGeneration: 2,
+                maxGenerations: 2,
+                populationSize: 4,
+                symbols: ['BTC', 'ETH'],
+                startedAt: '2026-03-18T10:00:00.000Z',
+                completedAt: '2026-03-18T10:15:00.000Z',
+                generationCount: 2,
+                latestTopFitness: 92,
+                latestAvgFitness: 71,
+                latestAvgPnl: 245.2,
+                latestSurvivalRate: 50,
+              },
+              {
+                tournamentId: 'evo-1',
+                name: 'March Warmup',
+                status: 'RUNNING',
+                currentGeneration: 1,
+                maxGenerations: 3,
+                populationSize: 4,
+                symbols: ['ETH'],
+                startedAt: '2026-03-17T10:00:00.000Z',
+                completedAt: '2026-03-17T10:15:00.000Z',
+                generationCount: 1,
+                latestTopFitness: 84,
+                latestAvgFitness: 66,
+                latestAvgPnl: 132.75,
+                latestSurvivalRate: 75,
+              },
+            ],
+            latestTournament: {
+              tournamentId: 'evo-2',
+              name: 'March Finals',
+              status: 'COMPLETED',
+              currentGeneration: 2,
+              maxGenerations: 2,
+              populationSize: 4,
+              symbols: ['BTC', 'ETH'],
+              startedAt: '2026-03-18T10:00:00.000Z',
+              completedAt: '2026-03-18T10:15:00.000Z',
+              generationCount: 2,
+              latestTopFitness: 92,
+              latestAvgFitness: 71,
+              latestAvgPnl: 245.2,
+              latestSurvivalRate: 50,
+              generationTimeline: [
+                {
+                  generation: 1,
+                  topFitness: 88,
+                  avgFitness: 63,
+                  avgPnl: 140.5,
+                  survivalRate: 50,
+                  populationCount: 4,
+                  survivorCount: 2,
+                  offspringCount: 2,
+                  retiredCount: 2,
+                  completedAt: '2026-03-18T10:05:00.000Z',
+                },
+                {
+                  generation: 2,
+                  topFitness: 92,
+                  avgFitness: 71,
+                  avgPnl: 245.2,
+                  survivalRate: 50,
+                  populationCount: 4,
+                  survivorCount: 2,
+                  offspringCount: 2,
+                  retiredCount: 2,
+                  completedAt: '2026-03-18T10:15:00.000Z',
+                },
+              ],
+            },
+          }),
+        });
+      }
+
+      if (url.endsWith('/api/evolutionary/tournament/evo-2')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            tournamentId: 'evo-2',
+            name: 'March Finals',
+            status: 'COMPLETED',
+            currentGeneration: 2,
+            startedAt: '2026-03-18T10:00:00.000Z',
+            completedAt: '2026-03-18T10:15:00.000Z',
+            config: {
+              populationSize: 4,
+              maxGenerations: 2,
+              symbols: ['BTC', 'ETH'],
+            },
+            generations: [
+              {
+                generation: 1,
+                competitionId: 'comp-1',
+                population: ['agent-a', 'agent-b', 'agent-c', 'agent-d'],
+                survivors: ['agent-a', 'agent-b'],
+                offspring: ['agent-e', 'agent-f'],
+                retired: ['agent-c', 'agent-d'],
+                topAgentId: 'agent-a',
+                topFitness: 88,
+                avgFitness: 63,
+                completedAt: '2026-03-18T10:05:00.000Z',
+              },
+              {
+                generation: 2,
+                competitionId: 'comp-2',
+                population: ['agent-a', 'agent-b', 'agent-e', 'agent-f'],
+                survivors: ['agent-a', 'agent-e'],
+                offspring: ['agent-g', 'agent-h'],
+                retired: ['agent-b', 'agent-f'],
+                topAgentId: 'agent-a',
+                topFitness: 92,
+                avgFitness: 71,
+                completedAt: '2026-03-18T10:15:00.000Z',
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.endsWith('/api/evolutionary/tournament/evo-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            tournamentId: 'evo-1',
+            name: 'March Warmup',
+            status: 'RUNNING',
+            currentGeneration: 1,
+            startedAt: '2026-03-17T10:00:00.000Z',
+            completedAt: '2026-03-17T10:15:00.000Z',
+            config: {
+              populationSize: 4,
+              maxGenerations: 3,
+              symbols: ['ETH'],
+            },
+            generations: [
+              {
+                generation: 1,
+                competitionId: 'comp-old',
+                population: ['agent-1', 'agent-2', 'agent-3', 'agent-4'],
+                survivors: ['agent-1', 'agent-2', 'agent-3'],
+                offspring: ['agent-5'],
+                retired: ['agent-4'],
+                topAgentId: 'agent-1',
+                topFitness: 84,
+                avgFitness: 66,
+                completedAt: '2026-03-17T10:15:00.000Z',
+              },
+            ],
+          }),
+        });
+      }
+
       if (url.endsWith('/api/agents/agent-1')) {
         return Promise.resolve({
           ok: true,
@@ -261,6 +479,51 @@ describe('Agent management dashboard', () => {
             ],
           }),
         });
+      }
+
+      if (url.endsWith('/api/agents/parent-a')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'parent-a',
+            agent_type: 'MOMENTUM',
+            risk_profile: 'AGGRESSIVE',
+            status: 'RETIRED',
+            custom_name: 'Parent Alpha',
+            emoji: '🌟',
+            color: '#800080',
+            biography: 'Archived parent strategist.',
+            nickname: 'Alpha',
+            age_iterations: 20,
+            generation_number: 2,
+            created_at: '2026-03-14T08:00:00.000Z',
+            stats: {
+              total_competitions: 18,
+              total_wins: 11,
+              total_losses: 7,
+              win_rate_percent: 61.1,
+              total_pnl: 980.15,
+              max_drawdown_percent: 8.1,
+              sharpe_ratio: 1.31,
+              roi_percent: 12.7,
+              trades_executed: 89,
+              consistency_score: 80,
+              avg_trade_profit: 12.1,
+            },
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/parent-a/history?limit=12')) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+
+      if (url.includes('/api/agents/parent-a/genome')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'parent-a', genome: { exploration_decay: 0.99 } }) });
+      }
+
+      if (url.includes('/api/agents/parent-a/genealogy')) {
+        return Promise.resolve({ ok: true, json: async () => ({ agentId: 'parent-a', genealogy: [] }) });
       }
 
       if (url.includes('/api/agents/agent-2/history?limit=12')) {
@@ -402,6 +665,51 @@ describe('Agent management dashboard', () => {
 
     await screen.findByText('Agent Management');
     await screen.findByText('Genome Snapshot');
+    await screen.findByText('Generation Trends');
+    await screen.findByText('Tournament History');
+    await screen.findByText('Latest Tournament Fitness Distribution');
+    await screen.findByText('Tournament Detail');
+    await screen.findByText('Cross-Tournament Comparison');
+    await screen.findByText('Genealogy Tree');
+    await screen.findByLabelText('Agent lineage graph');
+    await screen.findByText('sharpe_bias');
+    await screen.findByText('PnL curve');
+    await screen.findByText('Survival curve');
+    await screen.findByText('comp-1');
+
+    fireEvent.change(screen.getByLabelText('Filter tournaments by status'), { target: { value: 'RUNNING' } });
+
+    await screen.findByRole('button', { name: /March Warmup/i });
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /March Finals/i })).toBeNull();
+    });
+
+    fireEvent.change(screen.getByLabelText('Filter tournaments by status'), { target: { value: 'ALL' } });
+    fireEvent.change(screen.getByLabelText('Filter tournaments by symbol'), { target: { value: 'BTC' } });
+
+    fireEvent.click(screen.getByRole('button', { name: /March Finals/i }));
+
+    await screen.findByText('BTC, ETH');
+
+    fireEvent.change(screen.getByLabelText('Filter generations from'), { target: { value: '2' } });
+    await waitFor(() => {
+      expect(screen.queryByText('comp-1')).toBeNull();
+    });
+    await screen.findByText('comp-2');
+
+    fireEvent.change(screen.getByLabelText('Filter generations from'), { target: { value: '1' } });
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Parent 1/i })[0]!);
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/agents/parent-a');
+    });
+
+    await screen.findByText('Archived parent strategist.');
+
+    fireEvent.click(screen.getAllByRole('button', { name: /Signal Hunter/i })[0]!);
+
+    await screen.findByText('Tracks breakout regimes and adapts quickly.');
 
     fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
 
@@ -422,7 +730,7 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents?limit=100');
     });
-  }, 15000);
+  }, 25000);
 
   it('marks agents ready to evolve, breeds children, and retires weak agents', async () => {
     render(<App />);
@@ -457,5 +765,5 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-child-1/retire', expect.objectContaining({ method: 'POST' }));
     });
-  }, 15000);
+  }, 25000);
 });

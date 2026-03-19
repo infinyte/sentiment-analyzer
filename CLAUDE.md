@@ -64,7 +64,7 @@ backend/src/services/
 │   ├── selection-algorithm.ts        # Survival partitioning (survivalPercent)
 │   ├── genetic-crossover.ts          # UNIFORM / BLENDED genome crossover
 │   ├── mutation-engine.ts            # LIGHT / MEDIUM / HEAVY stochastic mutation
-│   ├── genome-manager.ts             # SQLite-backed genome CRUD
+│   ├── agent-genome.ts               # SQLite-backed genome CRUD
 │   ├── agent-cosmetics-manager.ts    # Name / emoji / color / bio management
 │   └── agent-statistics-manager.ts  # Win-rate, PnL, history tracking
 ├── exchange/
@@ -87,9 +87,9 @@ backend/src/services/
 |--------|------|-------|
 | MARL competition | `routes/marl-competition.ts` | `/api/marl/*` |
 | MARL real trading | `routes/marl-real-trading.ts` | `/api/marl/broker/*` |
-| Social media | `routes/social-media.ts` | `/api/social/*` |
+| Social media | `routes/social-media.ts` | `/api/social-media/*` |
 | Agent stats | `routes/agent-stats.ts` (factory) | `/api/agents/*` |
-| Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/agents/:id/genome` |
+| Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
@@ -109,10 +109,15 @@ backend/src/services/
 
 ### Frontend
 - `App.tsx` (40KB) — main dashboard, coin list, sentiment filters, coin detail modal
+- `components/AgentManagementDashboard.tsx` — agent registry, leaderboard, breeding controls, genealogy tree, tournament detail drill-down, generation trends, cross-tournament comparisons, genome snapshot
 - `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, agent cosmetics
 - `components/SocialDashboard.tsx` — trending topics, volume trends
-- Polls every 10 minutes via `useEffect` + axios
+- App dashboard polls every 10 minutes via `useEffect`; agent-management refreshes every 5 seconds via `refreshNonce`
+- UI styling is mostly inline styles inside focused components; extend the existing pattern rather than introducing a new design system for isolated changes
 - ChartJS via `react-chartjs-2` for price/equity charts
+
+### Evolution Docs
+- `docs/EVOLUTIONARY_SYSTEM_OVERVIEW.md` — maintainer overview of lifecycle, routes, tables, UI data flow, and remaining gaps
 
 ## Test Patterns
 
@@ -139,6 +144,9 @@ Import paths in backend use `.js` extension even for `.ts` source files (TypeScr
 
 ### Frontend (Vitest + @testing-library/react)
 Tests live in `frontend/src/__tests__/`. Environment: jsdom. Setup file: `__tests__/setup.ts`.
+
+Current high-value frontend coverage includes:
+- `AgentManagementDashboard.test.tsx` for registry, customization, breeding, retirement, and evolutionary UI rendering
 
 ## Environment Variables
 

@@ -5,6 +5,7 @@
  *   POST /api/evolutionary/tournament           - start a new tournament
  *   GET  /api/evolutionary/tournament           - list all tournaments
  *   GET  /api/evolutionary/tournament/:id       - get tournament status/summary
+ *   GET  /api/evolutionary/summary              - aggregate tournament history for dashboards
  *   GET  /api/agents/:id/genome                 - get an agent's genome
  *   GET  /api/agents/:id/genealogy              - get an agent's ancestry
  */
@@ -19,6 +20,165 @@ import type { CrossoverStrategy } from '../services/evolutionary/genetic-crossov
 import { MutationEngine } from '../services/evolutionary/mutation-engine.js';
 import type { MutationSeverity } from '../services/evolutionary/mutation-engine.js';
 import { AgentStatisticsManager } from '../services/evolutionary/agent-statistics-manager.js';
+import type { TournamentRecord } from '../services/evolutionary/evolutionary-orchestrator.js';
+
+interface TournamentTimelineEntry {
+  generation: number;
+  topFitness: number;
+  avgFitness: number;
+  avgPnl: number;
+  survivalRate: number;
+  populationCount: number;
+  survivorCount: number;
+  offspringCount: number;
+  retiredCount: number;
+  completedAt: string;
+}
+
+interface TournamentDashboardSummary {
+  tournamentId: string;
+  name: string;
+  status: string;
+  currentGeneration: number;
+  maxGenerations: number;
+  populationSize: number;
+  symbols: string[];
+  startedAt: string;
+  completedAt?: string;
+  generationCount: number;
+  latestTopFitness: number;
+  latestAvgFitness: number;
+  latestAvgPnl: number;
+  latestSurvivalRate: number;
+}
+
+interface CrossTournamentComparisonEntry {
+  tournamentId: string;
+  name: string;
+  status: string;
+  completedAt?: string;
+  symbols: string[];
+  generationCount: number;
+  latestTopFitness: number;
+  latestAvgFitness: number;
+  latestAvgPnl: number;
+  latestSurvivalRate: number;
+}
+
+interface LatestVsPreviousComparison {
+  latestTournamentId: string;
+  previousTournamentId: string;
+  topFitnessDelta: number;
+  avgFitnessDelta: number;
+  generationCountDelta: number;
+}
+
+function getCompetitionMetrics(db: Database.Database, competitionId: string): { avgPnl: number } {
+  let row: { avgPnl: number | null } | undefined;
+
+  try {
+    row = db.prepare(`
+      SELECT AVG(pnl) AS avgPnl
+      FROM agent_competitions
+      WHERE competition_id = ?
+    `).get(competitionId) as { avgPnl: number | null } | undefined;
+  } catch {
+    return { avgPnl: 0 };
+  }
+
+  return {
+    avgPnl: typeof row?.avgPnl === 'number' ? row.avgPnl : 0,
+  };
+}
+
+function buildTimeline(record: TournamentRecord, db: Database.Database): TournamentTimelineEntry[] {
+  return record.generations.map(generation => {
+    const metrics = getCompetitionMetrics(db, generation.competitionId);
+
+    return {
+      generation: generation.generation,
+      topFitness: generation.topFitness,
+      avgFitness: generation.avgFitness,
+      avgPnl: metrics.avgPnl,
+      survivalRate: generation.population.length > 0 ? (generation.survivors.length / generation.population.length) * 100 : 0,
+      populationCount: generation.population.length,
+      survivorCount: generation.survivors.length,
+      offspringCount: generation.offspring.length,
+      retiredCount: generation.retired.length,
+      completedAt: generation.completedAt,
+    };
+  });
+}
+
+function summarizeTournament(record: TournamentRecord, db: Database.Database): TournamentDashboardSummary {
+  const latestGeneration = record.generations[record.generations.length - 1];
+  const latestMetrics = latestGeneration ? getCompetitionMetrics(db, latestGeneration.competitionId) : { avgPnl: 0 };
+
+  return {
+    tournamentId: record.tournamentId,
+    name: record.name,
+    status: record.status,
+    currentGeneration: record.currentGeneration,
+    maxGenerations: record.config.maxGenerations,
+    populationSize: record.config.populationSize,
+    symbols: record.config.symbols,
+    startedAt: record.startedAt,
+    completedAt: record.completedAt,
+    generationCount: record.generations.length,
+    latestTopFitness: latestGeneration?.topFitness ?? 0,
+    latestAvgFitness: latestGeneration?.avgFitness ?? 0,
+    latestAvgPnl: latestMetrics.avgPnl,
+    latestSurvivalRate: latestGeneration && latestGeneration.population.length > 0
+      ? (latestGeneration.survivors.length / latestGeneration.population.length) * 100
+      : 0,
+  };
+}
+
+function buildCrossTournamentComparisons(tournaments: TournamentRecord[], db: Database.Database): {
+  bestTournament: CrossTournamentComparisonEntry | null;
+  latestVsPrevious: LatestVsPreviousComparison | null;
+  recentPerformance: CrossTournamentComparisonEntry[];
+} {
+  const comparable = tournaments.map(record => {
+    const latestGeneration = record.generations[record.generations.length - 1];
+    const latestMetrics = latestGeneration ? getCompetitionMetrics(db, latestGeneration.competitionId) : { avgPnl: 0 };
+
+    return {
+      tournamentId: record.tournamentId,
+      name: record.name,
+      status: record.status,
+      completedAt: record.completedAt,
+      symbols: record.config.symbols,
+      generationCount: record.generations.length,
+      latestTopFitness: latestGeneration?.topFitness ?? 0,
+      latestAvgFitness: latestGeneration?.avgFitness ?? 0,
+      latestAvgPnl: latestMetrics.avgPnl,
+      latestSurvivalRate: latestGeneration && latestGeneration.population.length > 0
+        ? (latestGeneration.survivors.length / latestGeneration.population.length) * 100
+        : 0,
+    };
+  });
+
+  const bestTournament = comparable.reduce<CrossTournamentComparisonEntry | null>((best, current) => {
+    if (!best) return current;
+    return current.latestTopFitness > best.latestTopFitness ? current : best;
+  }, null);
+
+  const latest = comparable[0] ?? null;
+  const previous = comparable[1] ?? null;
+
+  return {
+    bestTournament,
+    latestVsPrevious: latest && previous ? {
+      latestTournamentId: latest.tournamentId,
+      previousTournamentId: previous.tournamentId,
+      topFitnessDelta: latest.latestTopFitness - previous.latestTopFitness,
+      avgFitnessDelta: latest.latestAvgFitness - previous.latestAvgFitness,
+      generationCountDelta: latest.generationCount - previous.generationCount,
+    } : null,
+    recentPerformance: comparable.slice(0, 6),
+  };
+}
 
 export function createEvolutionaryRouter(db: Database.Database): Router {
   const router       = Router();
@@ -155,6 +315,40 @@ export function createEvolutionaryRouter(db: Database.Database): Router {
         completedAt:       t.completedAt,
       }));
       res.json({ tournaments: list });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── GET /api/evolutionary/summary — aggregate dashboard summary ──────────
+
+  router.get('/api/evolutionary/summary', (_req, res) => {
+    try {
+      const tournaments = orchestrator.listTournaments();
+      const recentTournaments = tournaments.slice(0, 6).map(tournament => summarizeTournament(tournament, db));
+      const latestTournament = tournaments[0] ?? null;
+
+      const allGenerations = tournaments.flatMap(tournament => tournament.generations);
+      const totalTopFitness = allGenerations.reduce((sum, generation) => sum + generation.topFitness, 0);
+      const totalAvgFitness = allGenerations.reduce((sum, generation) => sum + generation.avgFitness, 0);
+
+      res.json({
+        totals: {
+          totalTournaments: tournaments.length,
+          completedTournaments: tournaments.filter(tournament => tournament.status === 'COMPLETED').length,
+          runningTournaments: tournaments.filter(tournament => tournament.status === 'RUNNING').length,
+          failedTournaments: tournaments.filter(tournament => tournament.status === 'FAILED').length,
+          totalGenerations: allGenerations.length,
+          averageTopFitness: allGenerations.length > 0 ? totalTopFitness / allGenerations.length : 0,
+          averageGenerationFitness: allGenerations.length > 0 ? totalAvgFitness / allGenerations.length : 0,
+        },
+        crossTournament: buildCrossTournamentComparisons(tournaments, db),
+        recentTournaments,
+        latestTournament: latestTournament ? {
+          ...summarizeTournament(latestTournament, db),
+          generationTimeline: buildTimeline(latestTournament, db),
+        } : null,
+      });
     } catch (err) {
       res.status(500).json({ error: String(err) });
     }
