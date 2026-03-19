@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 type AgentSortKey = 'winRate' | 'pnl' | 'generation' | 'competitions';
 
@@ -445,6 +445,7 @@ export function AgentManagementDashboard() {
   const [customizationSaving, setCustomizationSaving] = useState(false);
   const [customizationForm, setCustomizationForm] = useState<CustomizationFormState>(buildCustomizationForm(null));
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const formInitializedForRef = useRef<string | null>(null);
   const [breedingPoolIds, setBreedingPoolIds] = useState<string[]>([]);
   const [breedChildCount, setBreedChildCount] = useState(2);
   const [breedStrategy, setBreedStrategy] = useState<BreedStrategy>('UNIFORM');
@@ -522,7 +523,12 @@ export function AgentManagementDashboard() {
         if (!detailResponse.ok) throw new Error(`Failed to load agent: HTTP ${detailResponse.status}`);
 
         const detailData = await detailResponse.json() as Record<string, unknown>;
-        setSelectedAgent(normalizeAgentDetail(detailData));
+        const normalizedDetail = normalizeAgentDetail(detailData);
+        setSelectedAgent(normalizedDetail);
+        if (formInitializedForRef.current !== selectedAgentId) {
+          formInitializedForRef.current = selectedAgentId;
+          setCustomizationForm(buildCustomizationForm(normalizedDetail));
+        }
 
         if (historyResponse.ok) {
           setHistory(await historyResponse.json() as AgentHistoryEntry[]);
@@ -551,10 +557,6 @@ export function AgentManagementDashboard() {
 
     void loadDetail();
   }, [selectedAgentId, refreshNonce]);
-
-  useEffect(() => {
-    setCustomizationForm(buildCustomizationForm(selectedAgent));
-  }, [selectedAgent]);
 
   useEffect(() => {
     if (!selectedAgent || selectedAgent.status !== 'ACTIVE') {
