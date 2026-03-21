@@ -6,17 +6,17 @@ const repoRoot = process.cwd();
 const authoritativeDocs = [
   'README.md',
   'CLAUDE.md',
-  'DEPLOYMENT_GUIDE.md',
-  'SENTIMENT_ANALYZER_ARCHITECTURE.md',
-  'TESTING_STRATEGY.md',
+  'docs/references/DEPLOYMENT_GUIDE.md',
+  'docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md',
+  'docs/references/TESTING_STRATEGY.md',
   'postman/README.md',
-  'docs/phase2/MARL_INTEGRATION_GUIDE.md',
+  'docs/MARL/MARL_INTEGRATION_GUIDE.md',
 ];
 
 const docsWithLiveRepoPathValidation = [
   'README.md',
   'postman/README.md',
-  'docs/phase2/MARL_INTEGRATION_GUIDE.md',
+  'docs/MARL/MARL_INTEGRATION_GUIDE.md',
 ];
 
 const fileTokenPattern = /`((?:\.\/)?(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.(?:md|ts|tsx|js|mjs|cjs|json|ya?ml|ps1))`/g;
@@ -95,18 +95,18 @@ function validateLiveDocs() {
 
   assertNotIncludes('README.md', 'trending_score (headline count)');
   assertIncludes(
-    'SENTIMENT_ANALYZER_ARCHITECTURE.md',
+    'docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md',
     'Sets `trending_score` from weighted frequency, recency, and source diversity rather than raw headline count'
   );
 
-  assertIncludes('TESTING_STRATEGY.md', 'Frontend Vitest + React Testing Library are configured');
-  assertIncludes('TESTING_STRATEGY.md', 'frontend/src/__tests__/App.test.tsx');
+  assertIncludes('docs/references/TESTING_STRATEGY.md', 'Frontend Vitest + React Testing Library are configured');
+  assertIncludes('docs/references/TESTING_STRATEGY.md', 'frontend/src/__tests__/App.test.tsx');
 
-  assertNotIncludes('DEPLOYMENT_GUIDE.md', '.github/workflows/` is empty');
-  assertNotIncludes('DEPLOYMENT_GUIDE.md', 'app currently uses in-memory cache only');
+  assertNotIncludes('docs/references/DEPLOYMENT_GUIDE.md', '.github/workflows/` is empty');
+  assertNotIncludes('docs/references/DEPLOYMENT_GUIDE.md', 'app currently uses in-memory cache only');
 
-  assertIncludes('docs/phase2/MARL_INTEGRATION_GUIDE.md', 'frontend/src/components/MarlCompetitionViewer.tsx');
-  assertIncludes('docs/phase2/MARL_INTEGRATION_GUIDE.md', 'frontend/src/App.tsx');
+  assertIncludes('docs/MARL/MARL_INTEGRATION_GUIDE.md', 'frontend/src/components/MarlCompetitionViewer.tsx');
+  assertIncludes('docs/MARL/MARL_INTEGRATION_GUIDE.md', 'frontend/src/App.tsx');
 }
 
 validateLiveDocs();

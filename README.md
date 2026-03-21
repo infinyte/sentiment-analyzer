@@ -99,7 +99,7 @@ Express Backend (port 3000)
 - `scoreItemAsync()` in the social-media pipeline prefers FinBERT when `FINBERT_API_URL` is configured, then falls back to the local keyword scorer.
 - `detectSarcasm()` can invert and down-weight strong sarcastic sentiment in both content and social scoring flows.
 - `detectLanguage()` stores ISO 639-1 language codes for social items using a Unicode-script heuristic with no external runtime dependency.
-- `ContentSignalService` supports target-coin context windows for aspect-based sentiment scoring, although the core `/api/coins/:symbol` flow is not yet passing `targetCoin` through every call site.
+- `ContentSignalService` supports target-coin context windows for aspect-based sentiment scoring (ABSA). The `targetCoin` parameter defaults to the coin symbol so the ABSA path is fully active for all `/api/coins/:symbol` sentiment fetches.
 
 **Scheduled jobs:**
 

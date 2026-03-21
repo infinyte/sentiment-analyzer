@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Backend
 ```bash
 cd backend
-npm run dev          # Dev server with watch (tsx)
+npm run dev          # Dev server with watch (nodemon + tsx)
 npm run build        # Compile TypeScript → dist/
 npm run type-check   # tsc --noEmit (run before committing)
 npm run lint         # ESLint
