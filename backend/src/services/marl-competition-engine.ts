@@ -381,7 +381,7 @@ interface Experience {
   features: number[];
 }
 
-interface LearningStateSnapshot {
+export interface LearningStateSnapshot {
   qValues: Array<[string, number[]]>;
   policyWeights: ReturnType<PolicyNetwork['cloneWeights']>;
   epsilon: number;
@@ -2247,6 +2247,33 @@ export class MarlCompetitionEngine {
       try { storage.deleteAgentLearningState(key); } catch { /* DB unavailable */ }
     }
     return cleared;
+  }
+
+  // ── Learning state accessors (for external use by pre-trainer) ────────────
+
+  /**
+   * Return the persisted learning state for `agentId` + `riskProfile`, or
+   * `undefined` if no state has been saved yet.
+   */
+  getAgentLearningState(agentId: string, riskProfile: string): LearningStateSnapshot | undefined {
+    const key = `${agentId}::${riskProfile}`;
+    return MarlCompetitionEngine.learningStateCache.get(key);
+  }
+
+  /**
+   * Inject a pre-trained snapshot into the persistence layer.
+   * Mirrors what `persistLearningStates` does internally after each competition
+   * round, but allows external callers (e.g. `PreTrainer`) to seed the cache.
+   */
+  injectPretrainedState(agentId: string, riskProfile: string, snapshot: LearningStateSnapshot): void {
+    const key = `${agentId}::${riskProfile}`;
+    MarlCompetitionEngine.learningStateCache.set(key, snapshot);
+    try {
+      storage.saveAgentLearningState(key, snapshot);
+    } catch (err) {
+      logger.warn('marl inject-pretrained: db write failed, cache updated', { key, error: String(err) });
+    }
+    logger.info('marl pre-trained state injected', { agentId, riskProfile });
   }
 
   // ── Result store ──────────────────────────────────────────────────────────

@@ -6,7 +6,7 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** Phase 3 Complete + Phase 5 Exchange Layer (partial) / Phase 4 Planned
+**Phase:** Phase 3 Complete + Phase 5 Exchange Layer (foundation complete) / Phase 4 Planned
 **Latest Release:** v3.1.0
 **Last Updated:** March 2026
 
@@ -252,12 +252,27 @@ Enable live trading and portfolio tracking.
 
 ### ✅ Completed (Foundation)
 
-- [x] **Exchange API Integration** (partial)
+- [x] **Exchange API Integration** (foundation complete)
   - Crypto.com REST v2 adapter (default) with HMAC-SHA256 auth
   - Binance.US adapter (opt-in via `TRADING_PROVIDER=binance-us`)
-  - Coinbase + Binance adapters for MARL layer
+  - Coinbase Advanced Trade API v3 adapter (opt-in via `TRADING_PROVIDER=coinbase`)
+  - Low-level `CoinbaseAdapter` + `BinanceAdapter` for MARL broker registry
   - AES-256-GCM encrypted credential storage (`BROKER_MASTER_KEY`)
   - Paper trading mode via `PaperExchange` (in-memory, zero risk)
+
+- [x] **Agent Pre-Training on Synthetic Data**
+  - `SyntheticMarketGenerator` — 5-regime configurable price series (BULL/BEAR/SIDEWAYS/CRASH/PUMP)
+  - `PreTrainer` — runs agents through synthetic episodes, persists Q-table + policy weights
+  - `POST /api/marl/agents/:agentId/pretrain` — returns convergence curve over training episodes
+  - Pre-training is additive; subsequent calls continue from prior persisted state
+
+- [x] **Evolution History & Population Endpoints**
+  - `GET /api/marl/evolution/history` — all generations across all tournaments with per-generation stats
+  - `GET /api/marl/evolution/best-genome` — highest fitness agent genome found across all tournaments
+  - `GET /api/marl/evolution/population` — current population of the latest tournament
+  - `POST /api/marl/agents/:agentId/algorithm` — algorithm info endpoint
+  - `GET /api/marl/competition/:id/equity-curves` — time-series equity for all agents
+  - `GET /api/marl/competition/:id/trade-log` — per-agent trade summary for a completed competition
 
 - [x] **Risk Management** (core guards)
   - `TradingService`: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
@@ -532,8 +547,9 @@ React with 👍 on feature requests to indicate interest. Roadmap priorities con
 2026 Q1 ✅ Phase 1: Foundation + Advanced Intelligence
 2026 Q1 ✅ Phase 2: MARL Competitive Framework
 2026 Q1 ✅ Phase 3: Social Media Intelligence
+2026 Q1 ✅ Phase 5: Exchange Integration (foundation — Crypto.com, Binance.US, Coinbase Advanced Trade)
 2026 Q2  → Phase 4: Enhanced Analytics (interactive charts, user accounts, alerts)
-2026 Q4  → Phase 5: Exchange Integration (Binance, Kraken, Coinbase)
+2026 Q3  → Phase 5: Exchange Integration (portfolio tracker, Kraken, additional providers)
 2027 Q2  → Phase 6: Machine Learning (custom sentiment model, price prediction)
 2027+    → Phase 7: Community & Scaling
 ```

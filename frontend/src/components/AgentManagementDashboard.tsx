@@ -115,6 +115,28 @@ interface BreedResponse {
   children: BreedResultChild[];
 }
 
+type MarketRegime = 'BULL_TREND' | 'BEAR_TREND' | 'SIDEWAYS' | 'VOLATILE_CRASH' | 'VOLATILE_PUMP';
+
+interface PretrainResult {
+  agentId: string;
+  riskProfile: string;
+  episodes: number;
+  avgReturn: number;
+  bestReturn: number;
+  convergenceCurve: number[];
+  finalEpsilon: number;
+  status: 'completed';
+}
+
+interface BestGenomeResponse {
+  agentId: string;
+  fitnessScore: number;
+  tournamentId: string;
+  generation: number;
+  foundAt: string;
+  genome: unknown;
+}
+
 interface EvolutionaryTournamentSummary {
   tournamentId: string;
   name: string;
@@ -615,6 +637,187 @@ function RetireConfirmationModal({ agent, retiring, onCancel, onConfirm }: Retir
           >
             {retiring ? 'Retiring...' : 'Confirm Kill Agent'}
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const ALL_REGIMES: MarketRegime[] = ['BULL_TREND', 'BEAR_TREND', 'SIDEWAYS', 'VOLATILE_CRASH', 'VOLATILE_PUMP'];
+
+interface PretrainModalProps {
+  agent: AgentDetail;
+  pretraining: boolean;
+  result: PretrainResult | null;
+  error: string | null;
+  episodes: number;
+  steps: number;
+  regimes: MarketRegime[];
+  onClose: () => void;
+  onEpisodesChange: (v: number) => void;
+  onStepsChange: (v: number) => void;
+  onRegimesChange: (v: MarketRegime[]) => void;
+  onRun: () => void;
+}
+
+function PretrainModal({
+  agent, pretraining, result, error,
+  episodes, steps, regimes,
+  onClose, onEpisodesChange, onStepsChange, onRegimesChange, onRun,
+}: PretrainModalProps) {
+  const convergencePath = result ? buildSparklinePath(result.convergenceCurve, 320, 64) : '';
+
+  const toggleRegime = (regime: MarketRegime) => {
+    onRegimesChange(regimes.includes(regime) ? regimes.filter(r => r !== regime) : [...regimes, regime]);
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Pre-train ${displayName(agent)}`}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        zIndex: 50,
+      }}
+    >
+      <div style={{ ...panelStyle, width: '100%', maxWidth: '42rem', padding: '1.5rem', maxHeight: '90vh', overflowY: 'auto' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#0f172a' }}>Pre-Train Agent</h3>
+            <p style={{ margin: '0.5rem 0 0', color: '#475569', fontSize: '0.95rem' }}>{displayName(agent)} · {agent.risk_profile}</p>
+          </div>
+          <button
+            onClick={onClose}
+            style={{ border: 'none', background: 'transparent', color: '#64748b', fontSize: '1.5rem', cursor: 'pointer' }}
+            aria-label="Close pre-train dialog"
+          >
+            ×
+          </button>
+        </div>
+
+        <p style={{ margin: '1rem 0 0', color: '#475569', fontSize: '0.9rem', lineHeight: 1.6 }}>
+          Run the agent through synthetic market episodes before live competitions. Pre-training is additive — subsequent calls build on prior state.
+        </p>
+
+        <div style={{ display: 'grid', gap: '1rem', marginTop: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <label style={{ display: 'grid', gap: '0.4rem', color: '#334155', fontWeight: 600 }}>
+              Episodes (max 500)
+              <input
+                type="number"
+                min={10}
+                max={500}
+                value={episodes}
+                onChange={event => onEpisodesChange(Math.min(500, Math.max(10, Number(event.target.value) || 50)))}
+                style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.4rem', color: '#334155', fontWeight: 600 }}>
+              Steps / episode (max 2000)
+              <input
+                type="number"
+                min={100}
+                max={2000}
+                value={steps}
+                onChange={event => onStepsChange(Math.min(2000, Math.max(100, Number(event.target.value) || 500)))}
+                style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+              />
+            </label>
+          </div>
+
+          <div>
+            <div style={{ color: '#334155', fontWeight: 600, marginBottom: '0.6rem' }}>Market regimes</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {ALL_REGIMES.map(regime => (
+                <button
+                  key={regime}
+                  type="button"
+                  onClick={() => toggleRegime(regime)}
+                  style={{
+                    padding: '0.4rem 0.75rem',
+                    borderRadius: '999px',
+                    border: '1px solid',
+                    borderColor: regimes.includes(regime) ? '#2563eb' : '#cbd5e1',
+                    backgroundColor: regimes.includes(regime) ? '#dbeafe' : '#ffffff',
+                    color: regimes.includes(regime) ? '#1d4ed8' : '#475569',
+                    fontSize: '0.82rem',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {regime.replace('_', ' ')}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {error && (
+            <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem' }}>
+              {error}
+            </div>
+          )}
+
+          {result && (
+            <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.9rem', padding: '1rem' }}>
+              <div style={{ color: '#15803d', fontWeight: 700, marginBottom: '0.75rem' }}>Pre-training completed</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(9rem, 1fr))', gap: '0.6rem', marginBottom: '0.9rem' }}>
+                {[
+                  { label: 'Episodes', value: String(result.episodes) },
+                  { label: 'Avg return', value: `${(result.avgReturn * 100).toFixed(2)}%` },
+                  { label: 'Best return', value: `${(result.bestReturn * 100).toFixed(2)}%` },
+                  { label: 'Final ε', value: result.finalEpsilon.toFixed(4) },
+                ].map(item => (
+                  <div key={item.label} style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '0.6rem' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>{item.label}</div>
+                    <div style={{ marginTop: '0.3rem', color: '#0f172a', fontWeight: 700 }}>{item.value}</div>
+                  </div>
+                ))}
+              </div>
+              {convergencePath && (
+                <div style={{ backgroundColor: '#f0fdf4', borderRadius: '0.75rem', padding: '0.75rem' }}>
+                  <div style={{ color: '#15803d', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Convergence curve</div>
+                  <svg viewBox="0 0 320 64" style={{ width: '100%', height: '4rem', marginTop: '0.4rem' }} aria-label="Pre-training convergence curve">
+                    <path d={convergencePath} fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '0.76rem', marginTop: '0.2rem' }}>
+                    <span>Block 1</span>
+                    <span>Block {result.convergenceCurve.length}</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem' }}>
+            <button
+              onClick={onClose}
+              style={{ padding: '0.75rem 1rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', backgroundColor: '#ffffff', cursor: 'pointer' }}
+            >
+              Close
+            </button>
+            <button
+              onClick={onRun}
+              disabled={pretraining || regimes.length === 0}
+              style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '0.75rem',
+                border: 'none',
+                backgroundColor: pretraining || regimes.length === 0 ? '#93c5fd' : '#2563eb',
+                color: '#ffffff',
+                cursor: pretraining || regimes.length === 0 ? 'wait' : 'pointer',
+                fontWeight: 700,
+              }}
+            >
+              {pretraining ? 'Training...' : result ? 'Run again' : 'Start pre-training'}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -1249,6 +1452,14 @@ export function AgentManagementDashboard() {
   const [retireError, setRetireError] = useState<string | null>(null);
   const [retiring, setRetiring] = useState(false);
   const [retireConfirmOpen, setRetireConfirmOpen] = useState(false);
+  const [pretrainOpen, setPretrainOpen] = useState(false);
+  const [pretraining, setPretraining] = useState(false);
+  const [pretrainResult, setPretrainResult] = useState<PretrainResult | null>(null);
+  const [pretrainError, setPretrainError] = useState<string | null>(null);
+  const [pretrainEpisodes, setPretrainEpisodes] = useState(50);
+  const [pretrainSteps, setPretrainSteps] = useState(500);
+  const [pretrainRegimes, setPretrainRegimes] = useState<MarketRegime[]>([...ALL_REGIMES]);
+  const [bestGenome, setBestGenome] = useState<BestGenomeResponse | null>(null);
 
   // Keep dashboard data moving during ongoing competitions without manual refresh.
   useEffect(() => {
@@ -1265,10 +1476,11 @@ export function AgentManagementDashboard() {
         setLoadingOverview(true);
         setOverviewError(null);
 
-        const [agentsResponse, leaderboardResponse, summaryResponse] = await Promise.all([
+        const [agentsResponse, leaderboardResponse, summaryResponse, bestGenomeResponse] = await Promise.all([
           fetch('/api/agents?limit=100'),
           fetch('/api/agents/stats/leaderboard?limit=10'),
           fetch('/api/evolutionary/summary'),
+          fetch('/api/marl/evolution/best-genome'),
         ]);
 
         if (!agentsResponse.ok) throw new Error(`Failed to load agents: HTTP ${agentsResponse.status}`);
@@ -1288,6 +1500,11 @@ export function AgentManagementDashboard() {
           setSelectedTournamentId(current => current ?? summaryData.latestTournament?.tournamentId ?? null);
         } else {
           setEvolutionSummary(null);
+        }
+        if (bestGenomeResponse.ok) {
+          setBestGenome(await bestGenomeResponse.json() as BestGenomeResponse);
+        } else {
+          setBestGenome(null);
         }
         setSelectedAgentId(current => current ?? normalizedAgents[0]?.id ?? null);
       } catch (error) {
@@ -1572,6 +1789,44 @@ export function AgentManagementDashboard() {
       setCustomizationError(error instanceof Error ? error.message : 'Failed to save customization');
     } finally {
       setCustomizationSaving(false);
+    }
+  };
+
+  const openPretrain = () => {
+    setPretrainResult(null);
+    setPretrainError(null);
+    setPretrainOpen(true);
+  };
+
+  const runPretrain = async () => {
+    if (!selectedAgent) return;
+
+    try {
+      setPretraining(true);
+      setPretrainError(null);
+      setPretrainResult(null);
+
+      const response = await fetch(`/api/marl/agents/${selectedAgent.id}/pretrain`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episodes: pretrainEpisodes,
+          stepsPerEpisode: pretrainSteps,
+          riskProfile: selectedAgent.risk_profile,
+          regimes: pretrainRegimes,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
+        throw new Error(typeof errorData.error === 'string' ? errorData.error : `HTTP ${response.status}`);
+      }
+
+      setPretrainResult(await response.json() as PretrainResult);
+    } catch (error) {
+      setPretrainError(error instanceof Error ? error.message : 'Pre-training failed');
+    } finally {
+      setPretraining(false);
     }
   };
 
@@ -1869,6 +2124,46 @@ export function AgentManagementDashboard() {
             </div>
           </div>
 
+          {bestGenome && (
+            <div style={{ ...panelStyle, padding: '1rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem', color: '#0f172a' }}>Best Genome Ever</h3>
+                <span style={{ padding: '0.25rem 0.6rem', borderRadius: '999px', backgroundColor: '#f0fdf4', color: '#15803d', fontSize: '0.8rem', fontWeight: 700 }}>
+                  Fitness {bestGenome.fitnessScore.toFixed(1)}
+                </span>
+              </div>
+              <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem' }}>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '0.65rem' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Agent</div>
+                  <div style={{ marginTop: '0.3rem', color: '#0f172a', fontWeight: 700, fontSize: '0.88rem' }}>{bestGenome.agentId.slice(0, 12)}</div>
+                </div>
+                <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.75rem', padding: '0.65rem' }}>
+                  <div style={{ color: '#64748b', fontSize: '0.74rem', textTransform: 'uppercase', letterSpacing: '0.07em' }}>Generation</div>
+                  <div style={{ marginTop: '0.3rem', color: '#0f172a', fontWeight: 700, fontSize: '0.88rem' }}>{bestGenome.generation}</div>
+                </div>
+              </div>
+              <pre
+                style={{
+                  marginTop: '0.85rem',
+                  padding: '0.75rem',
+                  borderRadius: '0.75rem',
+                  backgroundColor: '#0f172a',
+                  color: '#e2e8f0',
+                  overflowX: 'auto',
+                  fontSize: '0.78rem',
+                  lineHeight: 1.5,
+                  maxHeight: '12rem',
+                  overflowY: 'auto',
+                }}
+              >
+                {JSON.stringify(bestGenome.genome ?? {}, null, 2)}
+              </pre>
+              <div style={{ marginTop: '0.6rem', color: '#64748b', fontSize: '0.8rem' }}>
+                Tournament {bestGenome.tournamentId.slice(0, 12)} · {formatDate(bestGenome.foundAt)}
+              </div>
+            </div>
+          )}
+
           <GenerationTrendsPanel agents={agents} />
 
           <EvolutionTournamentHistoryPanel
@@ -1937,6 +2232,21 @@ export function AgentManagementDashboard() {
                     }}
                   >
                     {breedingPoolIds.includes(selectedAgent.id) ? 'Remove From Breeding Pool' : 'Mark Ready To Evolve'}
+                  </button>
+                  <button
+                    onClick={openPretrain}
+                    style={{
+                      alignSelf: 'start',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '0.85rem',
+                      border: '1px solid #a5b4fc',
+                      backgroundColor: '#eef2ff',
+                      color: '#4338ca',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    Pre-Train
                   </button>
                   <button
                     onClick={openCustomization}
@@ -2078,6 +2388,23 @@ export function AgentManagementDashboard() {
           retiring={retiring}
           onCancel={() => setRetireConfirmOpen(false)}
           onConfirm={retireSelectedAgent}
+        />
+      )}
+
+      {pretrainOpen && selectedAgent && (
+        <PretrainModal
+          agent={selectedAgent}
+          pretraining={pretraining}
+          result={pretrainResult}
+          error={pretrainError}
+          episodes={pretrainEpisodes}
+          steps={pretrainSteps}
+          regimes={pretrainRegimes}
+          onClose={() => setPretrainOpen(false)}
+          onEpisodesChange={setPretrainEpisodes}
+          onStepsChange={setPretrainSteps}
+          onRegimesChange={setPretrainRegimes}
+          onRun={runPretrain}
         />
       )}
     </section>

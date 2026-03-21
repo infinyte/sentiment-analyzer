@@ -384,6 +384,136 @@ export function createEvolutionaryRouter(db: Database.Database): Router {
     }
   });
 
+  // ── GET /api/marl/evolution/history ───────────────────────────────────────
+  /**
+   * All evolutionary tournament generations with per-generation stats.
+   * Useful for plotting improvement curves across tournaments.
+   *
+   * Example:
+   *   curl http://localhost:3000/api/marl/evolution/history
+   */
+  router.get('/api/marl/evolution/history', (_req, res) => {
+    try {
+      const tournaments = orchestrator.listTournaments();
+      const generations = tournaments.flatMap(t =>
+        t.generations.map(g => ({
+          tournamentId:  t.tournamentId,
+          name:          t.name,
+          generation:    g.generation,
+          topFitness:    g.topFitness,
+          avgFitness:    g.avgFitness,
+          topAgentId:    g.topAgentId,
+          populationSize: g.population.length,
+          survivorCount:  g.survivors.length,
+          offspringCount: g.offspring.length,
+          retiredCount:   g.retired.length,
+          completedAt:    g.completedAt,
+        })),
+      );
+      res.json({
+        totalTournaments: tournaments.length,
+        totalGenerations: generations.length,
+        generations,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── GET /api/marl/evolution/best-genome ───────────────────────────────────
+  /**
+   * Return the genome of the agent with the highest fitness ever recorded
+   * across all evolutionary tournaments.
+   *
+   * Example:
+   *   curl http://localhost:3000/api/marl/evolution/best-genome
+   */
+  router.get('/api/marl/evolution/best-genome', (_req, res) => {
+    try {
+      const tournaments = orchestrator.listTournaments();
+      if (tournaments.length === 0) {
+        res.status(404).json({ error: 'No evolutionary tournaments found' });
+        return;
+      }
+
+      // Find the generation entry with the highest topFitness across all tournaments.
+      let bestFitness  = -Infinity;
+      let bestAgentId  = '';
+      let bestTournamentId = '';
+      let bestGeneration   = 0;
+      let bestAt           = '';
+
+      for (const t of tournaments) {
+        for (const g of t.generations) {
+          if (g.topFitness > bestFitness) {
+            bestFitness      = g.topFitness;
+            bestAgentId      = g.topAgentId;
+            bestTournamentId = t.tournamentId;
+            bestGeneration   = g.generation;
+            bestAt           = g.completedAt;
+          }
+        }
+      }
+
+      if (!bestAgentId) {
+        res.status(404).json({ error: 'No fitness data found in tournament history' });
+        return;
+      }
+
+      const genome = genomes.loadGenome(bestAgentId);
+      res.json({
+        agentId:      bestAgentId,
+        fitnessScore: bestFitness,
+        tournamentId: bestTournamentId,
+        generation:   bestGeneration,
+        foundAt:      bestAt,
+        genome,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── GET /api/marl/evolution/population ────────────────────────────────────
+  /**
+   * Return the current population of the most recently started tournament.
+   *
+   * Example:
+   *   curl http://localhost:3000/api/marl/evolution/population
+   */
+  router.get('/api/marl/evolution/population', (_req, res) => {
+    try {
+      const tournaments = orchestrator.listTournaments();
+      if (tournaments.length === 0) {
+        res.json({ population: [], message: 'No evolutionary tournaments found' });
+        return;
+      }
+
+      // Most recent tournament is first in the list.
+      const latest     = tournaments[0]!;
+      const agentIds   = latest.currentPopulation;
+      const latestGen  = latest.generations[latest.generations.length - 1];
+
+      const members = agentIds.map(agentId => {
+        const genome  = genomes.loadGenome(agentId);
+        // Find this agent's fitness from the latest generation summary.
+        const fitness = latestGen?.topAgentId === agentId ? latestGen.topFitness : null;
+        return { agentId, genome, fitnessScore: fitness };
+      });
+
+      res.json({
+        tournamentId:    latest.tournamentId,
+        name:            latest.name,
+        status:          latest.status,
+        currentGeneration: latest.currentGeneration,
+        populationSize:  agentIds.length,
+        population:      members,
+      });
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
   // ── GET /api/agents/:id/genealogy ─────────────────────────────────────────
 
   router.get('/api/agents/:id/genealogy', (req, res) => {

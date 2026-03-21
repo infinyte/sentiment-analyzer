@@ -14,6 +14,7 @@
  * Provider selection (SANDBOX / LIVE modes):
  *   TRADING_PROVIDER=crypto-com  → uses CryptoComExchange (default)
  *   TRADING_PROVIDER=binance-us  → uses BinanceUSExchange
+ *   TRADING_PROVIDER=coinbase    → uses CoinbaseExchange (Advanced Trade API v3)
  */
 
 import type { AccountMode } from './exchange-adapter.js';
@@ -24,13 +25,15 @@ import { BinanceUSExchange } from './binance-us-exchange.js';
 import { PaperExchange }     from './paper-exchange.js';
 import { CryptoComClient }   from './crypto-com-client.js';
 import { CryptoComExchange } from './crypto-com-exchange.js';
+import { CoinbaseClient }    from './coinbase-client.js';
+import { CoinbaseExchange }  from './coinbase-exchange.js';
 import type { ExchangeInterface } from './exchange-interface.js';
 
 /** Low-level adapter providers (for ExchangeRegistry / real-trading routes). */
 export type ExchangeProvider = 'COINBASE' | 'BINANCE';
 
 /** Higher-level provider selector read from TRADING_PROVIDER env var. */
-export type TradingProvider = 'binance-us' | 'crypto-com';
+export type TradingProvider = 'binance-us' | 'crypto-com' | 'coinbase';
 
 export interface ExchangeAdapterConfig {
   provider:    ExchangeProvider;
@@ -89,7 +92,10 @@ export function getTradingConfig(): TradingConfig {
     : TradingMode.PAPER;
 
   const rawProvider = (process.env.TRADING_PROVIDER ?? 'crypto-com').toLowerCase();
-  const provider: TradingProvider = rawProvider === 'binance-us' ? 'binance-us' : 'crypto-com';
+  const provider: TradingProvider =
+    rawProvider === 'binance-us' ? 'binance-us' :
+    rawProvider === 'coinbase'   ? 'coinbase'   :
+    'crypto-com';
 
   return {
     mode,
@@ -133,6 +139,31 @@ export class ExchangeFactory {
         const baseUrl = process.env.CRYPTO_COM_LIVE_URL ?? 'https://api.crypto.com/exchange/v1';
         const client  = new CryptoComClient({ apiKey, apiSecret, baseUrl, sandbox: false });
         return new CryptoComExchange(client, { defaultPair: pair });
+      }
+    }
+
+    // ── Coinbase Advanced Trade ──────────────────────────────────────────────
+    if (provider === 'coinbase') {
+      const apiKey    = process.env.COINBASE_API_KEY;
+      const apiSecret = process.env.COINBASE_API_SECRET;
+      const product   = process.env.COINBASE_TRADING_PAIR ?? 'BTC-USD';
+
+      if (!apiKey || !apiSecret) {
+        throw new Error(
+          'COINBASE_API_KEY and COINBASE_API_SECRET must be set for coinbase mode.',
+        );
+      }
+
+      if (config.mode === TradingMode.SANDBOX) {
+        const baseUrl = 'https://api-sandbox.coinbase.com/api/v3/brokerage';
+        const client  = new CoinbaseClient({ apiKey, apiSecret, baseUrl, sandbox: true });
+        return new CoinbaseExchange(client, { defaultProduct: product });
+      }
+
+      if (config.mode === TradingMode.LIVE) {
+        const baseUrl = 'https://api.coinbase.com/api/v3/brokerage';
+        const client  = new CoinbaseClient({ apiKey, apiSecret, baseUrl, sandbox: false });
+        return new CoinbaseExchange(client, { defaultProduct: product });
       }
     }
 

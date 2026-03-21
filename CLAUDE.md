@@ -74,10 +74,14 @@ backend/src/services/
 │   ├── crypto-com-client.ts          # Crypto.com REST v2 HTTP client (HMAC-SHA256 auth)
 │   ├── crypto-com-exchange.ts        # ExchangeInterface adapter for Crypto.com
 │   ├── binance-us-exchange.ts        # ExchangeInterface adapter for Binance.US
+│   ├── coinbase-client.ts            # Coinbase Advanced Trade API v3 HTTP client (CB-ACCESS-KEY scheme)
+│   ├── coinbase-exchange.ts          # ExchangeInterface adapter for Coinbase Advanced Trade
 │   ├── trading-service.ts            # Safety guards: kill switch, max positions, position size, $1 min
 │   ├── risk-manager.ts               # Kill switch + daily-loss + order-size guard (MARL layer)
 │   ├── exchange-registry.ts          # Process-lifetime adapter singleton
 │   └── adapters/                     # coinbase-adapter.ts, binance-adapter.ts
+├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
+├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
 └── backtesting-engine.ts
 ```
@@ -89,7 +93,7 @@ backend/src/services/
 | MARL real trading | `routes/marl-real-trading.ts` | `/api/marl/broker/*` |
 | Social media | `routes/social-media.ts` | `/api/social-media/*` |
 | Agent stats | `routes/agent-stats.ts` (factory) | `/api/agents/*` |
-| Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` |
+| Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
@@ -102,7 +106,7 @@ backend/src/services/
 - Evolutionary tables: `agent_registry`, `agent_statistics`, `agent_competitions`, `evolutionary_tournaments`
 
 ### Exchange / Trading
-- Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us` to switch)
+- Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us` or `TRADING_PROVIDER=coinbase` to switch)
 - PAPER mode always uses `PaperExchange` (in-memory, no real orders) regardless of provider
 - `TradingService` wraps any `ExchangeInterface` with 4 safety guards: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
 - SELL orders bypass the kill switch; only BUY orders are blocked when the loss threshold is hit
@@ -116,8 +120,16 @@ backend/src/services/
 - UI styling is mostly inline styles inside focused components; extend the existing pattern rather than introducing a new design system for isolated changes
 - ChartJS via `react-chartjs-2` for price/equity charts
 
+### Agent Pre-Training
+- `PreTrainer` (`services/pre-trainer.ts`) + `SyntheticMarketGenerator` (`services/synthetic-market-generator.ts`) provide offline training before live competitions
+- `POST /api/marl/agents/:agentId/pretrain` body: `{ episodes, stepsPerEpisode, riskProfile, regimes }`; returns convergence curve
+- Pre-training is additive: calling it multiple times continues from the prior persisted state
+- The synthetic generator supports 5 regimes: BULL_TREND, BEAR_TREND, SIDEWAYS, VOLATILE_CRASH, VOLATILE_PUMP
+- Pre-trained state is stored via the same `agent_learning_states` SQLite table used by live competitions
+
 ### Evolution Docs
 - `docs/EVOLUTIONARY_SYSTEM_OVERVIEW.md` — maintainer overview of lifecycle, routes, tables, UI data flow, and remaining gaps
+- `docs/MARL/` — detailed MARL architecture, game theory analysis, and integration guide
 
 ## Test Patterns
 
@@ -156,8 +168,10 @@ Current high-value frontend coverage includes:
 - `API_SECRET_KEY` — Auth for `POST /api/refresh-sentiment`
 
 ### Key Optional
-- `BROKER_MASTER_KEY` — AES-256-GCM key; required for PAPER/LIVE broker modes
-- `TRADING_PROVIDER` — `crypto-com` (default) or `binance-us`; selects exchange for SANDBOX/LIVE mode
+- `BROKER_MASTER_KEY` — AES-256-GCM key; required for SANDBOX/LIVE broker modes
+- `TRADING_PROVIDER` — `crypto-com` (default), `binance-us`, or `coinbase`; selects exchange for SANDBOX/LIVE mode
+- `COINBASE_API_KEY` / `COINBASE_API_SECRET` — Coinbase Advanced Trade credentials (required when `TRADING_PROVIDER=coinbase`)
+- `COINBASE_TRADING_PAIR` — default Coinbase product ID, e.g. `BTC-USD` (default)
 - `FINBERT_API_URL` / `HUGGINGFACE_API_TOKEN` — remote FinBERT scoring
 - `TWITTER_BEARER_TOKEN`, `REDDIT_CLIENT_ID/SECRET`, `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `YOUTUBE_API_KEY` — social scrapers
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` — Azure telemetry

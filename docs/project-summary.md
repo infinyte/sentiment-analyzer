@@ -1,7 +1,7 @@
 SENTIMENT ANALYZER
 CURRENT PROJECT SUMMARY AND REMAINING WORK
 
-Date: March 19, 2026
+Date: March 21, 2026 (updated)
 Repository: infinyte/sentiment-analyzer
 Branch: main
 
@@ -66,8 +66,9 @@ Key backend files:
 - backend/src/__tests__/services/marl-competition-engine.test.ts
 
 4. Exchange and trading layer
-- Crypto.com REST v2 adapter
+- Crypto.com REST v2 adapter (default provider)
 - Binance.US adapter
+- Coinbase Advanced Trade API v3 adapter
 - Paper trading exchange for safe simulation
 - TradingService safety guards for max loss, max positions, position size, and minimum notional
 
@@ -75,9 +76,21 @@ Key backend files:
 - backend/src/services/exchange/crypto-com-client.ts
 - backend/src/services/exchange/crypto-com-exchange.ts
 - backend/src/services/exchange/binance-us-exchange.ts
+- backend/src/services/exchange/coinbase-client.ts
+- backend/src/services/exchange/coinbase-exchange.ts
 - backend/src/services/exchange/paper-exchange.ts
 - backend/src/services/exchange/exchange-factory.ts
 - backend/src/services/exchange/trading-service.ts
+
+7. Agent pre-training
+- SyntheticMarketGenerator: 5 configurable market regimes for synthetic price series
+- PreTrainer: runs agents through offline episodes, builds Q-table and policy weights
+- POST /api/marl/agents/:agentId/pretrain endpoint with convergence curve output
+- Pre-training is additive across calls (loads prior state, continues training)
+
+Key backend files:
+- backend/src/services/synthetic-market-generator.ts
+- backend/src/services/pre-trainer.ts
 
 5. Evolutionary backend
 - Genome persistence
@@ -146,7 +159,7 @@ REMAINING-WORK CHECKLIST
 Priority 1: Correct the docs
 - [x] Replace the stale project summary with a current-state document
 - [ ] Update README.md to reflect the current agent-management and evolutionary surface area clearly
-- [ ] Update CLAUDE.md so contributor guidance matches current architecture and frontend capabilities
+- [x] Update CLAUDE.md so contributor guidance matches current architecture and frontend capabilities
 - [ ] Add or expand a dedicated evolution-focused doc describing tournament lifecycle, stats tables, and UI/backend responsibilities
 
 Priority 2: Finish the evolutionary UI layer

@@ -647,6 +647,20 @@ describe('Agent management dashboard', () => {
         return Promise.resolve({ ok: true, json: async () => ({ agentId: 'agent-child-1', genealogy: [] }) });
       }
 
+      if (url.includes('/api/marl/evolution/best-genome')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            agentId: 'agent-1',
+            fitnessScore: 92.5,
+            tournamentId: 'evo-2',
+            generation: 2,
+            foundAt: '2026-03-18T10:15:00.000Z',
+            genome: { position_size: 0.12, sentiment_weight: 0.28 },
+          }),
+        });
+      }
+
       return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
     });
 

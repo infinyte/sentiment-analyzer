@@ -23,7 +23,9 @@
       "Bash(xargs -I {} basename {} .ts)",
       "Bash(git:*)",
       "Bash(find /c/work/sentiment-analyzer/frontend/src -name useSocial* -o -name social*)",
-      "Bash(find /c/work/sentiment-analyzer -type f \\\\\\(-name *.md -o -name *.txt -o -name *.rst \\\\\\) ! -path */node_modules/* ! -path */.git/*)"
+      "Bash(find /c/work/sentiment-analyzer -type f \\\\\\(-name *.md -o -name *.txt -o -name *.rst \\\\\\) ! -path */node_modules/* ! -path */.git/*)",
+      "Bash(node)",
+      "Bash(node:*)"
     ]
   }
 }

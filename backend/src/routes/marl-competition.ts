@@ -16,10 +16,14 @@ import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } from '../services/marl-competition-engine.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
+import { PreTrainer } from '../services/pre-trainer.js';
+import type { RiskProfile } from '../services/pre-trainer.js';
+import type { MarketRegime } from '../services/synthetic-market-generator.js';
 import logger from '../logger.js';
 
-const router = Router();
-const engine = new MarlCompetitionEngine();
+const router     = Router();
+const engine     = new MarlCompetitionEngine();
+const preTrainer = new PreTrainer();
 
 type RateLimitEntry = {
   count: number;
@@ -865,6 +869,204 @@ router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
       scope: 'Keyed by "{agentId}::{riskProfile}" — agents accumulate knowledge across separate competitions',
       reset: 'DELETE /api/marl/agents/:agentId/learning to clear one or all risk-profile snapshots',
     },
+  });
+});
+
+// ─── POST /api/marl/agents/:agentId/pretrain ─────────────────────────────────
+/**
+ * Pre-train an agent on synthetic market data.
+ *
+ * Body (all optional):
+ *   { episodes?: number, stepsPerEpisode?: number, riskProfile?: string, regimes?: string[] }
+ *
+ * Example:
+ *   curl -X POST http://localhost:3000/api/marl/agents/bull/pretrain \
+ *     -H "Content-Type: application/json" \
+ *     -d '{"episodes":50,"riskProfile":"AGGRESSIVE"}'
+ */
+router.post('/api/marl/agents/:agentId/pretrain', competitionWriteRateLimit, async (req, res) => {
+  const { agentId } = req.params;
+  if (!agentId) return res.status(400).json({ error: 'agentId is required' });
+
+  const body = req.body as {
+    episodes?:        unknown;
+    stepsPerEpisode?: unknown;
+    riskProfile?:     unknown;
+    regimes?:         unknown;
+  };
+
+  const VALID_PROFILES: RiskProfile[] = ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'];
+  const rawProfile = typeof body.riskProfile === 'string'
+    ? body.riskProfile.toUpperCase()
+    : 'AGGRESSIVE';
+
+  if (!VALID_PROFILES.includes(rawProfile as RiskProfile)) {
+    return res.status(400).json({
+      error: `riskProfile must be one of: ${VALID_PROFILES.join(', ')}`,
+    });
+  }
+  const riskProfile = rawProfile as RiskProfile;
+
+  const episodes = typeof body.episodes === 'number' && body.episodes > 0
+    ? Math.min(Math.floor(body.episodes), 500)
+    : 100;
+
+  const stepsPerEpisode = typeof body.stepsPerEpisode === 'number' && body.stepsPerEpisode > 0
+    ? Math.min(Math.floor(body.stepsPerEpisode), 2000)
+    : 1000;
+
+  const VALID_REGIMES: MarketRegime[] = [
+    'BULL_TREND', 'BEAR_TREND', 'SIDEWAYS', 'VOLATILE_CRASH', 'VOLATILE_PUMP',
+  ];
+  let regimes: MarketRegime[] | undefined;
+  if (Array.isArray(body.regimes) && body.regimes.length > 0) {
+    const filtered = (body.regimes as unknown[])
+      .filter((r): r is MarketRegime => typeof r === 'string' && VALID_REGIMES.includes(r as MarketRegime));
+    if (filtered.length > 0) regimes = filtered;
+  }
+
+  logger.info('marl pre-train request', { agentId, riskProfile, episodes, stepsPerEpisode });
+
+  try {
+    const result = await preTrainer.pretrain(agentId, riskProfile, engine, {
+      episodes,
+      stepsPerEpisode,
+      regimes,
+    });
+    return res.json(result);
+  } catch (err) {
+    logger.error('pre-train failed', { agentId, error: String(err) });
+    return res.status(500).json({ error: 'Pre-training failed', detail: String(err) });
+  }
+});
+
+// ─── POST /api/marl/agents/:agentId/algorithm ────────────────────────────────
+/**
+ * Query or declare the learning algorithm for an agent.
+ *
+ * The engine currently supports Q_TABLE (Q-learning with a policy-gradient
+ * network) and POLICY_GRADIENT (network-only).  DQN via TensorFlow is not
+ * bundled; attempting to set it returns a 501.
+ *
+ * Body: { algorithm: 'Q_TABLE' | 'POLICY_GRADIENT' | 'DQN' }
+ *
+ * Example:
+ *   curl -X POST http://localhost:3000/api/marl/agents/bull/algorithm \
+ *     -H "Content-Type: application/json" \
+ *     -d '{"algorithm":"Q_TABLE"}'
+ */
+router.post('/api/marl/agents/:agentId/algorithm', competitionReadRateLimit, (req, res) => {
+  const { agentId } = req.params;
+  const body = req.body as { algorithm?: unknown };
+  const algo  = typeof body.algorithm === 'string' ? body.algorithm.toUpperCase() : '';
+
+  const supported = ['Q_TABLE', 'POLICY_GRADIENT'];
+  if (algo === 'DQN') {
+    return res.status(501).json({
+      error: 'DQN via TensorFlow is not bundled. Use Q_TABLE or POLICY_GRADIENT.',
+      supported,
+    });
+  }
+  if (!supported.includes(algo)) {
+    return res.status(400).json({
+      error: `algorithm must be one of: ${supported.join(', ')}`,
+      supported,
+    });
+  }
+
+  return res.json({
+    agentId,
+    algorithm: algo,
+    note: 'Agent uses a combined Q-table + policy-gradient network by default. ' +
+          'The algorithm selection is informational — all agents in this build use the hybrid.',
+    policyNetwork: {
+      architecture: 'Feedforward 50→128(ReLU)→64(ReLU)→5(Softmax)',
+      updateRule:   'Advantage-weighted gradient-free nudge',
+      replayBuffer: 'Up to 1 000 experiences',
+    },
+  });
+});
+
+// ─── GET /api/marl/competition/:competitionId/equity-curves ──────────────────
+/**
+ * Return time-series equity for all agents in a completed competition.
+ *
+ * Example:
+ *   curl http://localhost:3000/api/marl/competition/comp_123/equity-curves
+ */
+router.get('/api/marl/competition/:competitionId/equity-curves', competitionReadRateLimit, (req, res) => {
+  const { competitionId } = req.params;
+  const record = engine.getRecord(competitionId);
+
+  if (!record) return res.status(404).json({ error: 'Competition not found' });
+
+  if (record.status === 'RUNNING') {
+    return res.status(202).json({
+      competitionId,
+      status: 'RUNNING',
+      message: 'Equity curves are available after the competition completes.',
+      progress: record.progress,
+    });
+  }
+
+  if (record.status === 'FAILED') {
+    return res.status(500).json({ error: 'Competition failed', competitionId });
+  }
+
+  const curves = record.result?.equityEvolution ?? [];
+  return res.json({
+    competitionId,
+    status: 'COMPLETED',
+    snapshotCount: curves.length,
+    equityCurves:  curves.map(snap => ({
+      timestamp:    snap.timestamp,
+      agentEquities: snap.agentEquities,
+    })),
+  });
+});
+
+// ─── GET /api/marl/competition/:competitionId/trade-log ──────────────────────
+/**
+ * Return per-agent trade summary for a completed competition.
+ * Note: the engine stores aggregate trade stats, not individual orders.
+ * For a per-order audit trail use GET /api/marl/broker/orders/:competitionId.
+ *
+ * Example:
+ *   curl http://localhost:3000/api/marl/competition/comp_123/trade-log
+ */
+router.get('/api/marl/competition/:competitionId/trade-log', competitionReadRateLimit, (req, res) => {
+  const { competitionId } = req.params;
+  const record = engine.getRecord(competitionId);
+
+  if (!record) return res.status(404).json({ error: 'Competition not found' });
+
+  if (record.status === 'RUNNING') {
+    return res.status(202).json({
+      competitionId,
+      status:  'RUNNING',
+      message: 'Trade log is available after the competition completes.',
+    });
+  }
+
+  if (record.status === 'FAILED') {
+    return res.status(500).json({ error: 'Competition failed', competitionId });
+  }
+
+  const rankings = record.result?.finalRankings ?? [];
+  return res.json({
+    competitionId,
+    status: 'COMPLETED',
+    note: 'Per-agent aggregate trade summary. For per-order details use GET /api/marl/broker/orders/:competitionId.',
+    tradeLog: rankings.map(r => ({
+      agentId:        r.agentId,
+      rank:           r.rank,
+      tradesExecuted: r.tradesExecuted,
+      winRate:        parseFloat((r.winRate * 100).toFixed(1)),
+      totalReturn:    parseFloat((r.totalReturn * 100).toFixed(2)),
+      finalCapital:   parseFloat(r.finalCapital.toFixed(2)),
+      sharpeRatio:    parseFloat(r.sharpeRatio.toFixed(3)),
+      maxDrawdown:    parseFloat((r.maxDrawdown * 100).toFixed(2)),
+    })),
   });
 });
 

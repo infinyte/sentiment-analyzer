@@ -179,6 +179,10 @@ export function MarlCompetitionViewer() {
   const [brokerCredentialId, setBrokerCredentialId] = useState('');
   const [availableCredentials, setAvailableCredentials] = useState<Array<{ id: string; label: string; provider: string; mode: string }>>([]);
 
+  // ── Trade log state ───────────────────────────────────────────────────────
+  const [tradeLog, setTradeLog] = useState<Array<{ agentId: string; tradesExecuted: number; finalCapital: number; totalReturn: number; winRate: number }> | null>(null);
+  const [tradeLogOpen, setTradeLogOpen] = useState(false);
+
   // ── Compare form state ────────────────────────────────────────────────────
   const [showCompare, setShowCompare] = useState(false);
   const [cmpA, setCmpA] = useState<CompetitionAgentSpec>({ id: 'aggressive', riskProfile: 'AGGRESSIVE', initialCapital: 10000 });
@@ -187,6 +191,18 @@ export function MarlCompetitionViewer() {
   const [cmpDuration, setCmpDuration] = useState(100);
 
   useEffect(() => { loadList(); }, [loadList]);
+
+  useEffect(() => {
+    if (!results?.competitionId) {
+      setTradeLog(null);
+      setTradeLogOpen(false);
+      return;
+    }
+    fetch(`/api/marl/competition/${results.competitionId}/trade-log`)
+      .then(r => r.ok ? r.json() as Promise<{ agentTradeSummaries: Array<{ agentId: string; tradesExecuted: number; finalCapital: number; totalReturn: number; winRate: number }> }> : Promise.reject())
+      .then(data => setTradeLog(data.agentTradeSummaries ?? null))
+      .catch(() => setTradeLog(null));
+  }, [results?.competitionId]);
 
   // Fetch available broker credentials when switching to PAPER or LIVE mode
   useEffect(() => {
@@ -823,6 +839,49 @@ export function MarlCompetitionViewer() {
                   },
                 }}
               />
+            </div>
+          )}
+
+          {/* Trade summary */}
+          {tradeLog && (
+            <div style={card}>
+              <button
+                onClick={() => setTradeLogOpen(open => !open)}
+                style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+              >
+                <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '700', color: '#374151' }}>
+                  Trade Summary ({tradeLog.length} agents)
+                </h4>
+                <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>{tradeLogOpen ? '▲ hide' : '▼ show'}</span>
+              </button>
+
+              {tradeLogOpen && (
+                <div style={{ marginTop: '0.75rem', overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+                    <thead>
+                      <tr style={{ backgroundColor: '#f9fafb' }}>
+                        {['Agent', 'Trades', 'Final Capital', 'Return', 'Win Rate'].map(h => (
+                          <th key={h} style={{ padding: '0.4rem 0.75rem', fontWeight: '600', textAlign: 'left', borderBottom: '1px solid #e5e7eb', color: '#374151' }}>{h}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {tradeLog.map(entry => (
+                        <tr key={entry.agentId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                          <td style={{ padding: '0.4rem 0.75rem', fontWeight: '500' }}>{entry.agentId}</td>
+                          <td style={{ padding: '0.4rem 0.75rem' }}>{entry.tradesExecuted}</td>
+                          <td style={{ padding: '0.4rem 0.75rem' }}>${entry.finalCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
+                          <td style={{ padding: '0.4rem 0.75rem', color: entry.totalReturn >= 0 ? '#16a34a' : '#dc2626', fontWeight: '600' }}>{pct(entry.totalReturn)}</td>
+                          <td style={{ padding: '0.4rem 0.75rem' }}>{fmt(entry.winRate, 1)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <p style={{ margin: '0.5rem 0 0', color: '#9ca3af', fontSize: '0.75rem' }}>
+                    Aggregate per agent. For per-order detail use <code>/api/marl/broker/orders/:id</code>.
+                  </p>
+                </div>
+              )}
             </div>
           )}
         </div>

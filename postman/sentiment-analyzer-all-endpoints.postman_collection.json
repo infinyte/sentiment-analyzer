@@ -918,6 +918,381 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "POST /api/marl/agents/:agentId/pretrain",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has convergenceCurve\", () => pm.expect(body.convergenceCurve).to.be.an(\"array\"));",
+                  "  pm.test(\"Has avgReturn\", () => pm.expect(body.avgReturn).to.be.a(\"number\"));",
+                  "  pm.test(\"Status completed\", () => pm.expect(body.status).to.eql(\"completed\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"episodes\": 50,\n  \"stepsPerEpisode\": 500,\n  \"riskProfile\": \"AGGRESSIVE\",\n  \"regimes\": [\n    \"BULL_TREND\",\n    \"BEAR_TREND\",\n    \"SIDEWAYS\",\n    \"VOLATILE_CRASH\",\n    \"VOLATILE_PUMP\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/pretrain",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "{{agent_id}}",
+                "pretrain"
+              ]
+            },
+            "description": "Pre-train an agent through synthetic market episodes before live competition. Persists Q-table and policy weights into the agent_learning_states table; calling multiple times is additive. Supported regimes: BULL_TREND, BEAR_TREND, SIDEWAYS, VOLATILE_CRASH, VOLATILE_PUMP. Max: episodes=500, stepsPerEpisode=2000."
+          },
+          "response": [
+            {
+              "name": "Example - 50 episodes completed",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/pretrain",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "agents",
+                    "{{agent_id}}",
+                    "pretrain"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"episodes\": 50,\n  \"stepsPerEpisode\": 500,\n  \"riskProfile\": \"AGGRESSIVE\",\n  \"regimes\": [\n    \"BULL_TREND\",\n    \"BEAR_TREND\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"agentId\": \"agent-agg-1\",\n  \"riskProfile\": \"AGGRESSIVE\",\n  \"episodes\": 50,\n  \"avgReturn\": 0.0142,\n  \"bestReturn\": 0.0831,\n  \"convergenceCurve\": [\n    -0.0031,\n    0.0012,\n    0.0058,\n    0.0099,\n    0.0142\n  ],\n  \"finalEpsilon\": 0.1827,\n  \"status\": \"completed\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/agents/:agentId/algorithm",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 501\", () => {",
+                  "  pm.expect([200, 501]).to.include(pm.response.code);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"algorithm\": \"Q_TABLE\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/algorithm",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "{{agent_id}}",
+                "algorithm"
+              ]
+            },
+            "description": "Set the learning algorithm for an agent. Values: Q_TABLE (default tabular Q-learning), POLICY_GRADIENT (policy network + experience replay). DQN returns 501 because TensorFlow is not bundled."
+          },
+          "response": [
+            {
+              "name": "Q_TABLE - 200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/algorithm",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "agents",
+                    "{{agent_id}}",
+                    "algorithm"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"algorithm\": \"Q_TABLE\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"agentId\": \"agent-agg-1\",\n  \"algorithm\": \"Q_TABLE\",\n  \"description\": \"Tabular Q-learning with epsilon-greedy exploration\",\n  \"note\": \"Algorithm selection affects how the agent updates its Q-values during competitions. The learning state persists across runs.\"\n}"
+            },
+            {
+              "name": "DQN - 501 Not Implemented",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/agents/{{agent_id}}/algorithm",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "agents",
+                    "{{agent_id}}",
+                    "algorithm"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"algorithm\": \"DQN\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Not Implemented",
+              "code": 501,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"error\": \"DQN variant requires TensorFlow which is not bundled. Use Q_TABLE or POLICY_GRADIENT.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:competitionId/equity-curves",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 202\", () => {",
+                  "  pm.expect([200, 202]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has competitionId\", () => pm.expect(body.competitionId).to.be.a(\"string\"));",
+                  "  pm.test(\"Has equityEvolution\", () => pm.expect(body.equityEvolution).to.be.an(\"array\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/equity-curves",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "{{competition_id}}",
+                "equity-curves"
+              ]
+            },
+            "description": "Retrieve per-step equity evolution data for each agent in a competition. Returns 202 Accepted with a note if the competition is still RUNNING. Use the equityEvolution array to render equity curves on the frontend."
+          },
+          "response": [
+            {
+              "name": "Example - completed competition",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/equity-curves",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "competition",
+                    "{{competition_id}}",
+                    "equity-curves"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"competitionId\": \"comp-abc123\",\n  \"status\": \"COMPLETED\",\n  \"equityEvolution\": [\n    {\n      \"step\": 1,\n      \"agentEquities\": [\n        {\n          \"agentId\": \"bull\",\n          \"equity\": 10000\n        },\n        {\n          \"agentId\": \"bear\",\n          \"equity\": 10000\n        }\n      ]\n    },\n    {\n      \"step\": 2,\n      \"agentEquities\": [\n        {\n          \"agentId\": \"bull\",\n          \"equity\": 10045\n        },\n        {\n          \"agentId\": \"bear\",\n          \"equity\": 9980\n        }\n      ]\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:competitionId/trade-log",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has agentTradeSummaries\", () => pm.expect(body.agentTradeSummaries).to.be.an(\"array\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/trade-log",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "{{competition_id}}",
+                "trade-log"
+              ]
+            },
+            "description": "Retrieve aggregate trade statistics per agent for a completed competition (total trades, final capital, return %, win rate). Derived from finalRankings. For per-order detail use GET /api/marl/broker/orders/:id."
+          },
+          "response": [
+            {
+              "name": "Example - aggregate trade summary",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/competition/{{competition_id}}/trade-log",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "competition",
+                    "{{competition_id}}",
+                    "trade-log"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"competitionId\": \"comp-abc123\",\n  \"status\": \"COMPLETED\",\n  \"note\": \"Aggregate per-agent summary. For per-order detail use /api/marl/broker/orders/:id.\",\n  \"agentTradeSummaries\": [\n    {\n      \"agentId\": \"bull\",\n      \"tradesExecuted\": 47,\n      \"finalCapital\": 10831.4,\n      \"totalReturn\": 8.31,\n      \"winRate\": 57.4\n    },\n    {\n      \"agentId\": \"bear\",\n      \"tradesExecuted\": 21,\n      \"finalCapital\": 10142.8,\n      \"totalReturn\": 1.43,\n      \"winRate\": 61.9\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     },
@@ -1109,7 +1484,7 @@
                 }
               ],
               "cookie": [],
-              "body": "{\n    \"error\": \"Unauthorized \u2014 x-api-key required\"\n}"
+              "body": "{\n    \"error\": \"Unauthorized — x-api-key required\"\n}"
             }
           ]
         },
@@ -1323,7 +1698,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"\ud83d\ude80\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
+              "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"🚀\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/agents/{{agent_id}}/customize",
@@ -1351,7 +1726,7 @@
                 ],
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"\ud83d\ude80\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
+                  "raw": "{\n  \"custom_name\": \"Signal Hunter\",\n  \"emoji\": \"🚀\",\n  \"color\": \"#00FF00\",\n  \"biography\": \"Adaptive momentum specialist\",\n  \"nickname\": \"Hunter\"\n}"
                 },
                 "url": {
                   "raw": "{{base_url}}/api/agents/{{agent_id}}/customize",
@@ -1519,6 +1894,372 @@
             }
           },
           "response": []
+        },
+        {
+          "name": "POST /api/agents/:id/retire",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/retire",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "{{agent_id}}",
+                "retire"
+              ]
+            },
+            "description": "Retire an active agent. Removes it from the active pool so it no longer appears in future breeding or competition selections. Status changes from ACTIVE to RETIRED."
+          },
+          "response": [
+            {
+              "name": "Example response",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/agents/{{agent_id}}/retire",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "agents",
+                    "{{agent_id}}",
+                    "retire"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"retired\": true,\n  \"agent\": {\n    \"id\": \"agent-agg-1\",\n    \"status\": \"RETIRED\"\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST /api/evolutionary/breed",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 201\", () => pm.response.to.have.status(201));",
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has children\", () => pm.expect(body.children).to.be.an(\"array\").with.lengthOf.at.least(1));",
+                  "  if (body.children[0]?.id) pm.collectionVariables.set(\"agent_id\", body.children[0].id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentIds\": [\n    \"{{agent_id}}\"\n  ],\n  \"childCount\": 2,\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"mutationSeverity\": \"MEDIUM\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/breed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "breed"
+              ]
+            },
+            "description": "Breed child agents from two or more parent agents using genetic crossover and mutation. crossoverStrategy: UNIFORM or BLENDED. mutationSeverity: LIGHT, MEDIUM, or HEAVY. The first child ID is stored in the agent_id collection variable."
+          },
+          "response": [
+            {
+              "name": "Example - 2 children created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/evolutionary/breed",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "evolutionary",
+                    "breed"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"parentIds\": [\n    \"agent-agg-1\",\n    \"agent-con-1\"\n  ],\n  \"childCount\": 2,\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"mutationSeverity\": \"MEDIUM\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"parentIds\": [\n    \"agent-agg-1\",\n    \"agent-con-1\"\n  ],\n  \"childCount\": 2,\n  \"crossoverStrategy\": \"UNIFORM\",\n  \"mutationSeverity\": \"MEDIUM\",\n  \"children\": [\n    {\n      \"id\": \"agent-child-001\",\n      \"agentType\": \"ML_BASED\",\n      \"riskProfile\": \"AGGRESSIVE\",\n      \"generationNumber\": 4,\n      \"status\": \"ACTIVE\",\n      \"parent1Id\": \"agent-agg-1\",\n      \"parent2Id\": \"agent-con-1\",\n      \"mutationsApplied\": [\n        \"position_size\"\n      ],\n      \"mutationSeverity\": \"MEDIUM\"\n    },\n    {\n      \"id\": \"agent-child-002\",\n      \"agentType\": \"ML_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"generationNumber\": 4,\n      \"status\": \"ACTIVE\",\n      \"parent1Id\": \"agent-agg-1\",\n      \"parent2Id\": \"agent-con-1\",\n      \"mutationsApplied\": [\n        \"sentiment_weight\"\n      ],\n      \"mutationSeverity\": \"MEDIUM\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/history",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200\", () => pm.response.to.have.status(200));",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has totalTournaments\", () => pm.expect(body.totalTournaments).to.be.a(\"number\"));",
+                  "  pm.test(\"Has generations array\", () => pm.expect(body.generations).to.be.an(\"array\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "history"
+              ]
+            },
+            "description": "Retrieve a flattened list of all evolutionary generations across all tournaments. Each entry includes fitness metrics, population sizes, survivor/offspring/retired counts, and the top agent. Useful for cross-tournament trend analysis."
+          },
+          "response": [
+            {
+              "name": "Example response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/evolution/history",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "evolution",
+                    "history"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"totalTournaments\": 3,\n  \"totalGenerations\": 8,\n  \"generations\": [\n    {\n      \"tournamentId\": \"evo-1\",\n      \"name\": \"March Warmup\",\n      \"generation\": 1,\n      \"topFitness\": 82.1,\n      \"avgFitness\": 64.3,\n      \"topAgentId\": \"agent-agg-1\",\n      \"populationSize\": 4,\n      \"survivorCount\": 2,\n      \"offspringCount\": 2,\n      \"retiredCount\": 2,\n      \"completedAt\": \"2026-03-17T10:15:00.000Z\"\n    },\n    {\n      \"tournamentId\": \"evo-2\",\n      \"name\": \"March Finals\",\n      \"generation\": 2,\n      \"topFitness\": 92.5,\n      \"avgFitness\": 71,\n      \"topAgentId\": \"agent-child-001\",\n      \"populationSize\": 4,\n      \"survivorCount\": 2,\n      \"offspringCount\": 2,\n      \"retiredCount\": 2,\n      \"completedAt\": \"2026-03-18T10:15:00.000Z\"\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/best-genome",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has agentId\", () => pm.expect(body.agentId).to.be.a(\"string\"));",
+                  "  pm.test(\"Has fitnessScore\", () => pm.expect(body.fitnessScore).to.be.a(\"number\"));",
+                  "  pm.test(\"Has genome\", () => pm.expect(body.genome).to.be.an(\"object\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/best-genome",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "best-genome"
+              ]
+            },
+            "description": "Retrieve the genome of the highest-fitness agent ever seen across all evolutionary tournaments. Returns agentId, fitnessScore, tournamentId, generation, foundAt timestamp, and the full genome object. Returns 404 if no evolutionary tournaments have completed yet."
+          },
+          "response": [
+            {
+              "name": "Example response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/evolution/best-genome",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "evolution",
+                    "best-genome"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"agentId\": \"agent-child-001\",\n  \"fitnessScore\": 92.5,\n  \"tournamentId\": \"evo-2\",\n  \"generation\": 2,\n  \"foundAt\": \"2026-03-18T10:15:00.000Z\",\n  \"genome\": {\n    \"position_size\": 0.14,\n    \"sentiment_weight\": 0.31,\n    \"exploration_decay\": 0.987,\n    \"sharpe_bias\": 0.62,\n    \"risk_tolerance\": 0.45\n  }\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/population",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status 200 or 404\", () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.test(\"Has population array\", () => pm.expect(body.population).to.be.an(\"array\"));",
+                  "  pm.test(\"Has tournamentId\", () => pm.expect(body.tournamentId).to.be.a(\"string\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/population",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "population"
+              ]
+            },
+            "description": "Retrieve the current population of the most recent evolutionary tournament. Each agent entry includes their genome and fitness score from the latest generation summary. Returns 404 if no evolutionary tournaments have run yet."
+          },
+          "response": [
+            {
+              "name": "Example response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/marl/evolution/population",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "marl",
+                    "evolution",
+                    "population"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"tournamentId\": \"evo-2\",\n  \"name\": \"March Finals\",\n  \"status\": \"COMPLETED\",\n  \"currentGeneration\": 2,\n  \"populationSize\": 4,\n  \"population\": [\n    {\n      \"agentId\": \"agent-agg-1\",\n      \"fitnessScore\": 92.5,\n      \"genome\": {\n        \"position_size\": 0.14,\n        \"sentiment_weight\": 0.31\n      }\n    },\n    {\n      \"agentId\": \"agent-child-001\",\n      \"fitnessScore\": 88.3,\n      \"genome\": {\n        \"position_size\": 0.12,\n        \"sentiment_weight\": 0.28\n      }\n    },\n    {\n      \"agentId\": \"agent-child-002\",\n      \"fitnessScore\": 76.1,\n      \"genome\": {\n        \"position_size\": 0.09,\n        \"sentiment_weight\": 0.22\n      }\n    },\n    {\n      \"agentId\": \"agent-con-1\",\n      \"fitnessScore\": 71.4,\n      \"genome\": {\n        \"position_size\": 0.07,\n        \"sentiment_weight\": 0.19\n      }\n    }\n  ]\n}"
+            }
+          ]
         }
       ]
     },
