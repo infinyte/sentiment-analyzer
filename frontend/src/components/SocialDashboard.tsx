@@ -14,12 +14,12 @@ const C = {
   neutral: '#f59e0b',
   bear:    '#ef4444',
   blue:    '#3b82f6',
-  gray:    '#6b7280',
-  bg:      '#f9fafb',
-  card:    '#ffffff',
-  border:  '#e5e7eb',
-  text:    '#111827',
-  muted:   '#4b5563',
+  gray:    'var(--text-muted)',
+  bg:      'var(--bg)',
+  card:    'var(--surface)',
+  border:  'var(--border)',
+  text:    'var(--text)',
+  muted:   'var(--text-subtle)',
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -353,10 +353,10 @@ export function SocialDashboard() {
               value={coinFilter}
               onChange={e => setCoinFilter(e.target.value.toUpperCase())}
               placeholder="Filter coin (BTC…)"
-              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem', width: '130px' }}
+              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem', width: '130px', backgroundColor: C.card, color: C.text }}
             />
             <select value={sourceFilter} onChange={e => setSourceFilter(e.target.value as SocialSource | '')}
-              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem' }}>
+              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem', backgroundColor: C.card, color: C.text }}>
               <option value="">All sources</option>
               <option value="twitter">X/Twitter</option>
               <option value="reddit">Reddit</option>
@@ -367,7 +367,7 @@ export function SocialDashboard() {
               <option value="tiktok">TikTok</option>
             </select>
             <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
-              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem' }}>
+              style={{ padding: '0.35rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem', backgroundColor: C.card, color: C.text }}>
               <option value="score">Top Score</option>
               <option value="recency">Most Recent</option>
               <option value="engagement">Most Engaged</option>

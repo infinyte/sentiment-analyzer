@@ -16,7 +16,7 @@ type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const card: CSSProperties = {
-  backgroundColor: '#fff',
+  backgroundColor: 'var(--surface)',
   borderRadius: '0.75rem',
   padding: '1.25rem',
   boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
@@ -27,7 +27,7 @@ const label: CSSProperties = {
   display: 'block',
   fontSize: '0.75rem',
   fontWeight: '600',
-  color: '#6b7280',
+  color: 'var(--text-muted)',
   marginBottom: '0.25rem',
   textTransform: 'uppercase',
   letterSpacing: '0.05em',
@@ -36,10 +36,12 @@ const label: CSSProperties = {
 const input: CSSProperties = {
   width: '100%',
   padding: '0.5rem 0.75rem',
-  border: '1px solid #d1d5db',
+  border: '1px solid var(--border-input)',
   borderRadius: '0.375rem',
   fontSize: '0.875rem',
   boxSizing: 'border-box',
+  backgroundColor: 'var(--surface)',
+  color: 'var(--text)',
 };
 
 const btn = (color = '#2563eb'): CSSProperties => ({
@@ -711,8 +713,8 @@ export function MarlCompetitionViewer() {
               <div
                 key={sel.agentId}
                 style={{
-                  background: '#fff',
-                  border: '1px solid #e5e7eb',
+                  background: 'var(--surface)',
+                  border: '1px solid var(--border)',
                   borderRadius: '0.5rem',
                   padding: '0.6rem 0.9rem',
                   minWidth: '160px',

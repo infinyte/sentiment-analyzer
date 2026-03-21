@@ -246,8 +246,8 @@ const EMOJI_OPTIONS = ['🟢', '🔴', '🟡', '💎', '🔥', '⚡', '🌟', '�
 const COLOR_OPTIONS = ['#00FF00', '#FF0000', '#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#800080', '#0099FF'];
 
 const panelStyle: React.CSSProperties = {
-  backgroundColor: '#ffffff',
-  border: '1px solid #e5e7eb',
+  backgroundColor: 'var(--surface)',
+  border: '1px solid var(--border)',
   borderRadius: '1rem',
   boxShadow: '0 16px 40px rgba(15, 23, 42, 0.06)',
 };

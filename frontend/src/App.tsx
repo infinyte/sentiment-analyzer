@@ -279,9 +279,9 @@ function CoinCard({ coin, onSelect, sortBy, sortRank }: CoinCardProps) {
       onClick={() => onSelect(coin.symbol)}
       style={{
         padding: '1rem',
-        border: '1px solid #e5e7eb',
+        border: '1px solid var(--border)',
         borderRadius: '0.5rem',
-        backgroundColor: '#ffffff',
+        backgroundColor: 'var(--surface)',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
         borderTop: `3px solid ${accent}`,
@@ -331,7 +331,7 @@ function CoinCard({ coin, onSelect, sortBy, sortRank }: CoinCardProps) {
           </span>
           {/* Market cap rank (always shown for reference) */}
           {sortBy !== 'market_cap' && (
-            <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+            <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
               cap #{coin.market_rank}
             </span>
           )}
@@ -381,7 +381,7 @@ function CoinCard({ coin, onSelect, sortBy, sortRank }: CoinCardProps) {
           gap: '0.5rem',
           marginBottom: '0.75rem',
           fontSize: '0.75rem',
-          color: '#6b7280',
+          color: 'var(--text-muted)',
         }}
       >
         <div>
@@ -409,7 +409,7 @@ function CoinCard({ coin, onSelect, sortBy, sortRank }: CoinCardProps) {
           margin: '0',
           fontSize: '0.875rem',
           lineHeight: '1.4',
-          color: '#1f2937',
+          color: 'var(--text-strong)',
           display: '-webkit-box',
           WebkitLineClamp: 3,
           WebkitBoxOrient: 'vertical',
@@ -446,6 +446,7 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
           color: '#991b1b',
           borderRadius: '0.5rem',
           marginBottom: '1rem',
+          border: '1px solid #fca5a5',
         }}
       >
         Error: {error}
@@ -478,7 +479,7 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
         <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem', fontWeight: '700' }}>
           Sentiment Analyzer
         </h1>
-        <p style={{ margin: '0', color: '#6b7280' }}>
+        <p style={{ margin: '0', color: 'var(--text-muted)' }}>
           Real-time cryptocurrency sentiment analysis
         </p>
       </div>
@@ -492,7 +493,7 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
             padding: '0.5rem 0.75rem',
             borderRadius: '0.375rem',
             border: `2px solid ${SORT_ACCENT[sortBy]}`,
-            backgroundColor: '#ffffff',
+            backgroundColor: 'var(--surface)',
             cursor: 'pointer',
             fontSize: '0.875rem',
             fontWeight: '600',
@@ -505,7 +506,7 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
           <option value="price_change">Sort: Price Change 24h</option>
         </select>
 
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+        <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.875rem', color: 'var(--text-muted)' }}>
           {loading ? (
             <>
               <span
@@ -599,7 +600,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          backgroundColor: '#ffffff',
+          backgroundColor: 'var(--surface)',
           borderRadius: '0.5rem',
           maxWidth: '900px',
           maxHeight: '90vh',
@@ -615,13 +616,14 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
             position: 'absolute',
             top: '1rem',
             right: '1rem',
-            backgroundColor: '#f3f4f6',
-            border: 'none',
+            backgroundColor: 'var(--surface-2)',
+            border: '1px solid var(--border)',
             borderRadius: '0.25rem',
             padding: '0.5rem',
             cursor: 'pointer',
             fontSize: '1.5rem',
             zIndex: 1001,
+            color: 'var(--text)',
           }}
         >
           ✕
@@ -663,15 +665,15 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
               </div>
 
               {/* Sentiment Summary */}
-              <div style={{ backgroundColor: '#f3f4f6', padding: '1rem', borderRadius: '0.375rem', marginBottom: '1.5rem' }}>
-                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '600' }}>
+              <div style={{ backgroundColor: 'var(--surface-2)', padding: '1rem', borderRadius: '0.375rem', marginBottom: '1.5rem' }}>
+                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '600', color: 'var(--text)' }}>
                   Sentiment Analysis
                 </h3>
-                <p style={{ margin: '0', color: '#1f2937' }}>
+                <p style={{ margin: '0', color: 'var(--text-strong)' }}>
                   {detail.sentiment_summary}
                 </p>
                 {detail.sentiment_today?.short_term_outlook && (
-                  <p style={{ margin: '0.75rem 0 0 0', color: '#4b5563', fontSize: '0.875rem' }}>
+                  <p style={{ margin: '0.75rem 0 0 0', color: 'var(--text-subtle)', fontSize: '0.875rem' }}>
                     {detail.sentiment_today.short_term_outlook}
                   </p>
                 )}
@@ -684,8 +686,8 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                 const total = Object.values(fa).reduce((s, v) => s + Math.abs(v), 0);
                 const entries = Object.entries(fa);
                 return (
-                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', borderLeft: '4px solid #8b5cf6' }}>
-                    <h3 style={{ margin: '0 0 0.875rem 0', fontSize: '1rem', fontWeight: '700' }}>Score Attribution</h3>
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-3)', borderRadius: '0.5rem', borderLeft: '4px solid #8b5cf6' }}>
+                    <h3 style={{ margin: '0 0 0.875rem 0', fontSize: '1rem', fontWeight: '700', color: 'var(--text)' }}>Score Attribution</h3>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.625rem' }}>
                       {entries.map(([key, value]) => {
                         const barPct = total > 0 ? Math.abs(value) / total * 100 : 0;
@@ -693,13 +695,13 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                         const label = key.charAt(0).toUpperCase() + key.slice(1);
                         return (
                           <div key={key}>
-                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.2rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-subtle)', marginBottom: '0.2rem' }}>
                               <span>{label}</span>
                               <span style={{ fontWeight: '700', color: value >= 0 ? '#3b82f6' : '#ef4444' }}>
                                 {(value >= 0 ? '+' : '') + value.toFixed(3)}
                               </span>
                             </div>
-                            <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                               <div style={{ height: '100%', width: `${Math.min(barPct, 100)}%`, backgroundColor: barColor, borderRadius: '3px' }} />
                             </div>
                           </div>
@@ -721,27 +723,27 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                   { label: 'Recency', value: ts.signals.recency },
                 ];
                 return (
-                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: '#f9fafb', borderRadius: '0.5rem', borderLeft: '4px solid #3b82f6' }}>
+                  <div style={{ marginBottom: '1.5rem', padding: '1rem', backgroundColor: 'var(--surface-3)', borderRadius: '0.5rem', borderLeft: '4px solid #3b82f6' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.875rem', flexWrap: 'wrap' }}>
-                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700' }}>Multi-Source Trending Signal</h3>
+                      <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700', color: 'var(--text)' }}>Multi-Source Trending Signal</h3>
                       <span style={{ padding: '0.2rem 0.6rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: '700', backgroundColor: `${dirColor}18`, color: dirColor }}>
                         {ts.sentiment}
                       </span>
-                      <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>{ts.composite_score.toFixed(0)}/100 composite</span>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{ts.composite_score.toFixed(0)}/100 composite</span>
                     </div>
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.625rem', marginBottom: '0.875rem' }}>
                       {signals.map(({ label, value }) => (
                         <div key={label}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: '#4b5563', marginBottom: '0.2rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.75rem', color: 'var(--text-subtle)', marginBottom: '0.2rem' }}>
                             <span>{label}</span><span style={{ fontWeight: '700' }}>{value.toFixed(0)}</span>
                           </div>
-                          <div style={{ height: '6px', backgroundColor: '#e5e7eb', borderRadius: '3px', overflow: 'hidden' }}>
+                          <div style={{ height: '6px', backgroundColor: 'var(--border)', borderRadius: '3px', overflow: 'hidden' }}>
                             <div style={{ height: '100%', width: `${Math.min(value, 100)}%`, backgroundColor: '#3b82f6', borderRadius: '3px' }} />
                           </div>
                         </div>
                       ))}
                     </div>
-                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: '#6b7280' }}>
+                    <div style={{ display: 'flex', gap: '1.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       <span>&#128293; {ts.velocity.toFixed(1)} mentions/hr</span>
                       <span>{ts.mention_count} mentions (24h)</span>
                       <span>{ts.unique_sources} sources</span>
@@ -763,35 +765,35 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                       marginBottom: '1rem',
                     }}
                   >
-                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: '0.875rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--surface)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Trending Score
                       </div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: 'var(--text)' }}>
                         {(detail.sentiment_today?.collection_stats?.trending_score ?? detail.trending_score).toFixed(1)}
                       </div>
                     </div>
-                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: '0.875rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--surface)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Items Collected
                       </div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: 'var(--text)' }}>
                         {detail.sentiment_today?.collection_stats?.total_items ?? detail.scored_items.length}
                       </div>
                     </div>
-                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: '0.875rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--surface)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Sources Active
                       </div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: 'var(--text)' }}>
                         {detail.sentiment_today?.collection_stats?.source_count ?? detail.sentiment_today?.source_breakdown?.length ?? 0}
                       </div>
                     </div>
-                    <div style={{ padding: '0.875rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', backgroundColor: '#ffffff' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    <div style={{ padding: '0.875rem', border: '1px solid var(--border)', borderRadius: '0.5rem', backgroundColor: 'var(--surface)' }}>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                         Avg Recency
                       </div>
-                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: '#111827' }}>
+                      <div style={{ marginTop: '0.35rem', fontSize: '1.25rem', fontWeight: '700', color: 'var(--text)' }}>
                         {((detail.sentiment_today?.collection_stats?.average_recency_score ?? 0) * 100).toFixed(0)}%
                       </div>
                     </div>
@@ -808,16 +810,16 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                             key={source.source}
                             style={{
                               padding: '0.875rem',
-                              border: '1px solid #e5e7eb',
+                              border: '1px solid var(--border)',
                               borderRadius: '0.5rem',
-                              backgroundColor: '#ffffff',
+                              backgroundColor: 'var(--surface)',
                             }}
                           >
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                              <span style={{ fontWeight: '700', color: '#111827' }}>{source.source_label}</span>
+                              <span style={{ fontWeight: '700', color: 'var(--text)' }}>{source.source_label}</span>
                               <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>{source.item_count} items</span>
                             </div>
-                            <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.8125rem', color: '#4b5563' }}>
+                            <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.8125rem', color: 'var(--text-subtle)' }}>
                               <span>Sentiment: <strong style={{ color: scoreColor(source.average_sentiment_score) }}>{source.average_sentiment_score.toFixed(2)}</strong></span>
                               <span>Weighted: <strong style={{ color: scoreColor(source.average_weighted_score) }}>{source.average_weighted_score.toFixed(2)}</strong></span>
                               <span>Frequency: <strong>{source.weighted_frequency.toFixed(2)}</strong></span>
@@ -841,9 +843,9 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                         key={item.id}
                         style={{
                           padding: '1rem',
-                          border: '1px solid #e5e7eb',
+                          border: '1px solid var(--border)',
                           borderRadius: '0.5rem',
-                          backgroundColor: '#ffffff',
+                          backgroundColor: 'var(--surface)',
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'start', marginBottom: '0.5rem' }}>
@@ -856,7 +858,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                                 {item.published_at ? new Date(item.published_at).toLocaleString() : 'Timestamp unavailable'}
                               </span>
                             </div>
-                            <div style={{ fontWeight: '700', color: '#111827', marginBottom: '0.35rem' }}>
+                            <div style={{ fontWeight: '700', color: 'var(--text)', marginBottom: '0.35rem' }}>
                               {item.url ? (
                                 <a href={item.url} target="_blank" rel="noreferrer" style={{ color: '#111827', textDecoration: 'none' }}>
                                   {item.title}
@@ -864,7 +866,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                               ) : item.title}
                             </div>
                             {item.body && (
-                              <div style={{ fontSize: '0.875rem', color: '#4b5563', lineHeight: 1.5 }}>
+                              <div style={{ fontSize: '0.875rem', color: 'var(--text-subtle)', lineHeight: 1.5 }}>
                                 {item.body}
                               </div>
                             )}
@@ -887,7 +889,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                             </div>
                           </div>
                         </div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(110px, 1fr))', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                           <span>Sentiment: <strong style={{ color: scoreColor(item.sentiment_score) }}>{item.sentiment_score.toFixed(2)}</strong></span>
                           <span>Relevance: <strong>{item.relevance_score.toFixed(2)}</strong></span>
                           <span>Recency: <strong>{item.recency_score.toFixed(2)}</strong></span>
@@ -944,9 +946,10 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                         key={i}
                         style={{
                           padding: '0.75rem',
-                          border: '1px solid #e5e7eb',
+                          border: '1px solid var(--border)',
                           borderRadius: '0.375rem',
                           fontSize: '0.875rem',
+                          color: 'var(--text)',
                         }}
                       >
                         {headline}
@@ -954,7 +957,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
                     ))}
                   </div>
                 ) : (
-                  <div style={{ padding: '1rem', border: '1px solid #e5e7eb', borderRadius: '0.375rem', color: '#6b7280', fontSize: '0.875rem' }}>
+                  <div style={{ padding: '1rem', border: '1px solid var(--border)', borderRadius: '0.375rem', color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                     No headlines available. Configure NEWSAPI_API_KEY or Reddit credentials to enable news collection.
                   </div>
                 )}
@@ -983,6 +986,12 @@ export default function App() {
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
+  const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
 
   const handleTickerSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -1012,7 +1021,7 @@ export default function App() {
     border: 'none',
     borderBottom: activeView === view ? '2px solid #3b82f6' : '2px solid transparent',
     backgroundColor: 'transparent',
-    color: activeView === view ? '#3b82f6' : '#6b7280',
+    color: activeView === view ? '#3b82f6' : 'var(--text-muted)',
     fontWeight: activeView === view ? '600' : '400',
     fontSize: '0.875rem',
     cursor: 'pointer',
@@ -1020,24 +1029,50 @@ export default function App() {
   });
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f9fafb', fontFamily: 'system-ui, sans-serif' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', fontFamily: 'system-ui, sans-serif', color: 'var(--text)' }}>
       <style>{`
         * { box-sizing: border-box; }
         body { margin: 0; padding: 0; }
+        :root {
+          --bg: #f9fafb;
+          --surface: #ffffff;
+          --surface-2: #f3f4f6;
+          --surface-3: #f9fafb;
+          --border: #e5e7eb;
+          --border-input: #d1d5db;
+          --text: #111827;
+          --text-strong: #1f2937;
+          --text-muted: #6b7280;
+          --text-subtle: #4b5563;
+        }
+        [data-theme="dark"] {
+          --bg: #0f172a;
+          --surface: #1e293b;
+          --surface-2: #334155;
+          --surface-3: #1e293b;
+          --border: #334155;
+          --border-input: #475569;
+          --text: #f1f5f9;
+          --text-strong: #e2e8f0;
+          --text-muted: #94a3b8;
+          --text-subtle: #cbd5e1;
+        }
+        select option { background-color: var(--surface); color: var(--text); }
+        input, select { color-scheme: light dark; }
       `}</style>
 
       {/* Nav */}
       <nav
         style={{
-          backgroundColor: '#ffffff',
-          borderBottom: '1px solid #e5e7eb',
+          backgroundColor: 'var(--surface)',
+          borderBottom: '1px solid var(--border)',
           padding: '0 1.5rem',
           display: 'flex',
           alignItems: 'center',
           gap: '1.5rem',
         }}
       >
-        <h1 style={{ margin: '0', fontSize: '1.25rem', fontWeight: '700', padding: '1rem 0' }}>
+        <h1 style={{ margin: '0', fontSize: '1.25rem', fontWeight: '700', padding: '1rem 0', color: 'var(--text)' }}>
           Sentiment Analyzer
         </h1>
         <div style={{ display: 'flex', gap: '0.25rem', height: '100%' }}>
@@ -1058,7 +1093,7 @@ export default function App() {
           onSubmit={handleTickerSearch}
           style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.75rem 0' }}
         >
-          <label htmlFor="coin-ticker-search" style={{ fontSize: '0.8125rem', color: '#4b5563', fontWeight: 600 }}>
+          <label htmlFor="coin-ticker-search" style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)', fontWeight: 600 }}>
             Search ticker
           </label>
           <input
@@ -1075,7 +1110,9 @@ export default function App() {
               width: '10rem',
               padding: '0.5rem 0.75rem',
               borderRadius: '0.375rem',
-              border: '1px solid #d1d5db',
+              border: '1px solid var(--border-input)',
+              backgroundColor: 'var(--surface)',
+              color: 'var(--text)',
               fontSize: '0.875rem',
             }}
           />
@@ -1101,6 +1138,25 @@ export default function App() {
             </span>
           )}
         </form>
+
+        {/* Dark mode toggle */}
+        <button
+          onClick={() => setIsDark(d => !d)}
+          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            background: 'none',
+            border: '1px solid var(--border)',
+            borderRadius: '0.375rem',
+            cursor: 'pointer',
+            fontSize: '1.1rem',
+            padding: '0.35rem 0.55rem',
+            color: 'var(--text-muted)',
+            lineHeight: 1,
+            flexShrink: 0,
+          }}
+        >
+          {isDark ? '☀️' : '🌙'}
+        </button>
       </nav>
 
       {/* Main */}
