@@ -252,12 +252,28 @@ function PercentChange({ value, label }: PercentChangeProps) {
 // COIN CARD COMPONENT
 // ============================================================================
 
+type SortBy = 'market_cap' | 'volatility' | 'sentiment' | 'price_change';
+
 interface CoinCardProps {
   coin: Coin;
   onSelect: (symbol: string) => void;
+  sortBy: SortBy;
+  sortRank: number;
 }
 
-function CoinCard({ coin, onSelect }: CoinCardProps) {
+const SORT_ACCENT: Record<SortBy, string> = {
+  market_cap:   '#6366f1',
+  volatility:   '#f59e0b',
+  sentiment:    '#10b981',
+  price_change: '#3b82f6',
+};
+
+function CoinCard({ coin, onSelect, sortBy, sortRank }: CoinCardProps) {
+  const accent = SORT_ACCENT[sortBy];
+  const isVolatilitySort  = sortBy === 'volatility';
+  const isSentimentSort   = sortBy === 'sentiment';
+  const isPriceChangeSort = sortBy === 'price_change';
+
   return (
     <div
       onClick={() => onSelect(coin.symbol)}
@@ -268,6 +284,7 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
         backgroundColor: '#ffffff',
         cursor: 'pointer',
         transition: 'all 0.2s ease',
+        borderTop: `3px solid ${accent}`,
       }}
       onMouseEnter={e => {
         const el = e.currentTarget as HTMLElement;
@@ -297,16 +314,28 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
             {coin.symbol}
           </span>
         </div>
-        <span
-          style={{
-            fontSize: '0.75rem',
-            backgroundColor: '#f3f4f6',
-            padding: '0.25rem 0.5rem',
-            borderRadius: '0.25rem',
-          }}
-        >
-          #{coin.market_rank}
-        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.2rem' }}>
+          {/* Sort position badge */}
+          <span
+            style={{
+              fontSize: '0.7rem',
+              fontWeight: '700',
+              backgroundColor: accent,
+              color: '#fff',
+              padding: '0.15rem 0.45rem',
+              borderRadius: '0.25rem',
+              letterSpacing: '0.02em',
+            }}
+          >
+            #{sortRank}
+          </span>
+          {/* Market cap rank (always shown for reference) */}
+          {sortBy !== 'market_cap' && (
+            <span style={{ fontSize: '0.65rem', color: '#9ca3af' }}>
+              cap #{coin.market_rank}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Price */}
@@ -315,13 +344,22 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
           ${coin.price_usd.toLocaleString('en-US', { maximumFractionDigits: 2 })}
         </div>
         <div style={{ display: 'flex', gap: '1rem', fontSize: '0.875rem' }}>
-          <PercentChange value={coin.price_change_24h_percent} label="24h" />
+          <span style={{ color: isPriceChangeSort ? accent : undefined, fontWeight: isPriceChangeSort ? '700' : undefined }}>
+            <PercentChange value={coin.price_change_24h_percent} label="24h" />
+          </span>
           <PercentChange value={coin.price_change_7d_percent} label="7d" />
         </div>
       </div>
 
       {/* Sentiment */}
-      <div style={{ marginBottom: '0.75rem' }}>
+      <div
+        style={{
+          marginBottom: '0.75rem',
+          outline: isSentimentSort ? `2px solid ${accent}` : undefined,
+          borderRadius: isSentimentSort ? '0.375rem' : undefined,
+          padding: isSentimentSort ? '0.25rem' : undefined,
+        }}
+      >
         <SentimentBadge
           score={coin.sentiment_score}
           confidence={coin.sentiment_confidence}
@@ -350,9 +388,18 @@ function CoinCard({ coin, onSelect }: CoinCardProps) {
           <span style={{ fontWeight: '600' }}>Vol 24h:</span>
           <div>${(coin.volume_24h_usd / 1e9).toFixed(2)}B</div>
         </div>
-        <div>
-          <span style={{ fontWeight: '600' }}>Volatility:</span>
-          <div>{coin.volatility_24h.toFixed(2)}%</div>
+        <div
+          style={{
+            backgroundColor: isVolatilitySort ? `${accent}15` : undefined,
+            borderRadius: isVolatilitySort ? '0.25rem' : undefined,
+            padding: isVolatilitySort ? '0.1rem 0.25rem' : undefined,
+            outline: isVolatilitySort ? `1px solid ${accent}40` : undefined,
+          }}
+        >
+          <span style={{ fontWeight: '600', color: isVolatilitySort ? accent : undefined }}>Volatility:</span>
+          <div style={{ fontWeight: isVolatilitySort ? '700' : undefined, color: isVolatilitySort ? accent : undefined }}>
+            {coin.volatility_24h.toFixed(2)}%
+          </div>
         </div>
       </div>
 
@@ -388,7 +435,7 @@ interface DashboardProps {
 }
 
 function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: DashboardProps) {
-  const [sortBy, setSortBy] = useState('market_cap');
+  const [sortBy, setSortBy] = useState<SortBy>('market_cap');
 
   if (error) {
     return (
@@ -406,12 +453,23 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
     );
   }
 
-  const sentimentOrder = { BULL: 0, NEUTRAL: 1, BEAR: 2 };
-  const displayCoins = sortBy === 'volatility'
-    ? [...coins].sort((a, b) => b.volatility_24h - a.volatility_24h)
-    : sortBy === 'sentiment'
-    ? [...coins].sort((a, b) => sentimentOrder[a.sentiment_score] - sentimentOrder[b.sentiment_score] || b.sentiment_confidence - a.sentiment_confidence)
-    : coins;
+  const sentimentOrder: Record<'BULL' | 'NEUTRAL' | 'BEAR', number> = { BULL: 0, NEUTRAL: 1, BEAR: 2 };
+  const safeNum = (v: number | undefined | null) => (typeof v === 'number' && isFinite(v) ? v : 0);
+
+  const displayCoins = (() => {
+    const arr = [...coins];
+    if (sortBy === 'volatility')
+      return arr.sort((a, b) => safeNum(b.volatility_24h) - safeNum(a.volatility_24h));
+    if (sortBy === 'sentiment')
+      return arr.sort((a, b) => {
+        const d = sentimentOrder[a.sentiment_score] - sentimentOrder[b.sentiment_score];
+        return d !== 0 ? d : safeNum(b.sentiment_confidence) - safeNum(a.sentiment_confidence);
+      });
+    if (sortBy === 'price_change')
+      return arr.sort((a, b) => safeNum(b.price_change_24h_percent) - safeNum(a.price_change_24h_percent));
+    // market_cap: sort explicitly by market_rank ascending (rank 1 = largest cap)
+    return arr.sort((a, b) => safeNum(a.market_rank) - safeNum(b.market_rank));
+  })();
 
   return (
     <div style={{ padding: '1.5rem' }}>
@@ -429,19 +487,22 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', alignItems: 'center' }}>
         <select
           value={sortBy}
-          onChange={e => setSortBy(e.target.value)}
+          onChange={e => setSortBy(e.target.value as SortBy)}
           style={{
             padding: '0.5rem 0.75rem',
             borderRadius: '0.375rem',
-            border: '1px solid #d1d5db',
+            border: `2px solid ${SORT_ACCENT[sortBy]}`,
             backgroundColor: '#ffffff',
             cursor: 'pointer',
             fontSize: '0.875rem',
+            fontWeight: '600',
+            color: SORT_ACCENT[sortBy],
           }}
         >
-          <option value="market_cap">Market Cap</option>
-          <option value="volatility">Volatility</option>
-          <option value="sentiment">Sentiment</option>
+          <option value="market_cap">Sort: Market Cap</option>
+          <option value="volatility">Sort: Volatility</option>
+          <option value="sentiment">Sort: Sentiment</option>
+          <option value="price_change">Sort: Price Change 24h</option>
         </select>
 
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
@@ -481,8 +542,8 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
           gap: '1rem',
         }}
       >
-        {displayCoins.map(coin => (
-          <CoinCard key={coin.id} coin={coin} onSelect={onCoinSelect} />
+        {displayCoins.map((coin, index) => (
+          <CoinCard key={coin.id} coin={coin} onSelect={onCoinSelect} sortBy={sortBy} sortRank={index + 1} />
         ))}
       </div>
     </div>

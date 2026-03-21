@@ -1473,7 +1473,10 @@ export function AgentManagementDashboard() {
   useEffect(() => {
     const loadOverview = async () => {
       try {
-        setLoadingOverview(true);
+        // Only show the loading spinner on the very first fetch (no data yet).
+        // Background refreshes (refreshNonce ticks) update silently so the UI
+        // doesn't blank out every 5 seconds and cause visible flickering.
+        if (agents.length === 0) setLoadingOverview(true);
         setOverviewError(null);
 
         const [agentsResponse, leaderboardResponse, summaryResponse, bestGenomeResponse] = await Promise.all([
@@ -1528,7 +1531,9 @@ export function AgentManagementDashboard() {
 
     const loadDetail = async () => {
       try {
-        setLoadingDetail(true);
+        // Only show loading state when the agent selection has changed; background
+        // refreshes via refreshNonce should update silently without clearing the panel.
+        if (selectedAgent?.id !== selectedAgentId) setLoadingDetail(true);
         setDetailError(null);
 
         const [detailResponse, historyResponse, genomeResponse, genealogyResponse] = await Promise.all([
@@ -1584,7 +1589,9 @@ export function AgentManagementDashboard() {
 
     const loadTournament = async () => {
       try {
-        setLoadingTournamentDetail(true);
+        // Only show loading state when switching to a different tournament;
+        // background refreshes update silently.
+        if (selectedTournament?.tournamentId !== selectedTournamentId) setLoadingTournamentDetail(true);
         const response = await fetch(`/api/evolutionary/tournament/${selectedTournamentId}`);
         if (!response.ok) throw new Error(`Failed to load tournament: HTTP ${response.status}`);
         setSelectedTournament(await response.json() as TournamentDetailResponse);
