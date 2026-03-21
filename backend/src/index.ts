@@ -1,6 +1,10 @@
 // BACKEND SERVER - index.ts
 // Main Express application with API routes and scheduled jobs
 
+// reflect-metadata MUST be the first import so the Reflect polyfill is
+// installed before tsyringe (via container.ts) reads any class metadata.
+import 'reflect-metadata';
+import { container, TOKENS } from './container.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -72,19 +76,19 @@ app.use((req, res, next) => {
   next();
 });
 
-// Initialize services
-const coingecko = new CoinGeckoService();
-const contentSignals = new ContentSignalService();
-const sentiment = new SentimentService();
-const cache = new Cache();
-const sentimentCache = new Cache();
-const analyzer = new SentimentAnalyzerEngine();
-const backtestEngine = new BacktestingEngine();
-const socialScraper = new SocialScraperService();
-const trendingEngine = new TrendingTopicsEngine();
-const socialScraperManager = new SocialMediaScraperManager();
-const socialDiscoveryEngine = new TrendingTopicDiscoveryEngine();
-const trendCalculator = new MultiSourceTrendingScoreCalculator();
+// Initialize services via DI container
+const coingecko          = container.resolve<CoinGeckoService>(TOKENS.CoinGeckoService);
+const contentSignals     = container.resolve<ContentSignalService>(TOKENS.ContentSignalService);
+const sentiment          = container.resolve<SentimentService>(TOKENS.SentimentService);
+const cache              = container.resolve<Cache>(TOKENS.Cache);
+const sentimentCache     = container.resolve<Cache>(TOKENS.SentimentCache);
+const analyzer           = container.resolve<SentimentAnalyzerEngine>(TOKENS.SentimentAnalyzerEngine);
+const backtestEngine     = container.resolve<BacktestingEngine>(TOKENS.BacktestingEngine);
+const socialScraper      = container.resolve<SocialScraperService>(TOKENS.SocialScraperService);
+const trendingEngine     = container.resolve<TrendingTopicsEngine>(TOKENS.TrendingTopicsEngine);
+const socialScraperManager  = container.resolve<SocialMediaScraperManager>(TOKENS.SocialMediaScraperManager);
+const socialDiscoveryEngine = container.resolve<TrendingTopicDiscoveryEngine>(TOKENS.TrendingTopicDiscoveryEngine);
+const trendCalculator       = container.resolve<MultiSourceTrendingScoreCalculator>(TOKENS.MultiSourceTrendingScoreCalculator);
 
 // In-memory agent registry (cleared on restart)
 const configuredAgents: Map<string, AgentConfig> = new Map();
