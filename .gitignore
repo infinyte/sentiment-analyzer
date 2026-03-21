@@ -36,6 +36,11 @@ pids/
 .parcelcache
 .cache/
 
+# SQLite databases (never commit data files)
+*.db
+*.db-shm
+*.db-wal
+
 # TypeScript
 *.tsbuildinfo
 

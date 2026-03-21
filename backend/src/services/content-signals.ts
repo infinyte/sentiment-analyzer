@@ -203,7 +203,7 @@ export class ContentSignalService {
     ];
   }
 
-  async collect(topic: string, symbol: string, days = 7, targetCoin?: string): Promise<CollectedSignalResult> {
+  async collect(topic: string, symbol: string, days = 7, targetCoin = symbol): Promise<CollectedSignalResult> {
     const sourceItems = await Promise.all(this.adapters.map(adapter => adapter.collect(topic, symbol, days)));
     const normalized = sourceItems
       .flat()
@@ -225,19 +225,15 @@ export class ContentSignalService {
     };
   }
 
-  private scoreItem(item: NormalizedSourceItem, topic: string, symbol: string, targetCoin?: string): ScoredSentimentItem {
+  private scoreItem(item: NormalizedSourceItem, topic: string, symbol: string, targetCoin: string): ScoredSentimentItem {
     const combinedText = normalizeText(`${item.title} ${item.body}`.trim()).toLowerCase();
 
     // ── ABSA: extract context window around the target coin mention ────────────
-    let scoringText = combinedText;
-    let context_window_used = false;
-    if (targetCoin) {
-      const window = extractContextWindow(combinedText, targetCoin);
-      if (window) {
-        scoringText = window;
-        context_window_used = true;
-      }
-    }
+    // targetCoin defaults to symbol so this path is always attempted; falls back
+    // to full combinedText when the target token is not found in the article.
+    const window = extractContextWindow(combinedText, targetCoin);
+    const scoringText = window ?? combinedText;
+    const context_window_used = window !== null;
 
     // ── Sarcasm detection ──────────────────────────────────────────────────────
     const sarcasmResult = detectSarcasm(scoringText);
