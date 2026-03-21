@@ -282,7 +282,7 @@ export function SocialDashboard() {
           <StatCard label="Total Items" value={statsData.total_items.toLocaleString()} />
           <StatCard label="Items (24h)" value={statsData.items_24h.toLocaleString()} />
           <StatCard label="Trending Topics" value={statsData.trending_topics} />
-          <StatCard label="Active Sources" value={statsData.sources.filter(s => s.items_24h > 0).length} />
+          <StatCard label="Active Sources" value={statsData.sources.filter(s => s.total_items > 0).length} />
         </div>
       )}
 

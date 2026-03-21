@@ -382,13 +382,14 @@ export class SocialStorageService {
 
   incrementFetchCount(source: SocialSource, delta: number): void {
     this.requireDb().prepare(`
-      UPDATE source_metadata
-      SET items_fetched_today = items_fetched_today + ?,
-          last_fetch_timestamp = datetime('now'),
-          status = 'healthy',
-          error_count = 0
-      WHERE source = ?
-    `).run(delta, source);
+      INSERT INTO source_metadata (source, last_fetch_timestamp, items_fetched_today, error_count, status, next_retry)
+      VALUES (?, datetime('now'), ?, 0, 'healthy', null)
+      ON CONFLICT(source) DO UPDATE SET
+        items_fetched_today  = items_fetched_today + excluded.items_fetched_today,
+        last_fetch_timestamp = datetime('now'),
+        status               = 'healthy',
+        error_count          = 0
+    `).run(source, delta);
   }
 
   recordSourceError(source: SocialSource, nextRetrySeconds = 300): void {
@@ -441,18 +442,26 @@ export class SocialStorageService {
       `SELECT source, COUNT(*) AS cnt FROM social_media_items WHERE fetched_at >= datetime('now', '-24 hours') GROUP BY source`
     ).all() as Array<{ source: string; cnt: number }>;
 
-    const totalMap = new Map(perSourceTotal.map(r => [r.source, r.cnt]));
-    const h24Map   = new Map(perSource24h.map(r => [r.source, r.cnt]));
+    const totalMap    = new Map(perSourceTotal.map(r => [r.source, r.cnt]));
+    const h24Map      = new Map(perSource24h.map(r => [r.source, r.cnt]));
+    const metaMap     = new Map(rawSources.map(s => [s.source, s]));
 
-    const sources = rawSources.map(s => ({
-      source:            s.source,
-      total_items:       totalMap.get(s.source) ?? 0,
-      items_24h:         h24Map.get(s.source)   ?? 0,
-      fetch_count_today: s.items_fetched_today,
-      error_count_today: s.error_count,
-      last_fetched_at:   s.last_fetch_timestamp ?? undefined,
-      status:            s.status,
-    }));
+    // Union of all sources seen in items table + source_metadata so that
+    // sources with DB rows but missing metadata (or vice-versa) still appear.
+    const allSources  = new Set<SocialSource>([...totalMap.keys() as IterableIterator<SocialSource>, ...metaMap.keys()]);
+
+    const sources = Array.from(allSources).map(src => {
+      const meta = metaMap.get(src);
+      return {
+        source:            src as SocialSource,
+        total_items:       totalMap.get(src) ?? 0,
+        items_24h:         h24Map.get(src)   ?? 0,
+        fetch_count_today: meta?.items_fetched_today ?? 0,
+        error_count_today: meta?.error_count         ?? 0,
+        last_fetched_at:   meta?.last_fetch_timestamp ?? undefined,
+        status:            meta?.status ?? 'idle',
+      };
+    });
 
     return { total_items: total, items_24h: h24, trending_topics: topics, bot_filtered_24h: botFiltered, sources };
   }

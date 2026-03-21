@@ -179,6 +179,15 @@ export function MarlCompetitionViewer() {
   const [brokerCredentialId, setBrokerCredentialId] = useState('');
   const [availableCredentials, setAvailableCredentials] = useState<Array<{ id: string; label: string; provider: string; mode: string }>>([]);
 
+  // ── Add-credential modal state ────────────────────────────────────────────
+  const [credModalOpen, setCredModalOpen] = useState(false);
+  const [newCredLabel, setNewCredLabel] = useState('');
+  const [newCredApiKey, setNewCredApiKey] = useState('');
+  const [newCredApiSecret, setNewCredApiSecret] = useState('');
+  const [newCredAdminKey, setNewCredAdminKey] = useState('');
+  const [newCredSaving, setNewCredSaving] = useState(false);
+  const [newCredError, setNewCredError] = useState<string | null>(null);
+
   // ── Trade log state ───────────────────────────────────────────────────────
   const [tradeLog, setTradeLog] = useState<Array<{ agentId: string; tradesExecuted: number; finalCapital: number; totalReturn: number; winRate: number }> | null>(null);
   const [tradeLogOpen, setTradeLogOpen] = useState(false);
@@ -269,6 +278,49 @@ export function MarlCompetitionViewer() {
     const symbols = symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
     compareAgents(cmpA, cmpB, symbols, cmpRounds, cmpDuration);
   };
+
+  const handleSaveCredential = useCallback(async (e: FormEvent) => {
+    e.preventDefault();
+    setNewCredSaving(true);
+    setNewCredError(null);
+    try {
+      const res = await fetch('/api/marl/broker/credentials', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': newCredAdminKey.trim(),
+        },
+        body: JSON.stringify({
+          label: newCredLabel.trim() || undefined,
+          provider: 'ALPACA',
+          mode: exchangeMode,
+          apiKey: newCredApiKey.trim(),
+          apiSecret: newCredApiSecret.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      const created = await res.json() as { id: string };
+      setNewCredLabel('');
+      setNewCredApiKey('');
+      setNewCredApiSecret('');
+      setCredModalOpen(false);
+      // Refresh the picker and auto-select the newly created credential
+      const pickerRes = await fetch('/api/marl/broker/credentials/picker');
+      if (pickerRes.ok) {
+        const pickerData = await pickerRes.json() as { credentials: Array<{ id: string; label: string; provider: string; mode: string }> };
+        const matching = pickerData.credentials.filter(c => c.mode === exchangeMode);
+        setAvailableCredentials(matching);
+        setBrokerCredentialId(created.id);
+      }
+    } catch (err) {
+      setNewCredError(err instanceof Error ? err.message : 'Failed to save credential');
+    } finally {
+      setNewCredSaving(false);
+    }
+  }, [newCredAdminKey, newCredLabel, newCredApiKey, newCredApiSecret, exchangeMode]);
 
   const addAgent = () => {
     if (agents.length < 10) {
@@ -478,10 +530,19 @@ export function MarlCompetitionViewer() {
                 </div>
                 {exchangeMode !== 'SIMULATED' && (
                   <div>
-                    <label style={label}>Broker Credential</label>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                      <label style={{ ...label, marginBottom: 0 }}>Broker Credential</label>
+                      <button
+                        type="button"
+                        onClick={() => { setNewCredError(null); setCredModalOpen(true); }}
+                        style={{ ...btn('#4f46e5'), fontSize: '0.7rem', padding: '0.2rem 0.65rem' }}
+                      >
+                        + Add Credential
+                      </button>
+                    </div>
                     {availableCredentials.length > 0 ? (
                       <select
-                        style={input}
+                        style={{ ...input, marginTop: '0.35rem' }}
                         value={brokerCredentialId}
                         onChange={e => setBrokerCredentialId(e.target.value)}
                         required
@@ -494,18 +555,9 @@ export function MarlCompetitionViewer() {
                         ))}
                       </select>
                     ) : (
-                      <>
-                        <input
-                          style={input}
-                          value={brokerCredentialId}
-                          onChange={e => setBrokerCredentialId(e.target.value)}
-                          placeholder="No credentials found — paste UUID manually"
-                          required
-                        />
-                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
-                          Store credentials via POST /api/marl/broker/credentials to enable the dropdown.
-                        </p>
-                      </>
+                      <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#6b7280', padding: '0.5rem 0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
+                        No credentials stored for {exchangeMode} mode. Click &ldquo;+ Add Credential&rdquo; above.
+                      </p>
                     )}
                     {exchangeMode === 'LIVE' && (
                       <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#dc2626' }}>
@@ -913,6 +965,138 @@ export function MarlCompetitionViewer() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* ── Add Broker Credential Modal ──────────────────────────────────────── */}
+      {credModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setCredModalOpen(false); }}
+        >
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '0.75rem', padding: '1.5rem',
+            width: '100%', maxWidth: '480px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <h3 style={{ margin: 0, fontSize: '1.05rem', fontWeight: '700' }}>Add Broker Credential</h3>
+              <button
+                type="button"
+                onClick={() => setCredModalOpen(false)}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem', color: '#6b7280' }}
+              >✕</button>
+            </div>
+
+            <form onSubmit={handleSaveCredential}>
+              {/* Mode — read-only, derived from the current exchange mode selection */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.875rem' }}>
+                <div>
+                  <label style={label}>Mode</label>
+                  <div style={{
+                    padding: '0.5rem 0.75rem', backgroundColor: '#f3f4f6', borderRadius: '0.375rem',
+                    fontSize: '0.875rem', fontWeight: '700',
+                    color: exchangeMode === 'LIVE' ? '#dc2626' : '#d97706',
+                  }}>
+                    {exchangeMode}
+                  </div>
+                </div>
+                <div>
+                  <label style={label}>Provider</label>
+                  <div style={{
+                    padding: '0.5rem 0.75rem', backgroundColor: '#f3f4f6', borderRadius: '0.375rem',
+                    fontSize: '0.875rem', fontWeight: '700', color: '#374151',
+                  }}>
+                    ALPACA
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ marginBottom: '0.875rem' }}>
+                <label style={label}>Label <span style={{ fontWeight: '400', textTransform: 'none', letterSpacing: 0 }}>(optional)</span></label>
+                <input
+                  type="text"
+                  style={input}
+                  value={newCredLabel}
+                  onChange={e => setNewCredLabel(e.target.value)}
+                  placeholder="e.g. My Alpaca Paper Account"
+                />
+              </div>
+
+              <div style={{ marginBottom: '0.875rem' }}>
+                <label style={label}>API Key</label>
+                <input
+                  type="password"
+                  style={input}
+                  value={newCredApiKey}
+                  onChange={e => setNewCredApiKey(e.target.value)}
+                  placeholder="Alpaca API Key"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div style={{ marginBottom: '0.875rem' }}>
+                <label style={label}>API Secret</label>
+                <input
+                  type="password"
+                  style={input}
+                  value={newCredApiSecret}
+                  onChange={e => setNewCredApiSecret(e.target.value)}
+                  placeholder="Alpaca API Secret"
+                  required
+                  autoComplete="new-password"
+                />
+              </div>
+
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={label}>Admin Key</label>
+                <input
+                  type="password"
+                  style={input}
+                  value={newCredAdminKey}
+                  onChange={e => setNewCredAdminKey(e.target.value)}
+                  placeholder="API_SECRET_KEY value (x-api-key header)"
+                  required
+                  autoComplete="new-password"
+                />
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#9ca3af' }}>
+                  Credentials are encrypted with AES-256-GCM before being stored.
+                </p>
+              </div>
+
+              {newCredError && (
+                <p style={{
+                  margin: '0 0 0.875rem', fontSize: '0.8rem', color: '#dc2626',
+                  padding: '0.5rem 0.75rem', backgroundColor: '#fef2f2',
+                  borderRadius: '0.375rem', border: '1px solid #fecaca',
+                }}>
+                  {newCredError}
+                </p>
+              )}
+
+              <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={() => setCredModalOpen(false)}
+                  style={{ ...btn('#6b7280'), fontSize: '0.875rem' }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={newCredSaving}
+                  style={{ ...btn('#4f46e5'), fontSize: '0.875rem', opacity: newCredSaving ? 0.7 : 1 }}
+                >
+                  {newCredSaving ? 'Saving…' : 'Save Credential'}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

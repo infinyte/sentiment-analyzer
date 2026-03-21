@@ -1,4 +1,4 @@
-import cryptoSlangMap from './crypto-slang-map.json';
+import cryptoSlangMap from './crypto-slang-map.json' with { type: 'json' };
 
 const repeatedCharacterPattern = /(.)\1{2,}/gu;
 const urlPattern = /https?:\/\/\S+/giu;

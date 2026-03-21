@@ -4,7 +4,13 @@ module.exports = {
   testEnvironment: 'node',
   testMatch: ['**/__tests__/**/*.test.ts'],
   transform: {
-    '^.+\\.ts$': ['ts-jest', { tsconfig: 'tsconfig.jest.json' }],
+    '^.+\\.ts$': ['ts-jest', {
+      tsconfig: 'tsconfig.jest.json',
+      // TS2823: import attributes not supported in CommonJS mode — ts-jest still
+      // compiles the import correctly (strips 'with' clause → plain require()),
+      // so we suppress the diagnostic rather than changing the module target.
+      diagnostics: { ignoreCodes: ['TS2823'] },
+    }],
   },
   // Allow imports with .js extension to resolve to .ts files (ESM compat)
   moduleNameMapper: {
