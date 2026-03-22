@@ -17,6 +17,9 @@ import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } fro
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
 import { workerPool } from '../services/worker-pool.js';
+import { getPubSub, competitionChannel } from '../services/pubsub.js';
+import type { CompetitionPubSubEvent } from '../services/pubsub.js';
+import { configService } from '../services/config-service.js';
 import { PreTrainer } from '../services/pre-trainer.js';
 import type { RiskProfile } from '../services/pre-trainer.js';
 import type { MarketRegime } from '../services/synthetic-market-generator.js';
@@ -860,6 +863,7 @@ router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
     endpoints: {
       'POST   /api/marl/competition/start': 'Start a new tournament',
       'GET    /api/marl/competition/:id/status': 'Poll running competition',
+      'GET    /api/marl/competition/:id/stream': 'SSE real-time progress stream (text/event-stream)',
       'GET    /api/marl/competition/:id/results': 'Fetch completed results',
       'POST   /api/marl/agents/compare': 'Head-to-head multi-round comparison',
       'GET    /api/marl/competitions': 'List all competitions',
@@ -1003,6 +1007,80 @@ router.post('/api/marl/agents/:agentId/algorithm', competitionReadRateLimit, (re
       replayBuffer: 'Up to 1 000 experiences',
     },
   });
+});
+
+// ─── GET /api/marl/competition/:competitionId/stream ─────────────────────────
+/**
+ * Server-Sent Events stream for a competition.
+ * Sends progress (0-100), completed, and failed events in real time.
+ * Falls back gracefully: if the competition is already done when you connect,
+ * it emits one synthetic event and closes the stream.
+ *
+ * Example (curl):
+ *   curl -N http://localhost:3000/api/marl/competition/comp_123/stream
+ *
+ * Example (browser):
+ *   const es = new EventSource('/api/marl/competition/comp_123/stream');
+ *   es.addEventListener('progress',  e => console.log(JSON.parse(e.data)));
+ *   es.addEventListener('completed', e => console.log(JSON.parse(e.data)));
+ *   es.addEventListener('failed',    e => console.log(JSON.parse(e.data)));
+ */
+router.get('/api/marl/competition/:competitionId/stream', (req: Request, res: Response) => {
+  const { competitionId } = req.params;
+
+  // ── SSE headers ──────────────────────────────────────────────────────────
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  // Disable nginx / express compression for SSE
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Helper: write a typed SSE frame
+  const send = (event: CompetitionPubSubEvent) => {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  };
+
+  // ── Fast-path: already finished ──────────────────────────────────────────
+  const record = engine.getRecord(competitionId);
+  if (record?.status === 'COMPLETED') {
+    send({
+      type: 'completed',
+      competitionId,
+      topPerformerId: record.topPerformerId,
+    });
+    res.end();
+    return;
+  }
+  if (record?.status === 'FAILED') {
+    send({ type: 'failed', competitionId, error: 'Competition already failed' });
+    res.end();
+    return;
+  }
+
+  // ── Subscribe to pub/sub ─────────────────────────────────────────────────
+  const channel    = competitionChannel(competitionId);
+  const unsubscribe = getPubSub().subscribe(channel, (event) => {
+    send(event);
+    // Auto-close on terminal events so the client knows the stream is done
+    if (event.type === 'completed' || event.type === 'failed') {
+      cleanup();
+      res.end();
+    }
+  });
+
+  // ── Heartbeat keeps TCP alive through proxies / load-balancers ───────────
+  const heartbeatMs = configService.get('sseHeartbeatIntervalMs');
+  const heartbeat   = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, heartbeatMs);
+
+  // ── Cleanup on client disconnect ─────────────────────────────────────────
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  };
+  req.on('close', cleanup);
 });
 
 // ─── GET /api/marl/competition/:competitionId/equity-curves ──────────────────

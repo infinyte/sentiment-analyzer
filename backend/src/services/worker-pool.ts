@@ -22,6 +22,7 @@ import { dirname, join }  from 'node:path';
 import type { CompetitionConfig, CompetitionResult } from './marl-competition-engine.js';
 import type { BacktestConfig, SimulationResult }    from './backtesting-engine.js';
 import type { WorkerOutMessage }                     from '../workers/types.js';
+import { getPubSub, competitionChannel }             from './pubsub.js';
 import logger                                        from '../logger.js';
 
 // ── Path helpers ───────────────────────────────────────────────────────────────
@@ -65,11 +66,39 @@ export class WorkerPool {
     onProgress?:   (progress: number) => void,
   ): TaskHandle<CompetitionResult> {
     logger.info('[worker-pool] spawning MARL simulation worker', { competitionId });
-    return this.spawn<CompetitionResult>(
+
+    const channel  = competitionChannel(competitionId);
+    const pubsub   = getPubSub();
+
+    const progressHandler = (progress: number) => {
+      onProgress?.(progress);
+      void pubsub.publish(channel, { type: 'progress', competitionId, progress });
+    };
+
+    const handle = this.spawn<CompetitionResult>(
       workerPath('marl-worker'),
       { taskId: competitionId, type: 'MARL_SIMULATION', config, competitionId },
-      onProgress,
+      progressHandler,
     );
+
+    // Publish completion / failure events so SSE subscribers don't have to poll.
+    handle.result
+      .then((result) => {
+        void pubsub.publish(channel, {
+          type: 'completed',
+          competitionId,
+          topPerformerId: result.finalRankings?.[0]?.agentId,
+        });
+      })
+      .catch((err: unknown) => {
+        void pubsub.publish(channel, {
+          type: 'failed',
+          competitionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      });
+
+    return handle;
   }
 
   /**

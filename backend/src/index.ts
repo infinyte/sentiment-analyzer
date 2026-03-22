@@ -23,6 +23,8 @@ import { onChainService } from './services/onchain.js';
 import type { AgentConfig } from './services/trading-agent.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
 import { workerPool } from './services/worker-pool.js';
+import { initPubSub, closePubSub } from './services/pubsub.js';
+import { configService } from './services/config-service.js';
 import { storage } from './storage.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
@@ -109,6 +111,12 @@ try {
   logger.warn('social-store unavailable', { error: String(err) });
 }
 
+// Initialize optional Redis services (pub/sub fan-out + config hot-reload).
+// Both are fire-and-forget: they fall back to EventEmitter / env defaults
+// if REDIS_URL is not set or ioredis is not installed.
+void initPubSub();
+void configService.init();
+
 // Warn about any open real-trading orders that survived a restart.
 // Broker adapters do NOT survive restarts — admin must re-POST
 // /api/marl/broker/connect/:id to reconnect before running PAPER/LIVE competitions.
@@ -127,6 +135,7 @@ async function shutdown() {
   await Promise.allSettled([
     brokerRegistry.disconnectAll(),
     workerPool.terminateAll(),
+    closePubSub(),
   ]);
   storage.close();
   socialStore.close();
