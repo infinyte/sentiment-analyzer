@@ -16,6 +16,7 @@ import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } from '../services/marl-competition-engine.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
+import { workerPool } from '../services/worker-pool.js';
 import { PreTrainer } from '../services/pre-trainer.js';
 import type { RiskProfile } from '../services/pre-trainer.js';
 import type { MarketRegime } from '../services/synthetic-market-generator.js';
@@ -397,24 +398,41 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       progress: 0,
     });
 
-    // Fire-and-forget tournament
-    engine
-      .runCompetition(config, (progress) => {
-        engine.updateRecord(competitionId, { progress });
-      }, competitionId)
-      .then(result => {
-        engine.updateRecord(competitionId, {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-          result,
-          progress: 100,
-          topPerformerId: result.finalRankings?.[0]?.agentId,
-        });
-      })
-      .catch(err => {
-        logger.error('competition failed', { competitionId, error: String(err) });
-        engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+    // Fire-and-forget tournament.
+    // CPU-bound SIMULATED competitions run on a Worker Thread so the main
+    // event loop stays responsive. Real-money modes (PAPER/LIVE) keep the
+    // existing main-thread path because they use setInterval + broker I/O.
+    const isSimulated = exchangeMode === 'SIMULATED';
+
+    const onSuccess = (result: Awaited<ReturnType<typeof engine.runCompetition>>) => {
+      engine.updateRecord(competitionId, {
+        status:          'COMPLETED',
+        completedAt:     new Date(),
+        result,
+        progress:        100,
+        topPerformerId:  result.finalRankings?.[0]?.agentId,
       });
+    };
+    const onFailure = (err: unknown) => {
+      logger.error('competition failed', { competitionId, error: String(err) });
+      engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+    };
+
+    if (isSimulated) {
+      const handle = workerPool.runMarlCompetition(
+        competitionId,
+        config,
+        (progress) => engine.updateRecord(competitionId, { progress }),
+      );
+      handle.result.then(onSuccess).catch(onFailure);
+    } else {
+      engine
+        .runCompetition(config, (progress) => {
+          engine.updateRecord(competitionId, { progress });
+        }, competitionId)
+        .then(onSuccess)
+        .catch(onFailure);
+    }
 
     logger.info('competition started', {
       competitionId,

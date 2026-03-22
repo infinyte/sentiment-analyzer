@@ -21,8 +21,8 @@ import type { MarketData, NewsData } from './services/sentiment-analyzer.js';
 import { finBertService } from './services/finbert.js';
 import { onChainService } from './services/onchain.js';
 import type { AgentConfig } from './services/trading-agent.js';
-import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
+import { workerPool } from './services/worker-pool.js';
 import { storage } from './storage.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
@@ -83,7 +83,7 @@ const sentiment          = container.resolve<SentimentService>(TOKENS.SentimentS
 const cache              = container.resolve<Cache>(TOKENS.Cache);
 const sentimentCache     = container.resolve<Cache>(TOKENS.SentimentCache);
 const analyzer           = container.resolve<SentimentAnalyzerEngine>(TOKENS.SentimentAnalyzerEngine);
-const backtestEngine     = container.resolve<BacktestingEngine>(TOKENS.BacktestingEngine);
+// backtestEngine removed — POST /api/backtest/run now uses workerPool.runBacktest().
 const socialScraper      = container.resolve<SocialScraperService>(TOKENS.SocialScraperService);
 const trendingEngine     = container.resolve<TrendingTopicsEngine>(TOKENS.TrendingTopicsEngine);
 const socialScraperManager  = container.resolve<SocialMediaScraperManager>(TOKENS.SocialMediaScraperManager);
@@ -122,9 +122,12 @@ try {
   }
 } catch { /* storage may not be connected yet */ }
 
-// Graceful shutdown — disconnect brokers, close DBs before process exits
+// Graceful shutdown — disconnect brokers, terminate workers, close DBs before process exits
 async function shutdown() {
-  await brokerRegistry.disconnectAll().catch(() => {});
+  await Promise.allSettled([
+    brokerRegistry.disconnectAll(),
+    workerPool.terminateAll(),
+  ]);
   storage.close();
   socialStore.close();
   process.exit(0);
@@ -732,7 +735,11 @@ app.post('/api/backtest/run', async (req, res) => {
       commissionPct: body.commissionPct ?? 0.001,
     };
 
-    const result = await backtestEngine.runSimulation(config);
+    // Run the CPU-bound simulation on a Worker Thread so the event loop stays
+    // responsive. The await here is non-blocking: Node.js can serve other
+    // requests while the worker thread runs the day-by-day simulation loop.
+    const handle = workerPool.runBacktest(config.symbols.join('-') + '_' + Date.now(), config);
+    const result = await handle.result;
 
     // Persist result to SQLite so it survives a restart
     try { storage.saveBacktestResult(result); } catch { /* non-fatal */ }
@@ -778,10 +785,10 @@ app.post('/api/backtest/run', async (req, res) => {
 
 // GET /api/backtest/results/:testId
 // Retrieve full details (equity curves, all trades) for a completed backtest.
-// Falls back to SQLite when the result is no longer in the engine's in-memory store.
+// Results are always persisted to SQLite by the worker at completion time.
 app.get('/api/backtest/results/:testId', (req, res) => {
   const testId = req.params.testId;
-  const result = backtestEngine.getResult(testId) ?? storage.getBacktestResult(testId);
+  const result = storage.getBacktestResult(testId);
   if (!result) {
     return res.status(404).json({ error: 'Backtest result not found' });
   }
