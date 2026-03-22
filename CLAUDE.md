@@ -183,3 +183,15 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to main:
 3. **Frontend** — lint → type-check → build
 
 Always run `npm run type-check` in `backend/` before committing backend changes.
+
+
+## Current TODO Tasks
+
+ ### TODO
+
+ 1. Implement PostgreSQL adapter bundle
+ 2. Implement MySQL adapter bundle
+ 3. Implement MongoDB adapter for social domain
+ 4. Implement BlobStore interface + adapter (S3/Azure)
+ 5. Service decomposition: extract Tournament Worker process with BullMQ
+ 6. Service decomposition: extract Scraper Service process

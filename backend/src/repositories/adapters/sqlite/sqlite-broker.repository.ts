@@ -112,14 +112,14 @@ export class SQLiteBrokerRepository implements IBrokerRepository {
     }));
   }
 
-  async getDecryptedCredential(id: string): Promise<BrokerCredentials> {
+  async getDecryptedCredential(id: string): Promise<BrokerCredentials | null> {
     const row = this.db.prepare(`
       SELECT id, label, provider, mode, encrypted
       FROM   broker_credentials
       WHERE  id = ?
     `).get(id) as { id: string; label: string; provider: BrokerCredentials['provider']; mode: BrokerCredentials['mode']; encrypted: string } | undefined;
 
-    if (!row) throw new Error(`[broker-repository] credential not found: ${id}`);
+    if (!row) return null;
 
     const blob      = JSON.parse(row.encrypted) as EncryptedBlob;
     const plaintext = decrypt(blob);
@@ -131,8 +131,9 @@ export class SQLiteBrokerRepository implements IBrokerRepository {
     return { id: row.id, label: row.label, provider: row.provider, mode: row.mode, apiKey, apiSecret };
   }
 
-  async deleteCredential(id: string): Promise<void> {
-    this.db.prepare('DELETE FROM broker_credentials WHERE id = ?').run(id);
+  async deleteCredential(id: string): Promise<boolean> {
+    const result = this.db.prepare('DELETE FROM broker_credentials WHERE id = ?').run(id);
+    return result.changes > 0;
   }
 
   // ── Order audit ────────────────────────────────────────────────────────────

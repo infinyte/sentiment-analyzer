@@ -8,9 +8,10 @@ export interface IBrokerRepository {
   // Credentials — stored AES-256-GCM encrypted at rest
   saveCredential(credential: BrokerCredentials): Promise<void>;
   listCredentials(): Promise<StoredCredential[]>;
-  /** Decrypt and return plaintext credentials. Throws if BROKER_MASTER_KEY missing. */
-  getDecryptedCredential(id: string): Promise<BrokerCredentials>;
-  deleteCredential(id: string): Promise<void>;
+  /** Decrypt and return plaintext credentials. Returns null if credential not found. Throws if BROKER_MASTER_KEY missing. */
+  getDecryptedCredential(id: string): Promise<BrokerCredentials | null>;
+  /** Returns true if a credential was found and removed. */
+  deleteCredential(id: string): Promise<boolean>;
 
   // Order audit trail
   insertOrder(order: BrokerOrder): Promise<void>;

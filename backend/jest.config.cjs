@@ -14,6 +14,9 @@ module.exports = {
   },
   // Allow imports with .js extension to resolve to .ts files (ESM compat)
   moduleNameMapper: {
+    // worker-pool.ts uses import.meta.url (ESM-only) which ts-jest cannot compile
+    // in CommonJS mode. Redirect all imports to the CJS-compatible manual mock.
+    '.*services/worker-pool(\\.js)?$': '<rootDir>/src/services/__mocks__/worker-pool.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
   clearMocks: true,

@@ -21,6 +21,8 @@ import { RiskManager } from './exchange/risk-manager.js';
 import type { RiskManagerConfig } from './exchange/risk-manager.js';
 import { storage } from '../storage.js';
 import logger from '../logger.js';
+import type { IAgentRepository } from '../repositories/interfaces/agent.repository.js';
+import type { IBrokerRepository, BrokerOrder } from '../repositories/interfaces/broker.repository.js';
 
 // ─── Order Book Types ────────────────────────────────────────────────────────
 
@@ -1021,10 +1023,15 @@ export class MarlCompetitionEngine {
   private coinGecko: CoinGeckoService;
   private readonly sentimentEngine: SentimentAnalyzerEngine;
 
-  constructor() {
+  private readonly learningStatesLoaded: Promise<void>;
+
+  constructor(
+    private readonly agentRepo?: IAgentRepository,
+    private readonly brokerRepo?: IBrokerRepository,
+  ) {
     this.coinGecko = new CoinGeckoService();
     this.sentimentEngine = new SentimentAnalyzerEngine();
-    this.loadLearningStatesFromDb();
+    this.learningStatesLoaded = this.loadLearningStatesFromDb();
   }
 
   /**
@@ -1032,14 +1039,24 @@ export class MarlCompetitionEngine {
    * Silently skips if the DB isn't connected yet (e.g. in unit tests that
    * reset the cache manually via beforeEach).
    */
-  private loadLearningStatesFromDb(): void {
+  private async loadLearningStatesFromDb(): Promise<void> {
     try {
-      const rows = storage.getAllAgentLearningStates();
-      for (const { cacheKey, snapshot } of rows) {
-        MarlCompetitionEngine.learningStateCache.set(cacheKey, snapshot as LearningStateSnapshot);
-      }
-      if (rows.length > 0) {
-        logger.info('marl learning states loaded from db', { count: rows.length });
+      if (this.agentRepo) {
+        const statesMap = await this.agentRepo.getAllLearningStates();
+        for (const [key, snapshot] of statesMap) {
+          MarlCompetitionEngine.learningStateCache.set(key, snapshot as LearningStateSnapshot);
+        }
+        if (statesMap.size > 0) {
+          logger.info('marl learning states loaded from db', { count: statesMap.size });
+        }
+      } else {
+        const rows = storage.getAllAgentLearningStates();
+        for (const { cacheKey, snapshot } of rows) {
+          MarlCompetitionEngine.learningStateCache.set(cacheKey, snapshot as LearningStateSnapshot);
+        }
+        if (rows.length > 0) {
+          logger.info('marl learning states loaded from db', { count: rows.length });
+        }
       }
     } catch {
       // DB not yet connected (e.g. tests) — start with empty cache, no problem.
@@ -1413,11 +1430,17 @@ export class MarlCompetitionEngine {
       MarlCompetitionEngine.learningStateCache.set(key, snapshot);
 
       // 2. Write through to SQLite so learning survives application restarts.
-      try {
-        storage.saveAgentLearningState(key, snapshot);
-      } catch (err) {
-        // DB unavailable (e.g. unit tests) — in-memory cache is still updated.
-        logger.warn('marl learning state db write failed', { key, error: String(err) });
+      if (this.agentRepo) {
+        void this.agentRepo.saveLearningState(key, snapshot).catch(err => {
+          logger.warn('marl learning state db write failed', { key, error: String(err) });
+        });
+      } else {
+        try {
+          storage.saveAgentLearningState(key, snapshot);
+        } catch (err) {
+          // DB unavailable (e.g. unit tests) — in-memory cache is still updated.
+          logger.warn('marl learning state db write failed', { key, error: String(err) });
+        }
       }
     }
     logger.info('marl learning states persisted', { count: agentStates.length });
@@ -1674,6 +1697,7 @@ export class MarlCompetitionEngine {
     onProgress?: (progress: number) => void,
     competitionId?: string
   ): Promise<CompetitionResult> {
+    await this.learningStatesLoaded;
     // Resolve symbols first — auto-selection fetches live data before the tournament starts
     const resolvedConfig: CompetitionConfig = config.symbolSelectionMode === 'AUTO'
       ? { ...config, symbols: await this.resolveSymbols(config) }
@@ -1771,7 +1795,6 @@ export class MarlCompetitionEngine {
     const { brokerRegistry } = await import('./brokers/broker-registry.js');
     const { RiskGuard } = await import('./risk/risk-guard.js');
     const { DEFAULT_RISK_CONFIG } = await import('../types/broker.js');
-    const { storage } = await import('../storage.js');
     const { randomUUID } = await import('node:crypto');
 
     const credentialId = config.brokerCredentialId;
@@ -1928,7 +1951,11 @@ export class MarlCompetitionEngine {
                 quantity:      finalQty,
                 limitPrice:    price,
               });
-              try { storage.insertBrokerOrder(placedOrder); } catch { /* non-fatal */ }
+              if (this.brokerRepo) {
+                void this.brokerRepo.insertOrder(placedOrder as BrokerOrder).catch(() => {});
+              } else {
+                try { storage.insertBrokerOrder(placedOrder); } catch { /* non-fatal */ }
+              }
             } catch (err) {
               logger.warn('marl real: order placement failed', { agentId: state.agentId, symbol, error: String(err) });
               continue;
@@ -1937,7 +1964,11 @@ export class MarlCompetitionEngine {
             // Poll for fill (up to 10s)
             const filled = await this.pollUntilFilled(adapter, clientOrderId, 10_000);
             if (filled) {
-              try { storage.updateBrokerOrder(clientOrderId, filled as Parameters<typeof storage.updateBrokerOrder>[1]); } catch { /* non-fatal */ }
+              if (this.brokerRepo) {
+                void this.brokerRepo.updateOrder(clientOrderId, filled as Parameters<typeof storage.updateBrokerOrder>[1]).catch(() => {});
+              } else {
+                try { storage.updateBrokerOrder(clientOrderId, filled as Parameters<typeof storage.updateBrokerOrder>[1]); } catch { /* non-fatal */ }
+              }
 
               const fillPrice = filled.avgFillPrice;
               if (action.type === 'BUY') {
@@ -2244,7 +2275,11 @@ export class MarlCompetitionEngine {
     for (const profile of profiles) {
       const key = this.getLearningCacheKey({ id: agentId, riskProfile: profile });
       if (MarlCompetitionEngine.learningStateCache.delete(key)) cleared++;
-      try { storage.deleteAgentLearningState(key); } catch { /* DB unavailable */ }
+      if (this.agentRepo) {
+        void this.agentRepo.deleteLearningState(key).catch(() => {});
+      } else {
+        try { storage.deleteAgentLearningState(key); } catch { /* DB unavailable */ }
+      }
     }
     return cleared;
   }
@@ -2268,10 +2303,16 @@ export class MarlCompetitionEngine {
   injectPretrainedState(agentId: string, riskProfile: string, snapshot: LearningStateSnapshot): void {
     const key = `${agentId}::${riskProfile}`;
     MarlCompetitionEngine.learningStateCache.set(key, snapshot);
-    try {
-      storage.saveAgentLearningState(key, snapshot);
-    } catch (err) {
-      logger.warn('marl inject-pretrained: db write failed, cache updated', { key, error: String(err) });
+    if (this.agentRepo) {
+      void this.agentRepo.saveLearningState(key, snapshot).catch(err => {
+        logger.warn('marl inject-pretrained: db write failed, cache updated', { key, error: String(err) });
+      });
+    } else {
+      try {
+        storage.saveAgentLearningState(key, snapshot);
+      } catch (err) {
+        logger.warn('marl inject-pretrained: db write failed, cache updated', { key, error: String(err) });
+      }
     }
     logger.info('marl pre-trained state injected', { agentId, riskProfile });
   }

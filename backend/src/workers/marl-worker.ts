@@ -16,6 +16,7 @@
 
 import { parentPort, workerData } from 'node:worker_threads';
 import { storage } from '../storage.js';
+import { createRepositories } from '../repositories/factory.js';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
 import type { MarlTaskData } from './types.js';
 
@@ -34,9 +35,10 @@ if (config.exchangeMode === 'PAPER' || config.exchangeMode === 'LIVE') {
 // Open a fresh SQLite connection for this worker thread.
 // WAL mode (set by the main-thread connection) allows concurrent reads/writes.
 storage.connect();
+const repos = createRepositories({ driver: 'sqlite', db: storage.getDb() });
 
 try {
-  const engine = new MarlCompetitionEngine();
+  const engine = new MarlCompetitionEngine(repos.agents, repos.broker);
 
   const result = await engine.runCompetition(
     config,

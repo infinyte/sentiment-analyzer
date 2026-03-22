@@ -26,9 +26,10 @@ import { workerPool } from './services/worker-pool.js';
 import { initPubSub, closePubSub } from './services/pubsub.js';
 import { configService } from './services/config-service.js';
 import { storage } from './storage.js';
+import { createRepositories } from './repositories/factory.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
-import marlRealTradingRoutes from './routes/marl-real-trading.js';
+import { createMarlRealTradingRouter } from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
@@ -971,15 +972,16 @@ app.post('/api/trending/ingest', (req, res) => {
 // ============================================================================
 
 app.use(marlRoutes);
-app.use(marlRealTradingRoutes);
 app.use(socialMediaRoutes);
 
-// Agent stats routes — requires an active DB connection
+// DB-dependent routes — require an active DB connection
 if (storage.isHealthy()) {
-  app.use(createAgentStatsRouter(storage.getDb()));
-  app.use(createEvolutionaryRouter(storage.getDb()));
+  const repos = createRepositories({ driver: 'sqlite', db: storage.getDb() });
+  app.use(createMarlRealTradingRouter(repos.broker));
+  app.use(createAgentStatsRouter(repos.agents));
+  app.use(createEvolutionaryRouter(storage.getDb(), repos.agents));
 } else {
-  logger.warn('agent-stats routes skipped (storage not connected)');
+  logger.warn('DB-dependent routes skipped (storage not connected)');
 }
 
 // Trading routes (paper / sandbox / live exchange)
