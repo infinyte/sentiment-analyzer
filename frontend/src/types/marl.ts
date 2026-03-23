@@ -111,6 +111,50 @@ export interface CompetitionStatus {
   topReturn?: string | null;
 }
 
+export interface CompetitionProgressEvent {
+  type: 'progress';
+  competitionId: string;
+  progress: number;
+}
+
+export interface CompetitionCompletedEvent {
+  type: 'completed';
+  competitionId: string;
+  topPerformerId?: string;
+}
+
+export interface CompetitionFailedEvent {
+  type: 'failed';
+  competitionId: string;
+  error: string;
+}
+
+export interface CompetitionEquitySnapshotEvent {
+  type: 'equity_snapshot';
+  competitionId: string;
+  progress: number;
+  timestamp: string;
+  agentEquities: { agentId: string; equity: number }[];
+}
+
+export interface CompetitionTradeExecutedEvent {
+  type: 'trade_executed';
+  competitionId: string;
+  agentId: string;
+  symbol: string;
+  side: 'BUY' | 'SELL';
+  quantity: number;
+  price: number;
+  timestamp: string;
+}
+
+export type CompetitionStreamEvent =
+  | CompetitionProgressEvent
+  | CompetitionCompletedEvent
+  | CompetitionFailedEvent
+  | CompetitionEquitySnapshotEvent
+  | CompetitionTradeExecutedEvent;
+
 export interface StartCompetitionResponse {
   competitionId: string;
   status: 'STARTED';

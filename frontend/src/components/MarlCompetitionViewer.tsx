@@ -186,7 +186,8 @@ function RankingsTable({ rankings }: { rankings: import('../types/marl').FinalRa
 export function MarlCompetitionViewer() {
   const {
     loading, competitionId, status, results, compareResult, list,
-    error, startCompetition, compareAgents, loadList, reset,
+    error, liveEquitySnapshots, liveTradeFeed, isStreamConnected, transport,
+    startCompetition, compareAgents, loadList, reset,
   } = useMarlCompetition();
 
   // ── Form state ────────────────────────────────────────────────────────────
@@ -656,6 +657,31 @@ export function MarlCompetitionViewer() {
     }
   }, [equityReloadId]);
 
+  const isLiveMonitorActive = loading && status?.status === 'RUNNING';
+
+  const liveChartData = liveEquitySnapshots.length
+    ? (() => {
+        const agentIds = liveEquitySnapshots[0].agentEquities.map(ae => ae.agentId);
+        const labels = liveEquitySnapshots.map((snap, i) => {
+          const stamp = new Date(snap.timestamp);
+          return Number.isNaN(stamp.getTime()) ? `Step ${i + 1}` : stamp.toLocaleTimeString();
+        });
+        return {
+          labels,
+          datasets: agentIds.map((id, i) => ({
+            label: id,
+            data: liveEquitySnapshots.map(snap =>
+              snap.agentEquities.find(ae => ae.agentId === id)?.equity ?? 0
+            ),
+            borderColor: AGENT_CHART_COLORS[i % AGENT_CHART_COLORS.length],
+            backgroundColor: 'transparent',
+            tension: 0.3,
+            pointRadius: 0,
+          })),
+        };
+      })()
+    : null;
+
   // ── Equity evolution chart ────────────────────────────────────────────────
   const equitySeries = reloadedEquityCurves ?? results?.equityEvolution ?? [];
   const chartData = equitySeries.length
@@ -1095,6 +1121,77 @@ export function MarlCompetitionViewer() {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '0.25rem', fontSize: '0.75rem', color: '#6b7280' }}>
             <span>{status.progress}% complete</span>
             {status.topPerformer && <span>Leading: {status.topPerformer}</span>}
+          </div>
+        </div>
+      )}
+
+      {isLiveMonitorActive && (
+        <div style={card}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+            <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: '700', color: '#374151' }}>Live Tournament Monitor</h4>
+            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '0.75rem', color: isStreamConnected ? '#16a34a' : '#d97706', fontWeight: '600' }}>
+                {isStreamConnected ? 'Stream connected' : 'Stream unavailable'}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: '#6b7280', padding: '0.12rem 0.45rem', border: '1px solid #e5e7eb', borderRadius: '9999px' }}>
+                Source: {transport}
+              </span>
+            </div>
+          </div>
+
+          <div style={{ marginBottom: '1rem' }}>
+            {liveChartData ? (
+              <Line
+                data={liveChartData}
+                options={{
+                  responsive: true,
+                  plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
+                  scales: {
+                    x: { display: true, grid: { display: false } },
+                    y: { display: true, ticks: { callback: v => `$${Number(v).toLocaleString()}` } },
+                  },
+                }}
+              />
+            ) : (
+              <div style={{ padding: '0.85rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', color: '#64748b', fontSize: '0.8rem' }}>
+                Waiting for live equity snapshots...
+              </div>
+            )}
+          </div>
+
+          <div>
+            <h5 style={{ margin: '0 0 0.55rem', fontSize: '0.82rem', fontWeight: '700', color: '#374151' }}>
+              Live Trade Feed
+            </h5>
+            {liveTradeFeed.length > 0 ? (
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.78rem' }}>
+                  <thead>
+                    <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
+                      {['Agent', 'Symbol', 'Side', 'Quantity', 'Price', 'Time'].map(h => (
+                        <th key={h} style={{ padding: '0.35rem 0.55rem', fontWeight: '600', color: '#475569', borderBottom: '1px solid #e2e8f0' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {liveTradeFeed.slice(0, 12).map((trade, idx) => (
+                      <tr key={`${trade.agentId}-${trade.timestamp}-${idx}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                        <td style={{ padding: '0.35rem 0.55rem', fontWeight: '600' }}>{trade.agentId}</td>
+                        <td style={{ padding: '0.35rem 0.55rem' }}>{trade.symbol}</td>
+                        <td style={{ padding: '0.35rem 0.55rem', color: trade.side === 'BUY' ? '#16a34a' : '#dc2626', fontWeight: '700' }}>{trade.side}</td>
+                        <td style={{ padding: '0.35rem 0.55rem' }}>{trade.quantity.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+                        <td style={{ padding: '0.35rem 0.55rem' }}>${trade.price.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+                        <td style={{ padding: '0.35rem 0.55rem', color: '#6b7280' }}>{new Date(trade.timestamp).toLocaleTimeString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ padding: '0.65rem', borderRadius: '0.5rem', backgroundColor: '#f8fafc', color: '#64748b', fontSize: '0.78rem' }}>
+                Waiting for trade execution events...
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -1584,27 +1681,29 @@ export function MarlCompetitionViewer() {
                 <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '700', color: '#374151' }}>
                   Equity Evolution
                 </h4>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                  <input
-                    value={equityReloadId}
-                    onChange={e => {
-                      setEquityReloadId(e.target.value);
-                      setEquityReloadError(null);
-                      setEquityReloadMessage(null);
-                    }}
-                    placeholder="Competition ID"
-                    aria-label="Competition ID"
-                    style={{ ...input, width: '15rem' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void reloadEquityCurves()}
-                    disabled={equityReloadLoading}
-                    style={{ ...btn('#2563eb'), opacity: equityReloadLoading ? 0.6 : 1 }}
-                  >
-                    {equityReloadLoading ? 'Loading…' : 'Reload Curves'}
-                  </button>
-                </div>
+                {!isLiveMonitorActive && (
+                  <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input
+                      value={equityReloadId}
+                      onChange={e => {
+                        setEquityReloadId(e.target.value);
+                        setEquityReloadError(null);
+                        setEquityReloadMessage(null);
+                      }}
+                      placeholder="Competition ID"
+                      aria-label="Competition ID"
+                      style={{ ...input, width: '15rem' }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void reloadEquityCurves()}
+                      disabled={equityReloadLoading}
+                      style={{ ...btn('#2563eb'), opacity: equityReloadLoading ? 0.6 : 1 }}
+                    >
+                      {equityReloadLoading ? 'Loading…' : 'Reload Curves'}
+                    </button>
+                  </div>
+                )}
               </div>
 
               {equityReloadMessage && (

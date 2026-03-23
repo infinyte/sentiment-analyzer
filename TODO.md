@@ -6,16 +6,16 @@
 - Issue Number: 1
 - Title: Frontend Live Tournament Monitor Panel
 - Priority: High
-- Status: Not started (backend ready)
+- Status: Completed
 - Description: Build real-time tournament monitoring UI in the MARL viewer using stream events, including live equity chart and trade feed.
 - Acceptance Criteria:
-  1. Add a live tournament hook using stream subscription for progress, equity snapshot, trade executed, completed, and failed events.
-  2. Render live equity chart updates while running.
-  3. Render latest trade feed entries with agent, symbol, side, quantity, price, and time.
-  4. Hide manual equity reload while live mode is active.
-  5. Fall back to polling if stream is unavailable.
-  6. Add frontend tests for stream open, event rendering, and stream close behavior.
-  7. Frontend type-check and tests pass.
+  1. Add a live tournament hook using stream subscription for progress, equity snapshot, trade executed, completed, and failed events. ✅
+  2. Render live equity chart updates while running. ✅
+  3. Render latest trade feed entries with agent, symbol, side, quantity, price, and time. ✅
+  4. Hide manual equity reload while live mode is active. ✅
+  5. Fall back to polling if stream is unavailable. ✅
+  6. Add frontend tests for stream open, event rendering, and stream close behavior. ✅
+  7. Frontend type-check and tests pass. ✅
 
 ### Issue 2
 - Issue Number: 2

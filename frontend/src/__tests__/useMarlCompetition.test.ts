@@ -26,12 +26,58 @@ function mockFetchError(status: number, body: unknown) {
   });
 }
 
+class MockEventSource {
+  static instances: MockEventSource[] = [];
+
+  readonly url: string;
+  readonly listeners: Record<string, Array<(event: MessageEvent) => void>> = {};
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
+  closed = false;
+
+  constructor(url: string) {
+    this.url = url;
+    MockEventSource.instances.push(this);
+  }
+
+  addEventListener(type: string, handler: (event: MessageEvent) => void): void {
+    this.listeners[type] = this.listeners[type] ?? [];
+    this.listeners[type]!.push(handler);
+  }
+
+  removeEventListener(type: string, handler: (event: MessageEvent) => void): void {
+    this.listeners[type] = (this.listeners[type] ?? []).filter(h => h !== handler);
+  }
+
+  emit(type: string, data: unknown): void {
+    const event = { data: JSON.stringify(data) } as MessageEvent;
+    for (const handler of this.listeners[type] ?? []) {
+      handler(event);
+    }
+  }
+
+  emitOpen(): void {
+    this.onopen?.({} as Event);
+  }
+
+  emitError(): void {
+    this.onerror?.({} as Event);
+  }
+
+  close(): void {
+    this.closed = true;
+  }
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
+  vi.stubGlobal('EventSource', undefined);
+  MockEventSource.instances = [];
 });
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -254,5 +300,128 @@ describe('useMarlCompetition — reset', () => {
     expect(result.current.results).toBeNull();
     expect(result.current.compareResult).toBeNull();
     expect(result.current.error).toBeNull();
+  });
+});
+
+describe('useMarlCompetition — stream lifecycle', () => {
+  const validConfig = {
+    mode: 'SINGLE' as const,
+    agents: [
+      { id: 'alpha', riskProfile: 'AGGRESSIVE' as const },
+      { id: 'beta', riskProfile: 'CONSERVATIVE' as const },
+    ],
+    symbols: ['BTC', 'ETH'],
+    duration: 200,
+    refreshInterval: 1000,
+    learningEnabled: true,
+  };
+
+  it('opens stream connection after competition start', async () => {
+    vi.stubGlobal('EventSource', MockEventSource);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ competitionId: 'cid-stream-1', status: 'STARTED' }),
+    }));
+
+    const { result } = renderHook(() => useMarlCompetition());
+
+    await act(async () => {
+      await result.current.startCompetition(validConfig);
+    });
+
+    expect(MockEventSource.instances).toHaveLength(1);
+    expect(MockEventSource.instances[0]!.url).toBe('/api/marl/competition/cid-stream-1/stream');
+    expect(result.current.transport).toBe('stream');
+  });
+
+  it('applies progress, equity, and trade stream events to live state', async () => {
+    vi.stubGlobal('EventSource', MockEventSource);
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ competitionId: 'cid-stream-2', status: 'STARTED' }),
+    }));
+
+    const { result } = renderHook(() => useMarlCompetition());
+
+    await act(async () => {
+      await result.current.startCompetition(validConfig);
+    });
+
+    const stream = MockEventSource.instances[0]!;
+
+    act(() => {
+      stream.emit('progress', { type: 'progress', competitionId: 'cid-stream-2', progress: 22 });
+      stream.emit('equity_snapshot', {
+        type: 'equity_snapshot',
+        competitionId: 'cid-stream-2',
+        progress: 25,
+        timestamp: '2026-03-23T12:00:00.000Z',
+        agentEquities: [
+          { agentId: 'alpha', equity: 10200 },
+          { agentId: 'beta', equity: 9900 },
+        ],
+      });
+      stream.emit('trade_executed', {
+        type: 'trade_executed',
+        competitionId: 'cid-stream-2',
+        agentId: 'alpha',
+        symbol: 'BTC',
+        side: 'BUY',
+        quantity: 0.1,
+        price: 65000,
+        timestamp: '2026-03-23T12:00:01.000Z',
+      });
+    });
+
+    expect(result.current.status?.progress).toBe(25);
+    expect(result.current.liveEquitySnapshots).toHaveLength(1);
+    expect(result.current.liveTradeFeed[0]?.symbol).toBe('BTC');
+    expect(result.current.liveTradeFeed[0]?.side).toBe('BUY');
+  });
+
+  it('closes stream and loads results on completed event', async () => {
+    vi.stubGlobal('EventSource', MockEventSource);
+    vi.stubGlobal('fetch', vi.fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ competitionId: 'cid-stream-3', status: 'STARTED' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          competitionId: 'cid-stream-3',
+          mode: 'SINGLE',
+          duration: 200,
+          startedAt: '2026-03-23T12:00:00.000Z',
+          completedAt: '2026-03-23T12:10:00.000Z',
+          finalRankings: [],
+          headToHeadMetrics: [],
+          equityEvolution: [],
+          competitorImpact: [],
+        }),
+      }));
+
+    const { result } = renderHook(() => useMarlCompetition());
+
+    await act(async () => {
+      await result.current.startCompetition(validConfig);
+    });
+
+    const stream = MockEventSource.instances[0]!;
+
+    act(() => {
+      stream.emitOpen();
+    });
+    expect(result.current.isStreamConnected).toBe(true);
+
+    await act(async () => {
+      stream.emit('completed', { type: 'completed', competitionId: 'cid-stream-3' });
+      await Promise.resolve();
+    });
+
+    expect(stream.closed).toBe(true);
+    expect(result.current.isStreamConnected).toBe(false);
+    expect(result.current.loading).toBe(false);
+    expect(result.current.results?.competitionId).toBe('cid-stream-3');
   });
 });

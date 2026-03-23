@@ -31,6 +31,10 @@ const defaultHook = {
   compareResult: null,
   list: null,
   error: null,
+  liveEquitySnapshots: [],
+  liveTradeFeed: [],
+  isStreamConnected: false,
+  transport: 'polling' as const,
   startCompetition: vi.fn(),
   compareAgents: vi.fn(),
   loadList: vi.fn(),
@@ -296,6 +300,92 @@ describe('MarlCompetitionViewer — running state', () => {
   it('does not show running banner in idle state', () => {
     render(<MarlCompetitionViewer />);
     expect(screen.queryByText(/competition running/i)).not.toBeInTheDocument();
+  });
+
+  it('renders live monitor trade feed from stream-backed hook data', () => {
+    mockUseMarl.mockReturnValue({
+      ...defaultHook,
+      loading: true,
+      competitionId: 'cid-live',
+      status: {
+        competitionId: 'cid-live',
+        status: 'RUNNING',
+        progress: 41,
+        mode: 'SINGLE',
+        agentCount: 2,
+        symbols: ['BTC'],
+        startedAt: new Date().toISOString(),
+        topPerformer: null,
+      },
+      isStreamConnected: true,
+      transport: 'stream',
+      liveEquitySnapshots: [
+        {
+          timestamp: '2026-03-23T10:00:00.000Z',
+          agentEquities: [
+            { agentId: 'alpha', equity: 10100 },
+            { agentId: 'beta', equity: 9950 },
+          ],
+        },
+      ],
+      liveTradeFeed: [
+        {
+          type: 'trade_executed',
+          competitionId: 'cid-live',
+          agentId: 'alpha',
+          symbol: 'BTC',
+          side: 'BUY',
+          quantity: 0.25,
+          price: 64000,
+          timestamp: '2026-03-23T10:00:02.000Z',
+        },
+      ],
+    });
+
+    render(<MarlCompetitionViewer />);
+
+    expect(screen.getByText('Live Tournament Monitor')).toBeInTheDocument();
+    expect(screen.getByText('Stream connected')).toBeInTheDocument();
+    expect(screen.getByText('alpha')).toBeInTheDocument();
+    expect(screen.getByText('BTC')).toBeInTheDocument();
+    expect(screen.getByText('BUY')).toBeInTheDocument();
+  });
+
+  it('hides manual equity reload controls while live monitor is active', () => {
+    mockUseMarl.mockReturnValue({
+      ...defaultHook,
+      loading: true,
+      competitionId: 'cid-live',
+      status: {
+        competitionId: 'cid-live',
+        status: 'RUNNING',
+        progress: 41,
+        mode: 'SINGLE',
+        agentCount: 2,
+        symbols: ['BTC'],
+        startedAt: new Date().toISOString(),
+        topPerformer: null,
+      },
+      isStreamConnected: true,
+      transport: 'stream',
+      results: {
+        competitionId: 'cid-live',
+        mode: 'SINGLE',
+        duration: 100,
+        startedAt: new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+        finalRankings: [
+          { rank: 1, agentId: 'alpha', finalCapital: 11000, totalReturn: 10, sharpeRatio: 1.5, maxDrawdown: 5, tradesExecuted: 10, winRate: 60 },
+        ],
+        headToHeadMetrics: [],
+        equityEvolution: [],
+        competitorImpact: [],
+      },
+    });
+
+    render(<MarlCompetitionViewer />);
+
+    expect(screen.queryByRole('button', { name: /reload curves/i })).not.toBeInTheDocument();
   });
 });
 
