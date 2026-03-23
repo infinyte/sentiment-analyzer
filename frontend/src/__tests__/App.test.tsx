@@ -23,6 +23,125 @@ describe('App detail modal', () => {
     mockFetch = vi.fn((input: string | URL | Request) => {
       const url = String(input);
 
+      if (url.includes('/api/health')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            status: 'healthy',
+            services: {
+              coingecko: 'ok',
+              newsapi: 'ok',
+              claude_api: 'ok',
+              sqlite: 'ok',
+            },
+            uptime_seconds: 120,
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/configure')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            configured: 1,
+            agents: [
+              {
+                agentId: 'agent_1',
+                type: 'RULE_BASED',
+                riskProfile: 'CONSERVATIVE',
+                initialCapital: 10000,
+              },
+            ],
+            readyForBacktesting: true,
+          }),
+        });
+      }
+
+      if (url.includes('/api/backtest/run')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            testId: 'backtest_123',
+            status: 'COMPLETED',
+            topPerformer: 'agent_1',
+            results: [
+              {
+                agentId: 'agent_1',
+                agentType: 'RULE_BASED',
+                riskProfile: 'CONSERVATIVE',
+                totalReturnPct: 12.5,
+                winRate: 58.2,
+                profitFactor: 1.42,
+                maxDrawdown: 4.1,
+                sharpeRatio: 1.11,
+                totalTrades: 7,
+              },
+            ],
+            summary: {
+              averageReturn: 12.5,
+              bestReturn: 12.5,
+              worstReturn: 12.5,
+              averageWinRate: 58.2,
+              narrative: 'Rule-based agents held up well in the selected window.',
+            },
+          }),
+        });
+      }
+
+      if (url.includes('/api/backtest/results/backtest_123')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            testId: 'backtest_123',
+            config: {
+              symbols: ['BTC', 'ETH'],
+              startDate: '2024-01-01T00:00:00.000Z',
+              endDate: '2024-06-30T00:00:00.000Z',
+              slippageModel: 'FIXED',
+              commissionPct: 0.001,
+              agentConfigs: [
+                {
+                  agentId: 'agent_1',
+                  type: 'RULE_BASED',
+                  riskProfile: 'CONSERVATIVE',
+                  initialCapital: 10000,
+                },
+              ],
+            },
+            agentResults: [
+              {
+                agentId: 'agent_1',
+                agentType: 'RULE_BASED',
+                riskProfile: 'CONSERVATIVE',
+                metrics: {
+                  totalTrades: 7,
+                  winRate: 0.582,
+                  profitFactor: 1.42,
+                  totalReturnPct: 0.125,
+                  maxDrawdown: 0.041,
+                  sharpeRatio: 1.11,
+                  equityCurve: [
+                    { date: '2024-01-01T00:00:00.000Z', capital: 10000 },
+                    { date: '2024-06-30T00:00:00.000Z', capital: 11250 },
+                  ],
+                },
+                trades: [],
+              },
+            ],
+            comparison: {
+              topPerformerByReturn: 'agent_1',
+              averageReturn: 0.125,
+              bestReturn: 0.125,
+              worstReturn: 0.125,
+              averageWinRate: 0.582,
+              summary: 'Rule-based agents held up well in the selected window.',
+            },
+            startedAt: '2024-01-01T00:00:00.000Z',
+            completedAt: '2024-06-30T00:00:00.000Z',
+          }),
+        });
+      }
+
       if (url.includes('/api/coins?limit=50')) {
         return Promise.resolve({
           ok: true,
@@ -168,6 +287,133 @@ describe('App detail modal', () => {
 
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/coins/BTC?days=7');
+    });
+  });
+
+  it('keeps navigation usable when the health endpoint is unavailable', async () => {
+    mockFetch.mockImplementation((input: string | URL | Request) => {
+      const url = String(input);
+
+      if (url.includes('/api/health')) {
+        return Promise.reject(new Error('Network down'));
+      }
+
+      if (url.includes('/api/coins?limit=50')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            data: [
+              {
+                id: 'bitcoin',
+                symbol: 'BTC',
+                name: 'Bitcoin',
+                price_usd: 65000,
+                market_cap_usd: 1_000_000_000,
+                volume_24h_usd: 100_000_000,
+                price_change_24h_percent: 2.5,
+                price_change_7d_percent: 8.4,
+                volatility_24h: 4.2,
+                sentiment_score: 'BULL',
+                sentiment_confidence: 0.82,
+                sentiment_summary: 'Positive momentum backed by strong signal quality.',
+                trending_score: 44.5,
+                market_rank: 1,
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.includes('/api/coins/BTC?days=7')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            coin: {
+              id: 'bitcoin',
+              symbol: 'BTC',
+              name: 'Bitcoin',
+              price_usd: 65000,
+              market_cap_usd: 1_000_000_000,
+              volume_24h_usd: 100_000_000,
+              price_change_24h_percent: 2.5,
+              price_change_7d_percent: 8.4,
+              volatility_24h: 4.2,
+              sentiment_score: 'BULL',
+              sentiment_confidence: 0.82,
+              sentiment_summary: 'Positive momentum backed by strong signal quality.',
+              trending_score: 44.5,
+              market_rank: 1,
+            },
+            price_history: [
+              { timestamp: new Date().toISOString(), open: 64000, high: 65500, low: 63500, close: 65000 },
+            ],
+            headlines: ['Bitcoin rally continues after ETF inflows'],
+            scored_items: [],
+            sentiment_today: {
+              sentiment_score: 'BULL',
+              confidence: 0.82,
+              summary: 'Positive momentum backed by strong signal quality.',
+              key_catalysts: ['ETF inflows'],
+              risk_factors: ['Macro uncertainty'],
+              short_term_outlook: 'Near-term bias remains constructive while signal breadth holds.',
+              volatility_warning: false,
+              trending_score: 44.5,
+              source_breakdown: [],
+              collection_stats: {
+                total_items: 1,
+                source_count: 1,
+                weighted_frequency: 0.93,
+                average_recency_score: 0.93,
+                trending_score: 44.5,
+                collected_at: '2026-03-17T08:05:00.000Z',
+              },
+            },
+          }),
+        });
+      }
+
+      return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
+    });
+
+    render(<App />);
+
+    await screen.findByText('Bitcoin');
+    expect(screen.getByRole('button', { name: /system down/i })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Search ticker'), { target: { value: 'btc' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    await screen.findByText('Signal Overview');
+  });
+
+  it('validates and runs the backtesting workflow', async () => {
+    render(<App />);
+
+    await screen.findByText('Bitcoin');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Backtesting' }));
+
+    fireEvent.change(screen.getByLabelText('Symbols'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run Backtest' }));
+
+    expect(await screen.findByText('At least one symbol is required.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Symbols'), { target: { value: 'BTC, ETH' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Configure Agents' }));
+
+    expect(await screen.findByText('Configured 1 agent(s) for backtesting.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Run Backtest' }));
+
+    expect(await screen.findByText('Backtest backtest_123 completed. Stored test id is ready for reload.')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('backtest_123')).toBeInTheDocument();
+    expect(await screen.findByText('Equity Curve')).toBeInTheDocument();
+    expect(screen.getByText('Rule-based agents held up well in the selected window.')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/agents/configure', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/backtest/run', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/backtest/results/backtest_123');
     });
   });
 });

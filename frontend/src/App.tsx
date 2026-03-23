@@ -117,6 +117,122 @@ interface CoinDetail extends Coin {
   sentiment_today?: CoinSentimentDetail;
 }
 
+type HealthState = 'healthy' | 'degraded' | 'down';
+
+interface HealthPayload {
+  status: 'healthy' | 'degraded';
+  services: Record<string, string>;
+  uptime_seconds: number;
+}
+
+const HEALTH_POLL_INTERVAL_MS = 30 * 1000;
+
+type FrontendAgentType = 'RULE_BASED' | 'ML_BASED' | 'HYBRID';
+type FrontendRiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
+type BacktestSlippageModel = 'FIXED' | 'VOLUME_BASED' | 'MARKET_IMPACT';
+
+interface BacktestAgentDraft {
+  agentId: string;
+  type: FrontendAgentType;
+  riskProfile: FrontendRiskProfile;
+  initialCapital: string;
+}
+
+interface ConfiguredBacktestAgent {
+  agentId: string;
+  type: FrontendAgentType;
+  riskProfile: FrontendRiskProfile;
+  initialCapital: number;
+}
+
+interface BacktestRunSummary {
+  averageReturn: number;
+  bestReturn: number;
+  worstReturn: number;
+  averageWinRate: number;
+  narrative: string;
+}
+
+interface BacktestRunResultRow {
+  agentId: string;
+  agentType: string;
+  riskProfile: string;
+  totalReturnPct: number;
+  winRate: number;
+  profitFactor: number;
+  maxDrawdown: number;
+  sharpeRatio: number;
+  totalTrades: number;
+}
+
+interface BacktestRunResponse {
+  testId: string;
+  status: 'COMPLETED';
+  results: BacktestRunResultRow[];
+  topPerformer: string;
+  summary: BacktestRunSummary;
+}
+
+interface StoredBacktestResult {
+  testId: string;
+  config: {
+    symbols: string[];
+    startDate: string | Date;
+    endDate: string | Date;
+    slippageModel: BacktestSlippageModel;
+    commissionPct: number;
+    agentConfigs: ConfiguredBacktestAgent[];
+  };
+  agentResults: Array<{
+    agentId: string;
+    agentType: string;
+    riskProfile: string;
+    metrics: {
+      totalTrades: number;
+      winRate: number;
+      profitFactor: number;
+      totalReturnPct: number;
+      maxDrawdown: number;
+      sharpeRatio: number;
+      equityCurve: Array<{ date: string | Date; capital: number }>;
+    };
+    trades: Array<{
+      symbol: string;
+      signal: 'BUY' | 'SELL';
+      entryPrice: number;
+      exitPrice: number;
+      pnl: number;
+      pnlPct: number;
+      holdDays: number;
+      exitReason: string;
+    }>;
+  }>;
+  comparison: {
+    topPerformerByReturn: string;
+    averageReturn: number;
+    bestReturn: number;
+    worstReturn: number;
+    averageWinRate: number;
+    summary: string;
+  };
+  startedAt: string | Date;
+  completedAt: string | Date;
+}
+
+const BACKTEST_AGENT_TYPE_OPTIONS: FrontendAgentType[] = ['RULE_BASED', 'ML_BASED', 'HYBRID'];
+const BACKTEST_RISK_PROFILE_OPTIONS: FrontendRiskProfile[] = ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'];
+const BACKTEST_SLIPPAGE_OPTIONS: BacktestSlippageModel[] = ['FIXED', 'VOLUME_BASED', 'MARKET_IMPACT'];
+const BACKTEST_SESSION_TEST_ID_KEY = 'backtest:lastTestId';
+
+function createDefaultBacktestAgent(index = 0): BacktestAgentDraft {
+  return {
+    agentId: `agent_${index + 1}`,
+    type: 'RULE_BASED',
+    riskProfile: 'CONSERVATIVE',
+    initialCapital: '10000',
+  };
+}
+
 // ============================================================================
 // CUSTOM HOOKS
 // ============================================================================
@@ -185,6 +301,51 @@ function useCoinDetail(symbol: string | null) {
   }, [symbol]);
 
   return { detail, loading, error };
+}
+
+function useSystemHealth() {
+  const [health, setHealth] = useState<HealthPayload | null>(null);
+  const [status, setStatus] = useState<HealthState>('down');
+  const [error, setError] = useState<string | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const fetchHealth = async () => {
+      try {
+        const response = await fetch('/api/health');
+        const payload = await response.json().catch(() => null) as HealthPayload | null;
+
+        if (!response.ok || !payload) {
+          throw new Error(`Health check failed (${response.status}).`);
+        }
+
+        if (!isActive) return;
+
+        setHealth(payload);
+        setStatus(payload.status === 'healthy' ? 'healthy' : 'degraded');
+        setError(null);
+        setLastChecked(new Date());
+      } catch (err) {
+        if (!isActive) return;
+
+        setStatus('down');
+        setError(err instanceof Error ? err.message : 'Health check failed.');
+        setLastChecked(new Date());
+      }
+    };
+
+    fetchHealth();
+    const intervalId = setInterval(fetchHealth, HEALTH_POLL_INTERVAL_MS);
+
+    return () => {
+      isActive = false;
+      clearInterval(intervalId);
+    };
+  }, []);
+
+  return { health, status, error, lastChecked };
 }
 
 // ============================================================================
@@ -478,6 +639,10 @@ interface SentimentLookupResponse {
 
 function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: DashboardProps) {
   const [sortBy, setSortBy] = useState<SortBy>('market_cap');
+  const [refreshApiKey, setRefreshApiKey] = useState(() => sessionStorage.getItem('sentimentRefreshApiKey') ?? '');
+  const [refreshPending, setRefreshPending] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [refreshToast, setRefreshToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [analysisMode, setAnalysisMode] = useState<SentimentMode>('BASIC');
   const [analysisSymbolsInput, setAnalysisSymbolsInput] = useState('BTC, ETH');
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
@@ -681,16 +846,127 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
     }
   }, [labTab, modesData, modesLoading, modesError]);
 
+  useEffect(() => {
+    if (!refreshToast) return;
+    const timer = setTimeout(() => setRefreshToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [refreshToast]);
+
+  const triggerSentimentRefresh = async () => {
+    const apiKey = refreshApiKey.trim();
+    if (!apiKey) {
+      setRefreshError('API key is required to refresh sentiment.');
+      return;
+    }
+
+    setRefreshPending(true);
+    setRefreshError(null);
+
+    try {
+      const response = await fetch('/api/refresh-sentiment', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+        },
+      });
+
+      const payload = await response.json().catch(() => ({}));
+
+      if (response.status !== 202) {
+        throw new Error(
+          payload.error ??
+          `Request failed (${response.status}). Verify your API key and try again.`,
+        );
+      }
+
+      sessionStorage.setItem('sentimentRefreshApiKey', apiKey);
+      const jobId = typeof payload.job_id === 'string' ? payload.job_id : null;
+      setRefreshToast({
+        type: 'success',
+        message: jobId
+          ? `Sentiment refresh queued (job ${jobId}).`
+          : 'Sentiment refresh queued successfully.',
+      });
+    } catch (err) {
+      const message = err instanceof Error
+        ? err.message
+        : 'Refresh failed. Verify API key and try again.';
+      setRefreshError(message);
+      setRefreshToast({ type: 'error', message });
+    } finally {
+      setRefreshPending(false);
+    }
+  };
+
   return (
     <div style={{ padding: '1.5rem' }}>
       {/* Header */}
-      <div style={{ marginBottom: '1.5rem' }}>
-        <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem', fontWeight: '700' }}>
-          Sentiment Analyzer
-        </h1>
-        <p style={{ margin: '0', color: 'var(--text-muted)' }}>
-          Real-time cryptocurrency sentiment analysis
-        </p>
+      <div style={{ marginBottom: '1.5rem', display: 'grid', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem', flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ margin: '0 0 0.5rem 0', fontSize: '2rem', fontWeight: '700' }}>
+              Sentiment Analyzer
+            </h1>
+            <p style={{ margin: '0', color: 'var(--text-muted)' }}>
+              Real-time cryptocurrency sentiment analysis
+            </p>
+          </div>
+
+          <div style={{
+            border: '1px solid var(--border)',
+            borderRadius: '0.5rem',
+            padding: '0.6rem',
+            backgroundColor: 'var(--surface)',
+            minWidth: '270px',
+            maxWidth: '420px',
+            width: '100%',
+          }}>
+            <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--text-subtle)', marginBottom: '0.35rem' }}>
+              Refresh Sentiment Cache
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <input
+                type="password"
+                value={refreshApiKey}
+                onChange={e => {
+                  setRefreshApiKey(e.target.value);
+                  if (refreshError) setRefreshError(null);
+                }}
+                placeholder="API key"
+                aria-label="Sentiment refresh API key"
+                style={{
+                  flex: 1,
+                  minWidth: '160px',
+                  padding: '0.45rem',
+                  borderRadius: '0.375rem',
+                  border: '1px solid var(--border-input)',
+                  backgroundColor: 'var(--surface)',
+                  color: 'var(--text)',
+                }}
+              />
+              <button
+                onClick={triggerSentimentRefresh}
+                disabled={refreshPending}
+                style={{
+                  padding: '0.45rem 0.7rem',
+                  border: 'none',
+                  borderRadius: '0.375rem',
+                  backgroundColor: refreshPending ? '#93c5fd' : '#2563eb',
+                  color: '#fff',
+                  cursor: refreshPending ? 'wait' : 'pointer',
+                  fontWeight: 600,
+                }}
+              >
+                {refreshPending ? 'Queuing...' : 'Refresh'}
+              </button>
+            </div>
+            {refreshError && (
+              <div style={{ marginTop: '0.4rem', fontSize: '0.78rem', color: '#b91c1c' }}>
+                {refreshError}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Controls */}
@@ -744,7 +1020,6 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
         </div>
       </div>
 
-      {/* Grid */}
       <section
         style={{
           marginBottom: '1.5rem',
@@ -933,6 +1208,477 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
           <CoinCard key={coin.id} coin={coin} onSelect={onCoinSelect} sortBy={sortBy} sortRank={index + 1} />
         ))}
       </div>
+
+      {refreshToast && (
+        <div
+          role="status"
+          style={{
+            position: 'fixed',
+            right: '1rem',
+            bottom: '1rem',
+            zIndex: 1200,
+            maxWidth: '320px',
+            padding: '0.75rem 0.875rem',
+            borderRadius: '0.5rem',
+            border: `1px solid ${refreshToast.type === 'success' ? '#86efac' : '#fca5a5'}`,
+            backgroundColor: refreshToast.type === 'success' ? '#f0fdf4' : '#fef2f2',
+            color: refreshToast.type === 'success' ? '#166534' : '#991b1b',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            boxShadow: '0 8px 24px rgba(15, 23, 42, 0.15)',
+          }}
+        >
+          {refreshToast.message}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BacktestingWorkspace() {
+  const [agentDrafts, setAgentDrafts] = useState<BacktestAgentDraft[]>([createDefaultBacktestAgent(0)]);
+  const [configuredAgents, setConfiguredAgents] = useState<ConfiguredBacktestAgent[]>([]);
+  const [configurePending, setConfigurePending] = useState(false);
+  const [configureMessage, setConfigureMessage] = useState<string | null>(null);
+  const [configureError, setConfigureError] = useState<string | null>(null);
+  const [agentValidationError, setAgentValidationError] = useState<string | null>(null);
+
+  const [symbolsInput, setSymbolsInput] = useState('BTC, ETH');
+  const [startDate, setStartDate] = useState('2024-01-01');
+  const [endDate, setEndDate] = useState('2024-06-30');
+  const [slippageModel, setSlippageModel] = useState<BacktestSlippageModel>('FIXED');
+  const [commissionPct, setCommissionPct] = useState('0.001');
+  const [runPending, setRunPending] = useState(false);
+  const [runError, setRunError] = useState<string | null>(null);
+  const [runValidationError, setRunValidationError] = useState<string | null>(null);
+  const [runResponse, setRunResponse] = useState<BacktestRunResponse | null>(null);
+  const [testIdInput, setTestIdInput] = useState(() => sessionStorage.getItem(BACKTEST_SESSION_TEST_ID_KEY) ?? '');
+  const [loadPending, setLoadPending] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [result, setResult] = useState<StoredBacktestResult | null>(null);
+
+  const normalizeAgentPayload = () => agentDrafts.map(draft => ({
+    agentId: draft.agentId.trim() || undefined,
+    type: draft.type,
+    riskProfile: draft.riskProfile,
+    initialCapital: Number(draft.initialCapital),
+  }));
+
+  const validateAgentDrafts = () => {
+    if (agentDrafts.length === 0) return 'Add at least one agent.';
+
+    for (const [index, draft] of agentDrafts.entries()) {
+      if (!draft.agentId.trim()) return `Agent ${index + 1} requires an id.`;
+      const initialCapital = Number(draft.initialCapital);
+      if (!Number.isFinite(initialCapital) || initialCapital <= 0) {
+        return `Agent ${index + 1} needs a positive initial capital.`;
+      }
+    }
+
+    return null;
+  };
+
+  const validateRunInputs = () => {
+    const agentError = validateAgentDrafts();
+    if (agentError) return agentError;
+
+    const symbols = symbolsInput.split(',').map(symbol => symbol.trim()).filter(Boolean);
+    if (symbols.length === 0) return 'At least one symbol is required.';
+    if (!startDate || !endDate) return 'Start date and end date are required.';
+
+    const parsedStartDate = new Date(startDate);
+    const parsedEndDate = new Date(endDate);
+    if (Number.isNaN(parsedStartDate.getTime()) || Number.isNaN(parsedEndDate.getTime()) || parsedStartDate >= parsedEndDate) {
+      return 'Enter a valid date range where the start date is before the end date.';
+    }
+
+    const parsedCommission = Number(commissionPct);
+    if (!Number.isFinite(parsedCommission) || parsedCommission < 0) {
+      return 'Commission must be zero or a positive decimal value.';
+    }
+
+    return null;
+  };
+
+  const updateAgentDraft = (index: number, field: keyof BacktestAgentDraft, value: string) => {
+    setAgentDrafts(current => current.map((draft, draftIndex) => (
+      draftIndex === index ? { ...draft, [field]: value } : draft
+    )));
+    setAgentValidationError(null);
+    setConfigureError(null);
+    setRunValidationError(null);
+  };
+
+  const loadBacktestResult = async (candidateId?: string) => {
+    const testId = (candidateId ?? testIdInput).trim();
+    if (!testId) {
+      setLoadError('Enter a test id to load stored results.');
+      return;
+    }
+
+    setLoadPending(true);
+    setLoadError(null);
+
+    try {
+      const response = await fetch(`/api/backtest/results/${encodeURIComponent(testId)}`);
+      const payload = await response.json().catch(() => ({})) as StoredBacktestResult & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Unable to load backtest result (${response.status}).`);
+      }
+
+      setResult(payload);
+      setTestIdInput(testId);
+      sessionStorage.setItem(BACKTEST_SESSION_TEST_ID_KEY, testId);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : 'Unable to load backtest result.');
+    } finally {
+      setLoadPending(false);
+    }
+  };
+
+  const handleConfigureAgents = async () => {
+    const validationError = validateAgentDrafts();
+    if (validationError) {
+      setAgentValidationError(validationError);
+      return;
+    }
+
+    setConfigurePending(true);
+    setConfigureError(null);
+    setConfigureMessage(null);
+    setAgentValidationError(null);
+
+    try {
+      const response = await fetch('/api/agents/configure', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agents: normalizeAgentPayload() }),
+      });
+
+      const payload = await response.json().catch(() => ({})) as {
+        error?: string;
+        configured?: number;
+        agents?: ConfiguredBacktestAgent[];
+      };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Failed to configure agents (${response.status}).`);
+      }
+
+      setConfiguredAgents(payload.agents ?? []);
+      setConfigureMessage(`Configured ${payload.configured ?? payload.agents?.length ?? agentDrafts.length} agent(s) for backtesting.`);
+    } catch (err) {
+      setConfigureError(err instanceof Error ? err.message : 'Failed to configure agents.');
+    } finally {
+      setConfigurePending(false);
+    }
+  };
+
+  const handleRunBacktest = async () => {
+    const validationError = validateRunInputs();
+    if (validationError) {
+      setRunValidationError(validationError);
+      return;
+    }
+
+    const symbols = symbolsInput.split(',').map(symbol => symbol.trim().toUpperCase()).filter(Boolean);
+
+    setRunPending(true);
+    setRunError(null);
+    setRunValidationError(null);
+
+    try {
+      const response = await fetch('/api/backtest/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols,
+          startDate,
+          endDate,
+          agents: normalizeAgentPayload(),
+          slippageModel,
+          commissionPct: Number(commissionPct),
+        }),
+      });
+
+      const payload = await response.json().catch(() => ({})) as BacktestRunResponse & { error?: string };
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `Backtest run failed (${response.status}).`);
+      }
+
+      setRunResponse(payload);
+      setTestIdInput(payload.testId);
+      sessionStorage.setItem(BACKTEST_SESSION_TEST_ID_KEY, payload.testId);
+      await loadBacktestResult(payload.testId);
+    } catch (err) {
+      setRunError(err instanceof Error ? err.message : 'Backtest run failed.');
+    } finally {
+      setRunPending(false);
+    }
+  };
+
+  const chartLabels = result?.agentResults[0]?.metrics.equityCurve.map(point => {
+    const date = new Date(point.date);
+    return Number.isNaN(date.getTime()) ? String(point.date) : date.toLocaleDateString();
+  }) ?? [];
+
+  const chartColors = ['#2563eb', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
+  const equityChartData = result ? {
+    labels: chartLabels,
+    datasets: result.agentResults.map((agent, index) => ({
+      label: agent.agentId,
+      data: agent.metrics.equityCurve.map(point => point.capital),
+      borderColor: chartColors[index % chartColors.length],
+      backgroundColor: 'transparent',
+      borderWidth: 2,
+      pointRadius: 0,
+      tension: 0.2,
+    })),
+  } : null;
+
+  const summaryCards = result ? [
+    { label: 'Top Performer', value: result.comparison.topPerformerByReturn },
+    { label: 'Average Return', value: `${(result.comparison.averageReturn * 100).toFixed(2)}%` },
+    { label: 'Best Return', value: `${(result.comparison.bestReturn * 100).toFixed(2)}%` },
+    { label: 'Average Win Rate', value: `${(result.comparison.averageWinRate * 100).toFixed(1)}%` },
+  ] : runResponse ? [
+    { label: 'Top Performer', value: runResponse.topPerformer },
+    { label: 'Average Return', value: `${runResponse.summary.averageReturn.toFixed(2)}%` },
+    { label: 'Best Return', value: `${runResponse.summary.bestReturn.toFixed(2)}%` },
+    { label: 'Average Win Rate', value: `${runResponse.summary.averageWinRate.toFixed(1)}%` },
+  ] : [];
+
+  return (
+    <div style={{ padding: '1.5rem', display: 'grid', gap: '1rem' }}>
+      <section style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', backgroundColor: 'var(--surface)' }}>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '1.25rem', fontWeight: 700 }}>Backtesting Workspace</h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            Configure agents, run historical backtests, and reload saved simulations by test id.
+          </p>
+        </div>
+
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          {agentDrafts.map((draft, index) => (
+            <div key={`${draft.agentId}-${index}`} style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'end' }}>
+              <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Agent ID
+                <input
+                  value={draft.agentId}
+                  onChange={event => updateAgentDraft(index, 'agentId', event.target.value)}
+                  placeholder="agent_alpha"
+                  style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                />
+              </label>
+              <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Type
+                <select
+                  value={draft.type}
+                  onChange={event => updateAgentDraft(index, 'type', event.target.value)}
+                  style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                >
+                  {BACKTEST_AGENT_TYPE_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Risk Profile
+                <select
+                  value={draft.riskProfile}
+                  onChange={event => updateAgentDraft(index, 'riskProfile', event.target.value)}
+                  style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                >
+                  {BACKTEST_RISK_PROFILE_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+                </select>
+              </label>
+              <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                Initial Capital
+                <input
+                  type="number"
+                  min="1"
+                  value={draft.initialCapital}
+                  onChange={event => updateAgentDraft(index, 'initialCapital', event.target.value)}
+                  style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                />
+              </label>
+              <button
+                type="button"
+                onClick={() => setAgentDrafts(current => current.length === 1 ? current : current.filter((_, draftIndex) => draftIndex !== index))}
+                disabled={agentDrafts.length === 1}
+                style={{ padding: '0.5rem 0.75rem', borderRadius: '0.375rem', border: '1px solid var(--border)', backgroundColor: 'var(--surface-2)', cursor: agentDrafts.length === 1 ? 'not-allowed' : 'pointer', color: 'var(--text)' }}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              onClick={() => setAgentDrafts(current => [...current, createDefaultBacktestAgent(current.length)])}
+              style={{ padding: '0.55rem 0.85rem', borderRadius: '0.375rem', border: '1px solid var(--border)', backgroundColor: 'var(--surface-2)', cursor: 'pointer', color: 'var(--text)', fontWeight: 600 }}
+            >
+              Add Agent
+            </button>
+            <button
+              type="button"
+              onClick={handleConfigureAgents}
+              disabled={configurePending}
+              style={{ padding: '0.55rem 0.85rem', borderRadius: '0.375rem', border: 'none', backgroundColor: configurePending ? '#93c5fd' : '#2563eb', color: '#fff', cursor: configurePending ? 'wait' : 'pointer', fontWeight: 600 }}
+            >
+              {configurePending ? 'Configuring...' : 'Configure Agents'}
+            </button>
+          </div>
+
+          {agentValidationError && <div style={{ fontSize: '0.82rem', color: '#b91c1c' }}>{agentValidationError}</div>}
+          {configureError && <div style={{ fontSize: '0.82rem', color: '#b91c1c' }}>{configureError}</div>}
+          {configureMessage && <div style={{ fontSize: '0.82rem', color: '#047857' }}>{configureMessage}</div>}
+          {configuredAgents.length > 0 && (
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+              Ready agents: {configuredAgents.map(agent => `${agent.agentId} (${agent.type}/${agent.riskProfile})`).join(', ')}
+            </div>
+          )}
+        </div>
+      </section>
+
+      <section style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', backgroundColor: 'var(--surface)' }}>
+        <h2 style={{ margin: '0 0 0.75rem 0', fontSize: '1.1rem', fontWeight: 700 }}>Run Backtest</h2>
+        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'end' }}>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Symbols
+            <input
+              value={symbolsInput}
+              onChange={event => {
+                setSymbolsInput(event.target.value);
+                setRunValidationError(null);
+              }}
+              placeholder="BTC, ETH"
+              style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+            />
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Start Date
+            <input type="date" value={startDate} onChange={event => setStartDate(event.target.value)} style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }} />
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            End Date
+            <input type="date" value={endDate} onChange={event => setEndDate(event.target.value)} style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }} />
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Slippage
+            <select value={slippageModel} onChange={event => setSlippageModel(event.target.value as BacktestSlippageModel)} style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}>
+              {BACKTEST_SLIPPAGE_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
+            </select>
+          </label>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+            Commission %
+            <input type="number" min="0" step="0.0001" value={commissionPct} onChange={event => setCommissionPct(event.target.value)} style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }} />
+          </label>
+          <button
+            type="button"
+            onClick={handleRunBacktest}
+            disabled={runPending}
+            style={{ padding: '0.55rem 0.95rem', borderRadius: '0.375rem', border: 'none', backgroundColor: runPending ? '#93c5fd' : '#2563eb', color: '#fff', cursor: runPending ? 'wait' : 'pointer', fontWeight: 600 }}
+          >
+            {runPending ? 'Running...' : 'Run Backtest'}
+          </button>
+        </div>
+        {runValidationError && <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#b91c1c' }}>{runValidationError}</div>}
+        {runError && <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#b91c1c' }}>{runError}</div>}
+        {runResponse && (
+          <div style={{ marginTop: '0.75rem', fontSize: '0.82rem', color: '#047857' }}>
+            Backtest {runResponse.testId} completed. Stored test id is ready for reload.
+          </div>
+        )}
+      </section>
+
+      <section style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', backgroundColor: 'var(--surface)' }}>
+        <h2 style={{ margin: '0 0 0.75rem 0', fontSize: '1.1rem', fontWeight: 700 }}>Results</h2>
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'end' }}>
+          <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)', minWidth: '18rem' }}>
+            Test ID
+            <input
+              value={testIdInput}
+              onChange={event => {
+                setTestIdInput(event.target.value);
+                setLoadError(null);
+              }}
+              placeholder="backtest_123456"
+              style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => void loadBacktestResult()}
+            disabled={loadPending}
+            style={{ padding: '0.55rem 0.95rem', borderRadius: '0.375rem', border: 'none', backgroundColor: loadPending ? '#93c5fd' : '#2563eb', color: '#fff', cursor: loadPending ? 'wait' : 'pointer', fontWeight: 600 }}
+          >
+            {loadPending ? 'Loading...' : 'Load Results'}
+          </button>
+        </div>
+        {loadError && <div style={{ marginTop: '0.5rem', fontSize: '0.82rem', color: '#b91c1c' }}>{loadError}</div>}
+
+        {summaryCards.length > 0 && (
+          <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '0.75rem' }}>
+            {summaryCards.map(card => (
+              <div key={card.label} style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.75rem', backgroundColor: 'var(--surface-2)' }}>
+                <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>{card.label}</div>
+                <div style={{ fontSize: '1rem', fontWeight: 700 }}>{card.value}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(result?.comparison.summary || runResponse?.summary.narrative) && (
+          <div style={{ marginTop: '0.75rem', padding: '0.75rem', borderRadius: '0.625rem', backgroundColor: 'var(--surface-2)', color: 'var(--text-subtle)', fontSize: '0.86rem' }}>
+            {result?.comparison.summary ?? runResponse?.summary.narrative}
+          </div>
+        )}
+
+        {result && equityChartData && (
+          <div style={{ marginTop: '1rem', display: 'grid', gap: '1rem' }}>
+            <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '1rem' }}>
+              <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: 700 }}>Equity Curve</h3>
+              <Line
+                data={equityChartData}
+                options={{
+                  responsive: true,
+                  plugins: { tooltip: { mode: 'index', intersect: false } },
+                  scales: {
+                    x: { grid: { display: false } },
+                    y: { ticks: { callback: value => `$${Number(value).toLocaleString()}` } },
+                  },
+                }}
+              />
+            </div>
+
+            <div style={{ display: 'grid', gap: '0.75rem' }}>
+              {result.agentResults.map(agent => (
+                <div key={agent.agentId} style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.9rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: 700 }}>{agent.agentId}</div>
+                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{agent.agentType} / {agent.riskProfile}</div>
+                    </div>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {agent.trades.length} trade(s)
+                    </div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))', gap: '0.5rem', fontSize: '0.82rem' }}>
+                    <div><strong>Return:</strong> {(agent.metrics.totalReturnPct * 100).toFixed(2)}%</div>
+                    <div><strong>Win rate:</strong> {(agent.metrics.winRate * 100).toFixed(1)}%</div>
+                    <div><strong>Sharpe:</strong> {agent.metrics.sharpeRatio.toFixed(2)}</div>
+                    <div><strong>Drawdown:</strong> {(agent.metrics.maxDrawdown * 100).toFixed(2)}%</div>
+                    <div><strong>Profit factor:</strong> {agent.metrics.profitFactor.toFixed(2)}</div>
+                    <div><strong>Total trades:</strong> {agent.metrics.totalTrades}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
     </div>
   );
 }
@@ -1364,15 +2110,17 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
+  const { health, status: healthStatus, error: healthError, lastChecked } = useSystemHealth();
   const [selectedSymbol, setSelectedSymbol] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<ActiveView>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [healthExpanded, setHealthExpanded] = useState(false);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
@@ -1413,6 +2161,32 @@ export default function App() {
     cursor: 'pointer',
     transition: 'color 0.15s ease',
   });
+
+  const healthConfig: Record<HealthState, { label: string; background: string; border: string; color: string; dot: string }> = {
+    healthy: {
+      label: 'Healthy',
+      background: '#ecfdf5',
+      border: '#86efac',
+      color: '#166534',
+      dot: '#16a34a',
+    },
+    degraded: {
+      label: 'Degraded',
+      background: '#fffbeb',
+      border: '#fcd34d',
+      color: '#92400e',
+      dot: '#d97706',
+    },
+    down: {
+      label: 'Down',
+      background: '#fef2f2',
+      border: '#fca5a5',
+      color: '#991b1b',
+      dot: '#dc2626',
+    },
+  };
+
+  const currentHealth = healthConfig[healthStatus];
 
   return (
     <div style={{ minHeight: '100vh', backgroundColor: 'var(--bg)', fontFamily: 'system-ui, sans-serif', color: 'var(--text)' }}>
@@ -1456,6 +2230,7 @@ export default function App() {
           display: 'flex',
           alignItems: 'center',
           gap: '1.5rem',
+          flexWrap: 'wrap',
         }}
       >
         <h1 style={{ margin: '0', fontSize: '1.25rem', fontWeight: '700', padding: '1rem 0', color: 'var(--text)' }}>
@@ -1474,75 +2249,189 @@ export default function App() {
           <button style={navTabStyle('social')} onClick={() => setActiveView('social')}>
             Social Intel
           </button>
+          <button style={navTabStyle('backtesting')} onClick={() => setActiveView('backtesting')}>
+            Backtesting
+          </button>
         </div>
-        <form
-          onSubmit={handleTickerSearch}
-          style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap', padding: '0.75rem 0' }}
-        >
-          <label htmlFor="coin-ticker-search" style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)', fontWeight: 600 }}>
-            Search ticker
-          </label>
-          <input
-            id="coin-ticker-search"
-            type="search"
-            value={searchQuery}
-            onChange={e => {
-              setSearchQuery(e.target.value);
-              if (searchFeedback) setSearchFeedback(null);
-            }}
-            placeholder="BTC"
-            aria-label="Search ticker"
-            style={{
-              width: '10rem',
-              padding: '0.5rem 0.75rem',
-              borderRadius: '0.375rem',
-              border: '1px solid var(--border-input)',
-              backgroundColor: 'var(--surface)',
-              color: 'var(--text)',
-              fontSize: '0.875rem',
-            }}
-          />
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 0' }}>
+          <div style={{ position: 'relative' }}>
+            <button
+              type="button"
+              aria-expanded={healthExpanded}
+              onClick={() => setHealthExpanded(open => !open)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.45rem',
+                borderRadius: '999px',
+                border: `1px solid ${currentHealth.border}`,
+                backgroundColor: currentHealth.background,
+                color: currentHealth.color,
+                padding: '0.45rem 0.75rem',
+                cursor: 'pointer',
+                fontSize: '0.8rem',
+                fontWeight: 700,
+                lineHeight: 1,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <span
+                aria-hidden="true"
+                style={{
+                  width: '0.55rem',
+                  height: '0.55rem',
+                  borderRadius: '50%',
+                  backgroundColor: currentHealth.dot,
+                  boxShadow: `0 0 0 3px ${currentHealth.background}`,
+                }}
+              />
+              System {currentHealth.label}
+            </button>
+
+            {healthExpanded && (
+              <div
+                role="dialog"
+                aria-label="System health details"
+                style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 0.5rem)',
+                  right: 0,
+                  width: 'min(22rem, calc(100vw - 3rem))',
+                  borderRadius: '0.75rem',
+                  border: '1px solid var(--border)',
+                  backgroundColor: 'var(--surface)',
+                  boxShadow: '0 18px 48px rgba(15, 23, 42, 0.18)',
+                  padding: '0.9rem',
+                  zIndex: 1100,
+                }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginBottom: '0.75rem', alignItems: 'center' }}>
+                  <div>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>System Health</div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      Polls every {Math.round(HEALTH_POLL_INTERVAL_MS / 1000)}s
+                    </div>
+                  </div>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: currentHealth.color }}>
+                    {currentHealth.label}
+                  </span>
+                </div>
+
+                {health?.services ? (
+                  <div style={{ display: 'grid', gap: '0.45rem' }}>
+                    {Object.entries(health.services).map(([service, serviceStatus]) => {
+                      const isServiceHealthy = serviceStatus === 'ok';
+                      return (
+                        <div
+                          key={service}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            gap: '1rem',
+                            padding: '0.45rem 0.55rem',
+                            borderRadius: '0.5rem',
+                            backgroundColor: isServiceHealthy ? 'rgba(34, 197, 94, 0.08)' : 'rgba(245, 158, 11, 0.12)',
+                          }}
+                        >
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-strong)', textTransform: 'capitalize' }}>
+                            {service.replace(/_/g, ' ')}
+                          </span>
+                          <span style={{ fontSize: '0.78rem', fontWeight: 700, color: isServiceHealthy ? '#166534' : '#92400e' }}>
+                            {serviceStatus}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    Service breakdown is unavailable while the health endpoint is down.
+                  </div>
+                )}
+
+                <div style={{ marginTop: '0.8rem', display: 'grid', gap: '0.25rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                  {typeof health?.uptime_seconds === 'number' && (
+                    <span>Uptime: {Math.floor(health.uptime_seconds)}s</span>
+                  )}
+                  {lastChecked && (
+                    <span>Last checked: {lastChecked.toLocaleTimeString()}</span>
+                  )}
+                  {healthError && (
+                    <span style={{ color: '#b91c1c' }}>{healthError}</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <form
+            onSubmit={handleTickerSearch}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}
+          >
+            <label htmlFor="coin-ticker-search" style={{ fontSize: '0.8125rem', color: 'var(--text-subtle)', fontWeight: 600 }}>
+              Search ticker
+            </label>
+            <input
+              id="coin-ticker-search"
+              type="search"
+              value={searchQuery}
+              onChange={e => {
+                setSearchQuery(e.target.value);
+                if (searchFeedback) setSearchFeedback(null);
+              }}
+              placeholder="BTC"
+              aria-label="Search ticker"
+              style={{
+                width: '10rem',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.375rem',
+                border: '1px solid var(--border-input)',
+                backgroundColor: 'var(--surface)',
+                color: 'var(--text)',
+                fontSize: '0.875rem',
+              }}
+            />
+            <button
+              type="submit"
+              disabled={loading}
+              style={{
+                padding: '0.5rem 0.9rem',
+                borderRadius: '0.375rem',
+                border: 'none',
+                backgroundColor: loading ? '#93c5fd' : '#2563eb',
+                color: '#ffffff',
+                cursor: loading ? 'wait' : 'pointer',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+              }}
+            >
+              Open
+            </button>
+            {searchFeedback && (
+              <span style={{ fontSize: '0.8125rem', color: '#b91c1c' }} role="status">
+                {searchFeedback}
+              </span>
+            )}
+          </form>
+
           <button
-            type="submit"
-            disabled={loading}
+            onClick={() => setIsDark(d => !d)}
+            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
             style={{
-              padding: '0.5rem 0.9rem',
+              background: 'none',
+              border: '1px solid var(--border)',
               borderRadius: '0.375rem',
-              border: 'none',
-              backgroundColor: loading ? '#93c5fd' : '#2563eb',
-              color: '#ffffff',
-              cursor: loading ? 'wait' : 'pointer',
-              fontSize: '0.875rem',
-              fontWeight: 600,
+              cursor: 'pointer',
+              fontSize: '1.1rem',
+              padding: '0.35rem 0.55rem',
+              color: 'var(--text-muted)',
+              lineHeight: 1,
+              flexShrink: 0,
             }}
           >
-            Open
+            {isDark ? '☀️' : '🌙'}
           </button>
-          {searchFeedback && (
-            <span style={{ fontSize: '0.8125rem', color: '#b91c1c' }} role="status">
-              {searchFeedback}
-            </span>
-          )}
-        </form>
-
-        {/* Dark mode toggle */}
-        <button
-          onClick={() => setIsDark(d => !d)}
-          title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          style={{
-            background: 'none',
-            border: '1px solid var(--border)',
-            borderRadius: '0.375rem',
-            cursor: 'pointer',
-            fontSize: '1.1rem',
-            padding: '0.35rem 0.55rem',
-            color: 'var(--text-muted)',
-            lineHeight: 1,
-            flexShrink: 0,
-          }}
-        >
-          {isDark ? '☀️' : '🌙'}
-        </button>
+        </div>
       </nav>
 
       {/* Main */}
@@ -1564,6 +2453,9 @@ export default function App() {
         )}
         {activeView === 'social' && (
           <SocialDashboard />
+        )}
+        {activeView === 'backtesting' && (
+          <BacktestingWorkspace />
         )}
       </main>
 
