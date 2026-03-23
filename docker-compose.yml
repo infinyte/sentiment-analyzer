@@ -1,4 +1,13 @@
 services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -8,8 +17,12 @@ services:
       NODE_ENV: production
       PORT: 3000
       DATABASE_PATH: /app/data/sentiment_analyzer.db
+      REDIS_URL: redis://redis:6379
     volumes:
       - sqlite_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
@@ -17,6 +30,42 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  tournament-worker:
+    build:
+      context: ./backend
+      target: production
+    env_file: ./backend/.env
+    command: ["node", "dist/workers/tournament-worker-process.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/sentiment_analyzer.db
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  scraper-worker:
+    build:
+      context: ./backend
+      target: production
+    env_file: ./backend/.env
+    command: ["node", "dist/workers/scraper-worker-process.js"]
+    environment:
+      NODE_ENV: production
+      DATABASE_PATH: /app/data/sentiment_analyzer.db
+      REDIS_URL: redis://redis:6379
+    volumes:
+      - sqlite_data:/app/data
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
 
   frontend:
     build:

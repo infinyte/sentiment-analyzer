@@ -77,20 +77,33 @@ export function useSocialItems(filter: ItemsFilter = {}) {
 
 // ── Stats ─────────────────────────────────────────────────────────────────────
 
-export function useSocialStats() {
-  const [data, setData] = useState<SocialStats | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export function useSocialStats(refreshInterval = 60_000) {
+  const [data, setData]                     = useState<SocialStats | null>(null);
+  const [loading, setLoading]               = useState(true);
+  const [error, setError]                   = useState<string | null>(null);
+  const [lastRefreshed, setLastRefreshed]   = useState<Date | null>(null);
 
-  useEffect(() => {
-    fetch('/api/social-media/stats')
-      .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
-      .then(d => { setData(d); setError(null); })
-      .catch(err => setError(err.message))
-      .finally(() => setLoading(false));
+  const fetch_ = useCallback(async () => {
+    try {
+      const r = await fetch('/api/social-media/stats');
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+      setError(null);
+      setLastRefreshed(new Date());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  return { data, loading, error };
+  useEffect(() => {
+    fetch_();
+    const id = setInterval(fetch_, refreshInterval);
+    return () => clearInterval(id);
+  }, [fetch_, refreshInterval]);
+
+  return { data, loading, error, lastRefreshed, refresh: fetch_ };
 }
 
 // ── Trend score ───────────────────────────────────────────────────────────────

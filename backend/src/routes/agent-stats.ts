@@ -11,21 +11,21 @@
  */
 
 import { Router } from 'express';
-import Database from 'better-sqlite3';
-import { AgentCosmeticsManager } from '../services/evolutionary/agent-cosmetics-manager.js';
-import { AgentStatisticsManager } from '../services/evolutionary/agent-statistics-manager.js';
+import type { IAgentRepository } from '../repositories/interfaces/agent.repository.js';
 
-export function createAgentStatsRouter(db: Database.Database): Router {
+const EMOJI_PALETTE = ['🟢', '🔴', '🟡', '💎', '🔥', '⚡', '🌟', '🎯', '🚀', '🏆'];
+const COLOR_PALETTE_RE = /^#[0-9A-Fa-f]{6}$/;
+
+export function createAgentStatsRouter(agentRepo: IAgentRepository): Router {
   const router = Router();
-  const cosmetics = new AgentCosmeticsManager(db);
-  const stats     = new AgentStatisticsManager(db);
 
   // GET /api/agents — list all active agents (joined with stats)
-  router.get('/api/agents', (req, res) => {
+  router.get('/api/agents', async (req, res) => {
     try {
       const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 100);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
+<<<<<<< HEAD
 <<<<<<< Updated upstream
       const agents = db.prepare(`
         SELECT
@@ -47,6 +47,12 @@ export function createAgentStatsRouter(db: Database.Database): Router {
 =======
       const result = await agentRepo.findAgentsPaginated('ACTIVE', limit, offset);
 >>>>>>> Stashed changes
+=======
+      const [agents, total] = await Promise.all([
+        agentRepo.findActiveAgentsWithStats(limit, offset),
+        agentRepo.countAgentsByStatus('ACTIVE'),
+      ]);
+>>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
 
       res.json({ agents: result.agents, total: result.total, limit, offset });
     } catch (error: unknown) {
@@ -55,10 +61,10 @@ export function createAgentStatsRouter(db: Database.Database): Router {
   });
 
   // GET /api/agents/stats/leaderboard — MUST come before /api/agents/:id
-  router.get('/api/agents/stats/leaderboard', (req, res) => {
+  router.get('/api/agents/stats/leaderboard', async (req, res) => {
     try {
       const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
-      const leaderboard = stats.getTopAgents(limit);
+      const leaderboard = await agentRepo.getTopAgents(limit);
       res.json(leaderboard);
     } catch (error: unknown) {
       res.status(500).json({ error: String(error) });
@@ -66,15 +72,14 @@ export function createAgentStatsRouter(db: Database.Database): Router {
   });
 
   // GET /api/agents/:id — single agent detail
-  router.get('/api/agents/:id', (req, res) => {
+  router.get('/api/agents/:id', async (req, res) => {
     try {
       const { id } = req.params;
 
-      const agent = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id);
+      const agent = await agentRepo.findAgentById(id);
       if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
-      let agentStats = null;
-      try { agentStats = stats.getStats(id); } catch { /* no stats yet */ }
+      const agentStats = await agentRepo.getStats(id).catch(() => null);
 
       res.json({ ...agent, stats: agentStats ?? {} });
     } catch (error: unknown) {
@@ -83,23 +88,44 @@ export function createAgentStatsRouter(db: Database.Database): Router {
   });
 
   // PUT /api/agents/:id/customize — update cosmetics
-  router.put('/api/agents/:id/customize', (req, res) => {
+  router.put('/api/agents/:id/customize', async (req, res) => {
     try {
       const { id } = req.params;
 
-      if (!db.prepare('SELECT id FROM agent_registry WHERE id = ?').get(id)) {
+      if (!await agentRepo.findAgentById(id)) {
         return res.status(404).json({ error: 'Agent not found' });
       }
 
       const { custom_name, emoji, color, biography, nickname } = req.body as Record<string, string>;
 
-      if (custom_name !== undefined) cosmetics.setCustomName(id, custom_name);
-      if (emoji       !== undefined) cosmetics.setEmoji(id, emoji);
-      if (color       !== undefined) cosmetics.setColor(id, color);
-      if (biography   !== undefined) cosmetics.setBiography(id, biography);
-      if (nickname    !== undefined) cosmetics.setNickname(id, nickname);
+      // Validate inputs before applying
+      if (custom_name !== undefined) {
+        if (!custom_name || custom_name.length === 0) throw new Error('Name cannot be empty');
+        if (custom_name.length > 255) throw new Error('Name too long (max 255 chars)');
+        if (!/^[a-zA-Z0-9\s\-_]+$/.test(custom_name)) throw new Error('Invalid characters in name');
+      }
+      if (emoji !== undefined && !EMOJI_PALETTE.includes(emoji)) {
+        throw new Error(`Invalid emoji. Choose from: ${EMOJI_PALETTE.join(' ')}`);
+      }
+      if (color !== undefined && !COLOR_PALETTE_RE.test(color)) {
+        throw new Error('Invalid hex color format (use #RRGGBB)');
+      }
+      if (biography !== undefined && biography.length > 1000) {
+        throw new Error('Biography too long (max 1000 chars)');
+      }
 
-      const updated = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id);
+      const patch: Record<string, string | undefined> = {};
+      if (custom_name !== undefined) patch.custom_name = custom_name;
+      if (emoji       !== undefined) patch.emoji       = emoji;
+      if (color       !== undefined) patch.color       = color;
+      if (biography   !== undefined) patch.biography   = biography;
+      if (nickname    !== undefined) patch.nickname    = nickname;
+
+      if (Object.keys(patch).length > 0) {
+        await agentRepo.updateCosmetics(id, patch);
+      }
+
+      const updated = await agentRepo.findAgentById(id);
       res.json(updated);
     } catch (error: unknown) {
       res.status(400).json({ error: String(error) });
@@ -107,11 +133,11 @@ export function createAgentStatsRouter(db: Database.Database): Router {
   });
 
   // POST /api/agents/:id/retire — manually remove an active agent from the pool
-  router.post('/api/agents/:id/retire', (req, res) => {
+  router.post('/api/agents/:id/retire', async (req, res) => {
     try {
       const { id } = req.params;
 
-      const existing = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id) as { status?: string } | undefined;
+      const existing = await agentRepo.findAgentById(id);
       if (!existing) {
         return res.status(404).json({ error: 'Agent not found' });
       }
@@ -120,8 +146,8 @@ export function createAgentStatsRouter(db: Database.Database): Router {
         return res.status(400).json({ error: 'Agent is already retired' });
       }
 
-      db.prepare("UPDATE agent_registry SET status = 'RETIRED' WHERE id = ?").run(id);
-      const updated = db.prepare('SELECT * FROM agent_registry WHERE id = ?').get(id);
+      await agentRepo.updateAgentStatus(id, 'RETIRED');
+      const updated = await agentRepo.findAgentById(id);
 
       res.json({ retired: true, agent: updated });
     } catch (error: unknown) {
@@ -130,21 +156,12 @@ export function createAgentStatsRouter(db: Database.Database): Router {
   });
 
   // GET /api/agents/:id/history — competition history
-  router.get('/api/agents/:id/history', (req, res) => {
+  router.get('/api/agents/:id/history', async (req, res) => {
     try {
       const { id } = req.params;
       const limit  = Math.min(parseInt(req.query.limit as string) || 50, 100);
 
-      const history = db.prepare(`
-        SELECT
-          competition_id, rank_position, starting_capital, ending_capital,
-          pnl, trades_count, win_trades, loss_trades,
-          largest_win, largest_loss, sharpe_ratio, completed_at
-        FROM agent_competitions
-        WHERE agent_id = ?
-        ORDER BY completed_at DESC
-        LIMIT ?
-      `).all(id, limit);
+      const history = await agentRepo.getAgentCompetitions(id, limit);
 
       res.json(history);
     } catch (error: unknown) {

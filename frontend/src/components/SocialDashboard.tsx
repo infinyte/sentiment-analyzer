@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   useTrendingTopics,
   useSocialItems,
   useSocialStats,
   useTrendScore,
 } from '../hooks/useSocialMedia';
-import type { ClusteredTrendingTopic, ScoredSocialItem, SocialSource } from '../types/social-media';
+import type { ClusteredTrendingTopic, ScoredSocialItem, SocialSource, SourceStat } from '../types/social-media';
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 
@@ -210,19 +210,187 @@ function TrendScorePanel({ symbol, onClose }: { symbol: string; onClose: () => v
   );
 }
 
-// ── Source Health ─────────────────────────────────────────────────────────────
+// ── Scraper Status Panel ──────────────────────────────────────────────────────
 
-function SourceHealthRow({ source, total, h24, fetches, errors }: {
-  source: string; total: number; h24: number; fetches: number; errors: number;
-}) {
-  const healthy = errors === 0;
+type ScraperStatus = 'LIVE' | 'DEGRADED' | 'STALE' | 'ERROR' | 'OFFLINE';
+
+function getScraperStatus(s: SourceStat): ScraperStatus {
+  if (s.total_items === 0) return 'OFFLINE';
+  if (s.items_24h === 0 && s.error_count_today > 0) return 'ERROR';
+  if (s.items_24h === 0) return 'STALE';
+  if (s.error_count_today > 0) return 'DEGRADED';
+  return 'LIVE';
+}
+
+const STATUS_CFG: Record<ScraperStatus, { color: string; bg: string; label: string; description: string }> = {
+  LIVE:     { color: '#10b981', bg: 'rgba(16,185,129,0.12)',  label: 'LIVE',     description: 'Receiving data, no errors' },
+  DEGRADED: { color: '#f59e0b', bg: 'rgba(245,158,11,0.12)', label: 'DEGRADED', description: 'Active but errors detected' },
+  STALE:    { color: '#f97316', bg: 'rgba(249,115,22,0.12)', label: 'STALE',    description: 'No new data today' },
+  ERROR:    { color: '#ef4444', bg: 'rgba(239,68,68,0.12)',  label: 'ERROR',    description: 'Errors, no data today' },
+  OFFLINE:  { color: '#6b7280', bg: 'rgba(107,114,128,0.12)',label: 'OFFLINE',  description: 'No data received' },
+};
+
+function fmtCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return String(n);
+}
+
+function ScraperCard({ stat }: { stat: SourceStat }) {
+  const status = getScraperStatus(stat);
+  const cfg    = STATUS_CFG[status];
+  const isLive = status === 'LIVE';
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '0.5rem 0', borderBottom: `1px solid ${C.border}`, fontSize: '0.8125rem' }}>
-      <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: healthy ? C.bull : C.bear, flexShrink: 0 }} />
-      <span style={{ flex: 1, fontWeight: '600', color: C.text }}>{sourceLabel(source as SocialSource)}</span>
-      <span style={{ color: C.gray }}>{total.toLocaleString()} total</span>
-      <span style={{ color: C.gray }}>{h24} today</span>
-      <span style={{ color: errors > 0 ? C.bear : C.gray }}>{errors > 0 ? `${errors} err` : `${fetches} fetches`}</span>
+    <div
+      title={cfg.description}
+      style={{
+        border: `1px solid ${C.border}`,
+        borderLeft: `4px solid ${cfg.color}`,
+        borderRadius: '0.5rem',
+        backgroundColor: C.card,
+        padding: '0.75rem 0.875rem',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '0.45rem',
+      }}
+    >
+      {/* Name + status badge */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
+        <span style={{ fontWeight: '700', fontSize: '0.8125rem', color: C.text }}>
+          {sourceLabel(stat.source as SocialSource)}
+        </span>
+        <span style={{
+          display: 'flex', alignItems: 'center', gap: '0.3rem',
+          fontSize: '0.6rem', fontWeight: '700', letterSpacing: '0.05em',
+          padding: '0.15rem 0.45rem', borderRadius: '1rem',
+          backgroundColor: cfg.bg, color: cfg.color, flexShrink: 0,
+        }}>
+          <span
+            className={isLive ? 'scraper-live-dot' : undefined}
+            style={{
+              width: '5px', height: '5px', borderRadius: '50%',
+              backgroundColor: cfg.color, display: 'inline-block', flexShrink: 0,
+            }}
+          />
+          {cfg.label}
+        </span>
+      </div>
+
+      {/* Counters */}
+      <div style={{ display: 'flex', gap: '0.875rem', alignItems: 'flex-end' }}>
+        <div>
+          <div style={{ fontSize: '1.1rem', fontWeight: '700', color: isLive ? cfg.color : C.text, lineHeight: 1 }}>
+            {fmtCount(stat.items_24h)}
+          </div>
+          <div style={{ fontSize: '0.6rem', color: C.muted, marginTop: '0.1rem' }}>today</div>
+        </div>
+        <div>
+          <div style={{ fontSize: '1.1rem', fontWeight: '700', color: C.text, lineHeight: 1 }}>
+            {fmtCount(stat.total_items)}
+          </div>
+          <div style={{ fontSize: '0.6rem', color: C.muted, marginTop: '0.1rem' }}>total</div>
+        </div>
+        {stat.error_count_today > 0 && (
+          <div>
+            <div style={{ fontSize: '1.1rem', fontWeight: '700', color: '#ef4444', lineHeight: 1 }}>
+              {stat.error_count_today}
+            </div>
+            <div style={{ fontSize: '0.6rem', color: C.muted, marginTop: '0.1rem' }}>errors</div>
+          </div>
+        )}
+      </div>
+
+      {/* Last fetch + fetch count */}
+      <div style={{ fontSize: '0.68rem', color: C.muted }}>
+        {stat.last_fetched_at
+          ? `${relTime(stat.last_fetched_at)} · ${stat.fetch_count_today} fetches`
+          : status === 'OFFLINE'
+            ? 'Never fetched'
+            : `${stat.fetch_count_today} fetches today`}
+      </div>
+    </div>
+  );
+}
+
+function ScraperStatusPanel({
+  sources,
+  lastRefreshed,
+  onRefresh,
+}: {
+  sources: SourceStat[];
+  lastRefreshed: Date | null;
+  onRefresh: () => void;
+}) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 15_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const updatedAgo = lastRefreshed
+    ? (() => {
+        const s = Math.floor((now - lastRefreshed.getTime()) / 1000);
+        if (s < 60) return `${s}s ago`;
+        return `${Math.floor(s / 60)}m ago`;
+      })()
+    : null;
+
+  const liveCnt     = sources.filter(s => getScraperStatus(s) === 'LIVE').length;
+  const degradedCnt = sources.filter(s => ['DEGRADED', 'STALE', 'ERROR'].includes(getScraperStatus(s))).length;
+
+  const summaryColor = degradedCnt > 0
+    ? (sources.some(s => getScraperStatus(s) === 'ERROR') ? '#ef4444' : '#f59e0b')
+    : liveCnt > 0 ? '#10b981' : '#6b7280';
+
+  return (
+    <div style={{ marginTop: '1.25rem' }}>
+      <style>{`
+        @keyframes scraper-pulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,0.5); }
+          60%       { box-shadow: 0 0 0 5px rgba(16,185,129,0); }
+        }
+        .scraper-live-dot { animation: scraper-pulse 2s ease-in-out infinite; }
+      `}</style>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700' }}>Scraper Status</h3>
+          <span style={{
+            fontSize: '0.7rem', fontWeight: '700', padding: '0.1rem 0.45rem',
+            borderRadius: '1rem', backgroundColor: `${summaryColor}18`, color: summaryColor,
+          }}>
+            {liveCnt}/{sources.length} live
+          </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          {updatedAgo && (
+            <span style={{ fontSize: '0.7rem', color: C.muted }}>Updated {updatedAgo}</span>
+          )}
+          <button
+            onClick={onRefresh}
+            style={{ fontSize: '0.75rem', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', border: `1px solid ${C.border}`, background: C.card, cursor: 'pointer', color: C.gray }}
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {/* Status legend */}
+      <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.625rem', flexWrap: 'wrap' }}>
+        {(Object.entries(STATUS_CFG) as [ScraperStatus, typeof STATUS_CFG[ScraperStatus]][]).map(([key, cfg]) => (
+          <span key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.65rem', color: C.muted }}>
+            <span style={{ width: '7px', height: '7px', borderRadius: '50%', backgroundColor: cfg.color, display: 'inline-block' }} />
+            {cfg.label} — {cfg.description}
+          </span>
+        ))}
+      </div>
+
+      {/* Cards grid */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem' }}>
+        {sources.map(s => <ScraperCard key={s.source} stat={s} />)}
+      </div>
     </div>
   );
 }
@@ -247,7 +415,7 @@ export function SocialDashboard() {
     limit: 20,
   });
 
-  const { data: statsData } = useSocialStats();
+  const { data: statsData, lastRefreshed: statsRefreshedAt, refresh: refreshStats } = useSocialStats(60_000);
 
   const handleTopicClick = (topic: ClusteredTrendingTopic) => {
     if (topic.coin_symbol) {
@@ -325,22 +493,13 @@ export function SocialDashboard() {
             ))}
           </div>
 
-          {/* Source health */}
+          {/* Scraper Status */}
           {statsData && statsData.sources.length > 0 && (
-            <div style={{ marginTop: '1.25rem' }}>
-              <h3 style={{ margin: '0 0 0.75rem 0', fontSize: '1rem', fontWeight: '700' }}>Source Health</h3>
-              <div style={{ border: `1px solid ${C.border}`, borderRadius: '0.5rem', backgroundColor: C.card, padding: '0.5rem 1rem' }}>
-                {statsData.sources.map(s => (
-                  <SourceHealthRow key={s.source}
-                    source={s.source}
-                    total={s.total_items}
-                    h24={s.items_24h}
-                    fetches={s.fetch_count_today}
-                    errors={s.error_count_today}
-                  />
-                ))}
-              </div>
-            </div>
+            <ScraperStatusPanel
+              sources={statsData.sources}
+              lastRefreshed={statsRefreshedAt}
+              onRefresh={refreshStats}
+            />
           )}
         </div>
 

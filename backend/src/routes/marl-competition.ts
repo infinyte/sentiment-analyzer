@@ -13,17 +13,84 @@
 
 import { NextFunction, Request, Response, Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
-import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } from '../services/marl-competition-engine.js';
+import type { CompetitionConfig, CompetitionAgentSpec, CompetitionResult, SymbolSelectionMode } from '../services/marl-competition-engine.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
+import { workerPool } from '../services/worker-pool.js';
+import { getPubSub, competitionChannel } from '../services/pubsub.js';
+import type { CompetitionPubSubEvent } from '../services/pubsub.js';
+import { configService } from '../services/config-service.js';
 import { PreTrainer } from '../services/pre-trainer.js';
 import type { RiskProfile } from '../services/pre-trainer.js';
 import type { MarketRegime } from '../services/synthetic-market-generator.js';
+import { getTournamentQueue } from '../queues/tournament.queue.js';
+import { isQueueAvailable } from '../queues/connection.js';
+import { QueueEvents } from 'bullmq';
+import { createConnectionOptions } from '../queues/connection.js';
 import logger from '../logger.js';
 
 const router     = Router();
 const engine     = new MarlCompetitionEngine();
 const preTrainer = new PreTrainer();
+
+// ── BullMQ QueueEvents bridge ─────────────────────────────────────────────────
+// When tournaments run in a separate worker process via BullMQ, the API process
+// must listen for job completion / failure events and update the in-memory
+// competition registry accordingly.
+
+let _queueEvents: QueueEvents | null = null;
+
+function ensureQueueEventsListener(): void {
+  if (_queueEvents || !isQueueAvailable()) return;
+
+  _queueEvents = new QueueEvents('tournament', { connection: createConnectionOptions() });
+
+  _queueEvents.on('progress', ({ jobId, data }) => {
+    engine.updateRecord(jobId, { progress: data as number });
+  });
+
+  _queueEvents.on('completed', ({ jobId, returnvalue }) => {
+    try {
+      const result: CompetitionResult =
+        typeof returnvalue === 'string' ? JSON.parse(returnvalue) : returnvalue;
+      engine.updateRecord(jobId, {
+        status:         'COMPLETED',
+        completedAt:    new Date(),
+        result,
+        progress:       100,
+        topPerformerId: result.finalRankings?.[0]?.agentId,
+      });
+    } catch (err) {
+      logger.error('queueEvents: failed to parse completed returnvalue', { jobId, error: String(err) });
+      engine.updateRecord(jobId, { status: 'FAILED', progress: 0 });
+    }
+  });
+
+  _queueEvents.on('failed', ({ jobId, failedReason }) => {
+    logger.error('queueEvents: tournament job failed', { competitionId: jobId, reason: failedReason });
+    engine.updateRecord(jobId, { status: 'FAILED', progress: 0 });
+  });
+
+  _queueEvents.on('error', (err) => {
+    logger.error('queueEvents: connection error', { error: String(err) });
+  });
+
+  logger.info('marl-competition: BullMQ QueueEvents listener attached');
+}
+
+async function closeQueueEventsListener(): Promise<void> {
+  if (!_queueEvents) return;
+  try {
+    await _queueEvents.close();
+    logger.info('marl-competition: BullMQ QueueEvents listener closed');
+  } catch (err) {
+    logger.error('marl-competition: error closing QueueEvents listener', { error: String(err) });
+  } finally {
+    _queueEvents = null;
+  }
+}
+
+export { closeQueueEventsListener };
 
 type RateLimitEntry = {
   count: number;
@@ -397,24 +464,54 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       progress: 0,
     });
 
-    // Fire-and-forget tournament
-    engine
-      .runCompetition(config, (progress) => {
-        engine.updateRecord(competitionId, { progress });
-      }, competitionId)
-      .then(result => {
-        engine.updateRecord(competitionId, {
-          status: 'COMPLETED',
-          completedAt: new Date(),
-          result,
-          progress: 100,
-          topPerformerId: result.finalRankings?.[0]?.agentId,
-        });
-      })
-      .catch(err => {
-        logger.error('competition failed', { competitionId, error: String(err) });
-        engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+    // Fire-and-forget tournament.
+    // CPU-bound SIMULATED competitions run on a Worker Thread so the main
+    // event loop stays responsive. Real-money modes (PAPER/LIVE) keep the
+    // existing main-thread path because they use setInterval + broker I/O.
+    const isSimulated = exchangeMode === 'SIMULATED';
+
+    const onSuccess = (result: Awaited<ReturnType<typeof engine.runCompetition>>) => {
+      engine.updateRecord(competitionId, {
+        status:          'COMPLETED',
+        completedAt:     new Date(),
+        result,
+        progress:        100,
+        topPerformerId:  result.finalRankings?.[0]?.agentId,
       });
+    };
+    const onFailure = (err: unknown) => {
+      logger.error('competition failed', { competitionId, error: String(err) });
+      engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+    };
+
+    if (isSimulated) {
+      if (isQueueAvailable()) {
+        // BullMQ path: enqueue job in Redis; a tournament-worker-process picks it up.
+        // Use competitionId as the job ID so QueueEvents can map events back to records.
+        ensureQueueEventsListener();
+        getTournamentQueue()
+          .add('tournament', { competitionId, config }, { jobId: competitionId })
+          .catch((err: unknown) => {
+            logger.error('failed to enqueue tournament job', { competitionId, error: String(err) });
+            engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+          });
+      } else {
+        // Fallback: Worker Thread (no Redis configured)
+        const handle = workerPool.runMarlCompetition(
+          competitionId,
+          config,
+          (progress) => engine.updateRecord(competitionId, { progress }),
+        );
+        handle.result.then(onSuccess).catch(onFailure);
+      }
+    } else {
+      engine
+        .runCompetition(config, (progress) => {
+          engine.updateRecord(competitionId, { progress });
+        }, competitionId)
+        .then(onSuccess)
+        .catch(onFailure);
+    }
 
     logger.info('competition started', {
       competitionId,
@@ -474,7 +571,7 @@ router.get('/api/marl/competition/:competitionId/status', competitionReadRateLim
   }
 
   if (record.status === 'FAILED') {
-    return res.status(500).json({
+    return res.status(200).json({
       competitionId,
       status: 'FAILED',
       startedAt: record.startedAt,
@@ -842,6 +939,7 @@ router.get('/api/marl/info', competitionReadRateLimit, (_req, res) => {
     endpoints: {
       'POST   /api/marl/competition/start': 'Start a new tournament',
       'GET    /api/marl/competition/:id/status': 'Poll running competition',
+      'GET    /api/marl/competition/:id/stream': 'SSE real-time progress stream (text/event-stream)',
       'GET    /api/marl/competition/:id/results': 'Fetch completed results',
       'POST   /api/marl/agents/compare': 'Head-to-head multi-round comparison',
       'GET    /api/marl/competitions': 'List all competitions',
@@ -985,6 +1083,80 @@ router.post('/api/marl/agents/:agentId/algorithm', competitionReadRateLimit, (re
       replayBuffer: 'Up to 1 000 experiences',
     },
   });
+});
+
+// ─── GET /api/marl/competition/:competitionId/stream ─────────────────────────
+/**
+ * Server-Sent Events stream for a competition.
+ * Sends progress (0-100), completed, and failed events in real time.
+ * Falls back gracefully: if the competition is already done when you connect,
+ * it emits one synthetic event and closes the stream.
+ *
+ * Example (curl):
+ *   curl -N http://localhost:3000/api/marl/competition/comp_123/stream
+ *
+ * Example (browser):
+ *   const es = new EventSource('/api/marl/competition/comp_123/stream');
+ *   es.addEventListener('progress',  e => console.log(JSON.parse(e.data)));
+ *   es.addEventListener('completed', e => console.log(JSON.parse(e.data)));
+ *   es.addEventListener('failed',    e => console.log(JSON.parse(e.data)));
+ */
+router.get('/api/marl/competition/:competitionId/stream', (req: Request, res: Response) => {
+  const { competitionId } = req.params;
+
+  // ── SSE headers ──────────────────────────────────────────────────────────
+  res.setHeader('Content-Type',  'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection',    'keep-alive');
+  // Disable nginx / express compression for SSE
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  // Helper: write a typed SSE frame
+  const send = (event: CompetitionPubSubEvent) => {
+    res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+  };
+
+  // ── Fast-path: already finished ──────────────────────────────────────────
+  const record = engine.getRecord(competitionId);
+  if (record?.status === 'COMPLETED') {
+    send({
+      type: 'completed',
+      competitionId,
+      topPerformerId: record.topPerformerId,
+    });
+    res.end();
+    return;
+  }
+  if (record?.status === 'FAILED') {
+    send({ type: 'failed', competitionId, error: 'Competition already failed' });
+    res.end();
+    return;
+  }
+
+  // ── Subscribe to pub/sub ─────────────────────────────────────────────────
+  const channel    = competitionChannel(competitionId);
+  const unsubscribe = getPubSub().subscribe(channel, (event) => {
+    send(event);
+    // Auto-close on terminal events so the client knows the stream is done
+    if (event.type === 'completed' || event.type === 'failed') {
+      cleanup();
+      res.end();
+    }
+  });
+
+  // ── Heartbeat keeps TCP alive through proxies / load-balancers ───────────
+  const heartbeatMs = configService.get('sseHeartbeatIntervalMs');
+  const heartbeat   = setInterval(() => {
+    res.write(': heartbeat\n\n');
+  }, heartbeatMs);
+
+  // ── Cleanup on client disconnect ─────────────────────────────────────────
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+  };
+  req.on('close', cleanup);
 });
 
 // ─── GET /api/marl/competition/:competitionId/equity-curves ──────────────────

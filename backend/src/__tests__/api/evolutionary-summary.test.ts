@@ -12,6 +12,7 @@ import express from 'express';
 import request from 'supertest';
 import Database from 'better-sqlite3';
 import { createEvolutionaryRouter } from '../../routes/evolutionary.js';
+import { SQLiteAgentRepository } from '../../repositories/adapters/sqlite/sqlite-agent.repository.js';
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:');
@@ -152,7 +153,7 @@ describe('GET /api/evolutionary/summary', () => {
     ]);
 
     app = express();
-    app.use(createEvolutionaryRouter(db));
+    app.use(createEvolutionaryRouter(db, new SQLiteAgentRepository(db)));
   });
 
   afterEach(() => {

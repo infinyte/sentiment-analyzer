@@ -19,6 +19,23 @@
 
 jest.mock('node-cron', () => ({ schedule: jest.fn() }));
 
+jest.mock('../../repositories/factory.js', () => ({
+  createRepositories: jest.fn().mockReturnValue({
+    agents:      {},
+    tournaments: {},
+    broker: {
+      saveCredential:         jest.fn().mockResolvedValue(undefined),
+      listCredentials:        jest.fn().mockResolvedValue([]),
+      getDecryptedCredential: jest.fn().mockResolvedValue(null),
+      deleteCredential:       jest.fn().mockResolvedValue(false),
+      insertOrder:            jest.fn().mockResolvedValue(undefined),
+      updateOrder:            jest.fn().mockResolvedValue(undefined),
+      getOrders:              jest.fn().mockResolvedValue([]),
+      getOpenOrders:          jest.fn().mockResolvedValue([]),
+    },
+  }),
+}));
+
 jest.mock('../../storage.js', () => ({
   storage: {
     connect: jest.fn(),
@@ -158,6 +175,7 @@ jest.mock('../../database/sqlite-social-store.js', () => ({
 import request from 'supertest';
 import app from '../../index.js';
 import { storage } from '../../storage.js';
+import { createRepositories } from '../../repositories/factory.js';
 import { brokerRegistry } from '../../services/brokers/broker-registry.js';
 import { createBrokerAdapter } from '../../services/brokers/broker-factory.js';
 import { resetMarlRateLimitersForTests } from '../../routes/marl-competition.js';
@@ -165,6 +183,8 @@ import { resetMarlRateLimitersForTests } from '../../routes/marl-competition.js'
 const storageMock = storage as jest.Mocked<typeof storage>;
 const registryMock = brokerRegistry as jest.Mocked<typeof brokerRegistry>;
 const factoryMock  = createBrokerAdapter as jest.Mock;
+// Access the stable mock broker repo created by the factory mock
+const brokerRepoMock = (createRepositories as jest.Mock)().broker;
 
 const VALID_API_KEY = 'test-secret-key';
 
@@ -174,10 +194,11 @@ beforeEach(() => {
   // Reset the competition-start rate limiter so this test suite starts fresh.
   resetMarlRateLimitersForTests();
   jest.clearAllMocks();
-  storageMock.listBrokerCredentials.mockReturnValue([]);
-  storageMock.decryptBrokerCredential.mockReturnValue(undefined);
-  storageMock.deleteBrokerCredential.mockReturnValue(false);
-  storageMock.getBrokerOrders.mockReturnValue([]);
+  // Re-set default return values after clearAllMocks wipes them
+  brokerRepoMock.listCredentials.mockResolvedValue([]);
+  brokerRepoMock.getDecryptedCredential.mockResolvedValue(null);
+  brokerRepoMock.deleteCredential.mockResolvedValue(false);
+  brokerRepoMock.getOrders.mockResolvedValue([]);
   registryMock.get.mockImplementation((id: string) => mockRegistryStore.get(id) as never);
   registryMock.has.mockImplementation((id: string) => mockRegistryStore.has(id));
   registryMock.listIds.mockImplementation(() => Array.from(mockRegistryStore.keys()));
@@ -257,7 +278,7 @@ describe('POST /api/marl/broker/credentials', () => {
     expect(res.body.mode).toBe('PAPER');
     expect(res.body).not.toHaveProperty('apiKey');
     expect(res.body).not.toHaveProperty('apiSecret');
-    expect(storageMock.saveBrokerCredential).toHaveBeenCalledWith(
+    expect(brokerRepoMock.saveCredential).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'ALPACA', mode: 'PAPER' })
     );
   });
@@ -291,7 +312,7 @@ describe('GET /api/marl/broker/credentials', () => {
   });
 
   it('returns credential metadata without secrets, with connected flag', async () => {
-    storageMock.listBrokerCredentials.mockReturnValue([
+    brokerRepoMock.listCredentials.mockResolvedValue([
       {
         id:        'cred-paper-1',
         label:     'Test Paper',
@@ -326,7 +347,7 @@ describe('DELETE /api/marl/broker/credentials/:id', () => {
   });
 
   it('returns 404 when credential does not exist', async () => {
-    storageMock.deleteBrokerCredential.mockReturnValue(false);
+    brokerRepoMock.deleteCredential.mockResolvedValue(false);
     const res = await request(app)
       .delete('/api/marl/broker/credentials/nonexistent')
       .set('x-api-key', VALID_API_KEY);
@@ -334,7 +355,7 @@ describe('DELETE /api/marl/broker/credentials/:id', () => {
   });
 
   it('disconnects adapter and deletes credential', async () => {
-    storageMock.deleteBrokerCredential.mockReturnValue(true);
+    brokerRepoMock.deleteCredential.mockResolvedValue(true);
     const res = await request(app)
       .delete('/api/marl/broker/credentials/cred-paper-1')
       .set('x-api-key', VALID_API_KEY);
@@ -342,7 +363,7 @@ describe('DELETE /api/marl/broker/credentials/:id', () => {
     expect(res.status).toBe(200);
     expect(res.body.deleted).toBe(true);
     expect(registryMock.unregister).toHaveBeenCalledWith('cred-paper-1');
-    expect(storageMock.deleteBrokerCredential).toHaveBeenCalledWith('cred-paper-1');
+    expect(brokerRepoMock.deleteCredential).toHaveBeenCalledWith('cred-paper-1');
   });
 });
 
@@ -363,7 +384,7 @@ describe('POST /api/marl/broker/connect/:id', () => {
   });
 
   it('returns 404 when the credential does not exist', async () => {
-    storageMock.decryptBrokerCredential.mockReturnValue(undefined);
+    brokerRepoMock.getDecryptedCredential.mockResolvedValue(null);
     const res = await request(app)
       .post('/api/marl/broker/connect/unknown-cred')
       .set('x-api-key', VALID_API_KEY);
@@ -371,16 +392,10 @@ describe('POST /api/marl/broker/connect/:id', () => {
   });
 
   it('decrypts, creates adapter, registers, and returns 200', async () => {
-    storageMock.decryptBrokerCredential.mockReturnValue({
+    brokerRepoMock.getDecryptedCredential.mockResolvedValue({
+      id: 'cred-paper-1', label: 'Test', provider: 'ALPACA', mode: 'PAPER',
       apiKey: 'PKTEST', apiSecret: 'secret',
     });
-    storageMock.listBrokerCredentials.mockReturnValue([
-      {
-        id: 'cred-paper-1', label: 'Test', provider: 'ALPACA', mode: 'PAPER',
-        encrypted: { iv: '', authTag: '', ciphertext: '' },
-        createdAt: '2026-03-17T00:00:00Z',
-      },
-    ]);
 
     const res = await request(app)
       .post('/api/marl/broker/connect/cred-paper-1')
@@ -405,7 +420,7 @@ describe('GET /api/marl/broker/connected', () => {
   });
 
   it('returns list of connected adapter ids with metadata', async () => {
-    storageMock.listBrokerCredentials.mockReturnValue([
+    brokerRepoMock.listCredentials.mockResolvedValue([
       {
         id: 'cred-paper-1', label: 'Alpaca Paper', provider: 'ALPACA', mode: 'PAPER',
         encrypted: { iv: '', authTag: '', ciphertext: '' },
@@ -435,7 +450,7 @@ describe('GET /api/marl/broker/orders/:competitionId', () => {
   });
 
   it('returns empty order list for a competition with no orders', async () => {
-    storageMock.getBrokerOrders.mockReturnValue([]);
+    brokerRepoMock.getOrders.mockResolvedValue([]);
     const res = await request(app)
       .get('/api/marl/broker/orders/comp-test')
       .set('x-api-key', VALID_API_KEY);
@@ -445,7 +460,7 @@ describe('GET /api/marl/broker/orders/:competitionId', () => {
   });
 
   it('returns order list omitting brokerResponse', async () => {
-    storageMock.getBrokerOrders.mockReturnValue([
+    brokerRepoMock.getOrders.mockResolvedValue([
       {
         id:             'ord-1',
         competitionId:  'comp-test',
@@ -482,12 +497,12 @@ describe('GET /api/marl/broker/orders/:competitionId', () => {
   });
 
   it('filters by agentId query param when provided', async () => {
-    storageMock.getBrokerOrders.mockReturnValue([]);
+    brokerRepoMock.getOrders.mockResolvedValue([]);
     await request(app)
       .get('/api/marl/broker/orders/comp-test?agentId=alpha')
       .set('x-api-key', VALID_API_KEY);
 
-    expect(storageMock.getBrokerOrders).toHaveBeenCalledWith('comp-test', 'alpha');
+    expect(brokerRepoMock.getOrders).toHaveBeenCalledWith('comp-test', 'alpha');
   });
 });
 

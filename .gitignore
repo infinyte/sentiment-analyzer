@@ -47,3 +47,7 @@ pids/
 # OS
 .DS_Store
 Thumbs.db
+*.db
+backend/package-lock.json
+backend/package-lock.json
+backend/node_modules/.package-lock.json

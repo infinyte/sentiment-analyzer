@@ -21,12 +21,15 @@ import type { MarketData, NewsData } from './services/sentiment-analyzer.js';
 import { finBertService } from './services/finbert.js';
 import { onChainService } from './services/onchain.js';
 import type { AgentConfig } from './services/trading-agent.js';
-import { BacktestingEngine } from './services/backtesting-engine.js';
 import type { BacktestConfig } from './services/backtesting-engine.js';
+import { workerPool } from './services/worker-pool.js';
+import { initPubSub, closePubSub } from './services/pubsub.js';
+import { configService } from './services/config-service.js';
 import { storage } from './storage.js';
+import { createRepositories } from './repositories/factory.js';
 import { socialStore } from './database/sqlite-social-store.js';
-import marlRoutes from './routes/marl-competition.js';
-import marlRealTradingRoutes from './routes/marl-real-trading.js';
+import marlRoutes, { closeQueueEventsListener } from './routes/marl-competition.js';
+import { createMarlRealTradingRouter } from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
@@ -39,6 +42,8 @@ import { SocialMediaScraperManager } from './services/social-media/scraper/scrap
 import { TrendingTopicDiscoveryEngine } from './services/social-media/trending/trending-discovery-engine.js';
 import { MultiSourceTrendingScoreCalculator } from './services/social-media/trending/multi-source-calculator.js';
 import { ingestQueue } from './services/social-media/ingest-queue.js';
+import { getScraperQueue } from './queues/scraper.queue.js';
+import { isQueueAvailable } from './queues/connection.js';
 import logger from './logger.js';
 
 dotenv.config();
@@ -83,7 +88,7 @@ const sentiment          = container.resolve<SentimentService>(TOKENS.SentimentS
 const cache              = container.resolve<Cache>(TOKENS.Cache);
 const sentimentCache     = container.resolve<Cache>(TOKENS.SentimentCache);
 const analyzer           = container.resolve<SentimentAnalyzerEngine>(TOKENS.SentimentAnalyzerEngine);
-const backtestEngine     = container.resolve<BacktestingEngine>(TOKENS.BacktestingEngine);
+// backtestEngine removed — POST /api/backtest/run now uses workerPool.runBacktest().
 const socialScraper      = container.resolve<SocialScraperService>(TOKENS.SocialScraperService);
 const trendingEngine     = container.resolve<TrendingTopicsEngine>(TOKENS.TrendingTopicsEngine);
 const socialScraperManager  = container.resolve<SocialMediaScraperManager>(TOKENS.SocialMediaScraperManager);
@@ -109,6 +114,12 @@ try {
   logger.warn('social-store unavailable', { error: String(err) });
 }
 
+// Initialize optional Redis services (pub/sub fan-out + config hot-reload).
+// Both are fire-and-forget: they fall back to EventEmitter / env defaults
+// if REDIS_URL is not set or ioredis is not installed.
+void initPubSub();
+void configService.init();
+
 // Warn about any open real-trading orders that survived a restart.
 // Broker adapters do NOT survive restarts — admin must re-POST
 // /api/marl/broker/connect/:id to reconnect before running PAPER/LIVE competitions.
@@ -122,9 +133,14 @@ try {
   }
 } catch { /* storage may not be connected yet */ }
 
-// Graceful shutdown — disconnect brokers, close DBs before process exits
+// Graceful shutdown — disconnect brokers, terminate workers, close DBs before process exits
 async function shutdown() {
-  await brokerRegistry.disconnectAll().catch(() => {});
+  await Promise.allSettled([
+    brokerRegistry.disconnectAll(),
+    workerPool.terminateAll(),
+    closePubSub(),
+    closeQueueEventsListener(),
+  ]);
   storage.close();
   socialStore.close();
   process.exit(0);
@@ -732,7 +748,11 @@ app.post('/api/backtest/run', async (req, res) => {
       commissionPct: body.commissionPct ?? 0.001,
     };
 
-    const result = await backtestEngine.runSimulation(config);
+    // Run the CPU-bound simulation on a Worker Thread so the event loop stays
+    // responsive. The await here is non-blocking: Node.js can serve other
+    // requests while the worker thread runs the day-by-day simulation loop.
+    const handle = workerPool.runBacktest(config.symbols.join('-') + '_' + Date.now(), config);
+    const result = await handle.result;
 
     // Persist result to SQLite so it survives a restart
     try { storage.saveBacktestResult(result); } catch { /* non-fatal */ }
@@ -778,10 +798,10 @@ app.post('/api/backtest/run', async (req, res) => {
 
 // GET /api/backtest/results/:testId
 // Retrieve full details (equity curves, all trades) for a completed backtest.
-// Falls back to SQLite when the result is no longer in the engine's in-memory store.
+// Persist result to SQLite after the worker completes and returns the result to the API process.
 app.get('/api/backtest/results/:testId', (req, res) => {
   const testId = req.params.testId;
-  const result = backtestEngine.getResult(testId) ?? storage.getBacktestResult(testId);
+  const result = storage.getBacktestResult(testId);
   if (!result) {
     return res.status(404).json({ error: 'Backtest result not found' });
   }
@@ -955,15 +975,16 @@ app.post('/api/trending/ingest', (req, res) => {
 // ============================================================================
 
 app.use(marlRoutes);
-app.use(marlRealTradingRoutes);
 app.use(socialMediaRoutes);
 
-// Agent stats routes — requires an active DB connection
+// DB-dependent routes — require an active DB connection
 if (storage.isHealthy()) {
-  app.use(createAgentStatsRouter(storage.getDb()));
-  app.use(createEvolutionaryRouter(storage.getDb()));
+  const repos = createRepositories({ driver: 'sqlite', db: storage.getDb() });
+  app.use(createMarlRealTradingRouter(repos.broker));
+  app.use(createAgentStatsRouter(repos.agents));
+  app.use(createEvolutionaryRouter(storage.getDb(), repos.agents));
 } else {
-  logger.warn('agent-stats routes skipped (storage not connected)');
+  logger.warn('DB-dependent routes skipped (storage not connected)');
 }
 
 // Trading routes (paper / sandbox / live exchange)
@@ -1045,29 +1066,34 @@ cron.schedule(socialCronSchedule, async () => {
   try {
     const coins = cache.get<{ symbol: string }[]>('coins');
     const top = coins?.slice(0, 10).map(c => c.symbol) ?? [];
-    const scrapeResult = await socialScraperManager.scrapeAll(top);
-    logger.info('social cron: scrape phase complete', {
-      symbols: top.length,
-      rss: scrapeResult.rss_items,
-      discord: scrapeResult.discord_items,
-      telegram: scrapeResult.telegram_items,
-      total_scraped: scrapeResult.total_items_scraped,
-      total_stored: scrapeResult.total_items_stored,
-      duration_ms: scrapeResult.duration_ms,
-    });
 
-    // Log ingest queue health after scraping phase completes
-    logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
+    if (isQueueAvailable()) {
+      // Delegate to the scraper worker process via BullMQ
+      await getScraperQueue().add('cron-social-scrape', { targets: top, rss_only: false });
+      logger.info('social cron: scrape job enqueued', { symbols: top.length });
+    } else {
+      // Fallback: run in-process when Redis is not configured
+      const scrapeResult = await socialScraperManager.scrapeAll(top);
+      logger.info('social cron: scrape phase complete', {
+        symbols: top.length,
+        rss: scrapeResult.rss_items,
+        discord: scrapeResult.discord_items,
+        telegram: scrapeResult.telegram_items,
+        total_scraped: scrapeResult.total_items_scraped,
+        total_stored: scrapeResult.total_items_stored,
+        duration_ms: scrapeResult.duration_ms,
+      });
 
-    // Recompute trending topics in DB
-    const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
-    const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
-    logger.info('social cron: trending topics updated', { count: topics.length });
+      logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
 
-    // Prune old items (keep last 30 days by default)
-    const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
-    const pruned = socialStore.pruneOldItems(retainDays);
-    if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+      const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
+      const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
+      logger.info('social cron: trending topics updated', { count: topics.length });
+
+      const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
+      const pruned = socialStore.pruneOldItems(retainDays);
+      if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+    }
   } catch (error) {
     logger.error('social cron failed', { error: String(error) });
   }

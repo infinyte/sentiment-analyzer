@@ -31,6 +31,7 @@ describe('SQLiteAgentRepository', () => {
     db.close();
   });
 
+<<<<<<< HEAD
   describe('findAgentsPaginated', () => {
     beforeAll(async () => {
       // Clear before test (delete in correct order to respect foreign keys)
@@ -41,6 +42,15 @@ describe('SQLiteAgentRepository', () => {
       db.exec('DELETE FROM agent_registry');
       db.exec('PRAGMA foreign_keys = ON');
 
+=======
+  describe('countAgentsByStatus', () => {
+    it('should return 0 for empty database', async () => {
+      const count = await repo.countAgentsByStatus('ACTIVE');
+      expect(count).toBe(0);
+    });
+
+    it('should count only ACTIVE agents', async () => {
+>>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
       const genome: AgentGenome = {
         epsilon: 0.1,
         learningRate: 0.01,
@@ -55,6 +65,7 @@ describe('SQLiteAgentRepository', () => {
         holdDurationMax: 5,
       };
 
+<<<<<<< HEAD
       // Create 5 active agents with different win rates
       for (let i = 0; i < 5; i++) {
         const agentId = `agent-${i}`;
@@ -79,10 +90,16 @@ describe('SQLiteAgentRepository', () => {
       const retiredId = 'agent-retired';
       await repo.registerAgent({
         agentId: retiredId,
+=======
+      // Register two agents
+      await repo.registerAgent({
+        agentId: 'agent-1',
+>>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
         agentType: 'ML_BASED',
         riskProfile: 'CONSERVATIVE',
         initialGenome: genome,
       });
+<<<<<<< HEAD
       await repo.initializeStats(retiredId);
       await repo.updateAgentStatus(retiredId, 'RETIRED');
       db.prepare(
@@ -153,6 +170,28 @@ describe('SQLiteAgentRepository', () => {
       const result = await repo.findAgentsPaginated('ACTIVE', 10, 100);
       expect(result.agents).toHaveLength(0);
       expect(result.total).toBe(5);
+=======
+
+      await repo.registerAgent({
+        agentId: 'agent-2',
+        agentType: 'ML_BASED',
+        riskProfile: 'AGGRESSIVE',
+        initialGenome: genome,
+      });
+
+      // Both should be ACTIVE initially
+      let activeCount = await repo.countAgentsByStatus('ACTIVE');
+      expect(activeCount).toBe(2);
+
+      // Retire one agent
+      await repo.updateAgentStatus('agent-1', 'RETIRED');
+
+      activeCount = await repo.countAgentsByStatus('ACTIVE');
+      expect(activeCount).toBe(1);
+
+      const retiredCount = await repo.countAgentsByStatus('RETIRED');
+      expect(retiredCount).toBe(1);
+>>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
     });
   });
 
