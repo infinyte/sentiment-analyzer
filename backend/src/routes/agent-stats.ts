@@ -26,6 +26,7 @@ export function createAgentStatsRouter(db: Database.Database): Router {
       const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 100);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
+<<<<<<< Updated upstream
       const agents = db.prepare(`
         SELECT
           r.id, r.agent_type, r.risk_profile, r.status,
@@ -43,8 +44,11 @@ export function createAgentStatsRouter(db: Database.Database): Router {
       const total = (db.prepare(
         "SELECT COUNT(*) AS count FROM agent_registry WHERE status = 'ACTIVE'"
       ).get() as { count: number }).count;
+=======
+      const result = await agentRepo.findAgentsPaginated('ACTIVE', limit, offset);
+>>>>>>> Stashed changes
 
-      res.json({ agents, total, limit, offset });
+      res.json({ agents: result.agents, total: result.total, limit, offset });
     } catch (error: unknown) {
       res.status(500).json({ error: String(error) });
     }
