@@ -25,20 +25,10 @@ export function createAgentStatsRouter(agentRepo: IAgentRepository): Router {
       const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 100);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
-      const [allAgents, allStats] = await Promise.all([
-        agentRepo.findAllAgents('ACTIVE'),
-        agentRepo.getAllStats(),
+      const [agents, total] = await Promise.all([
+        agentRepo.findActiveAgentsWithStats(limit, offset),
+        agentRepo.countAgentsByStatus('ACTIVE'),
       ]);
-
-      const statsById = new Map(allStats.map(s => [s.agent_id, s]));
-
-      // Sort by win_rate_percent descending (mirrors the original JOIN query)
-      const sorted = allAgents
-        .map(r => ({ ...r, ...(statsById.get(r.id) ?? {}) }))
-        .sort((a, b) => ((b as { win_rate_percent?: number }).win_rate_percent ?? 0) - ((a as { win_rate_percent?: number }).win_rate_percent ?? 0));
-
-      const total = sorted.length;
-      const agents = sorted.slice(offset, offset + limit);
 
       res.json({ agents, total, limit, offset });
     } catch (error: unknown) {

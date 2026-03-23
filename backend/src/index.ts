@@ -797,7 +797,7 @@ app.post('/api/backtest/run', async (req, res) => {
 
 // GET /api/backtest/results/:testId
 // Retrieve full details (equity curves, all trades) for a completed backtest.
-// Results are always persisted to SQLite by the worker at completion time.
+// Persist result to SQLite after the worker completes and returns the result to the API process.
 app.get('/api/backtest/results/:testId', (req, res) => {
   const testId = req.params.testId;
   const result = storage.getBacktestResult(testId);

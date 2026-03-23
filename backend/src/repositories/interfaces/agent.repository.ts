@@ -68,6 +68,26 @@ export interface AgentWithCosmetics extends AgentStats {
   color: string | null;
 }
 
+// Agent + stats joined for paginated queries
+export interface AgentWithStatsDetail extends AgentStats {
+  // Agent registry fields
+  id: string;
+  agent_type: string;
+  risk_profile: string;
+  status: AgentStatus;
+  custom_name: string | null;
+  emoji: string | null;
+  color: string | null;
+  biography: string | null;
+  personality_traits: string | null;
+  nickname: string | null;
+  age_iterations: number;
+  generation_number: number;
+  parent_id_1: string | null;
+  parent_id_2: string | null;
+  created_at: string;
+}
+
 export interface CompetitionResultInput {
   competitionId: string;
   rank: number;
@@ -122,6 +142,7 @@ export interface IAgentRepository {
   registerAgent(opts: RegisterAgentOptions): Promise<void>;
   findAgentById(id: string): Promise<AgentRecord | null>;
   findAllAgents(status?: AgentStatus): Promise<AgentRecord[]>;
+  countAgentsByStatus(status: AgentStatus): Promise<number>;
   updateAgentStatus(id: string, status: AgentStatus): Promise<void>;
 
   // Cosmetics
@@ -133,6 +154,7 @@ export interface IAgentRepository {
   getStats(agentId: string): Promise<AgentStats | null>;
   getAllStats(): Promise<AgentStats[]>;
   getTopAgents(limit: number): Promise<AgentWithCosmetics[]>;
+  findActiveAgentsWithStats(limit: number, offset: number): Promise<AgentWithStatsDetail[]>;
   recordCompetitionResult(agentId: string, result: CompetitionResultInput): Promise<void>;
   getAgentCompetitions(agentId: string, limit?: number): Promise<AgentCompetitionRecord[]>;
 

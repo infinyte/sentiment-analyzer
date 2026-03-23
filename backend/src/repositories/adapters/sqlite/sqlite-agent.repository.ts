@@ -9,6 +9,7 @@ import type {
   AgentCosmetics,
   AgentStats,
   AgentWithCosmetics,
+  AgentWithStatsDetail,
   CompetitionResultInput,
   AgentCompetitionRecord,
   GenealogyRecord,
@@ -59,6 +60,13 @@ export class SQLiteAgentRepository implements IAgentRepository {
       ).all(status) as AgentRecord[];
     }
     return this.db.prepare('SELECT * FROM agent_registry ORDER BY created_at DESC').all() as AgentRecord[];
+  }
+
+  async countAgentsByStatus(status: AgentStatus): Promise<number> {
+    const row = this.db.prepare(
+      'SELECT COUNT(*) as count FROM agent_registry WHERE status = ?',
+    ).get(status) as { count: number } | undefined;
+    return row?.count ?? 0;
   }
 
   async updateAgentStatus(id: string, status: AgentStatus): Promise<void> {
@@ -115,6 +123,20 @@ export class SQLiteAgentRepository implements IAgentRepository {
       ORDER  BY s.win_rate_percent DESC
       LIMIT  ?
     `).all(limit) as AgentWithCosmetics[];
+  }
+
+  async findActiveAgentsWithStats(limit: number, offset: number): Promise<AgentWithStatsDetail[]> {
+    return this.db.prepare(`
+      SELECT s.*, r.id, r.agent_type, r.risk_profile, r.status, r.custom_name, r.emoji, r.color,
+             r.biography, r.personality_traits, r.nickname, r.age_iterations, r.generation_number,
+             r.parent_id_1, r.parent_id_2, r.created_at
+      FROM   agent_statistics s
+      JOIN   agent_registry   r ON s.agent_id = r.id
+      WHERE  r.status = 'ACTIVE'
+      ORDER  BY s.win_rate_percent DESC
+      LIMIT  ?
+      OFFSET ?
+    `).all(limit, offset) as AgentWithStatsDetail[];
   }
 
   async recordCompetitionResult(agentId: string, result: CompetitionResultInput): Promise<void> {

@@ -107,18 +107,23 @@ export class SQLiteSocialRepository implements ISocialRepository {
       conditions.push('fetched_at >= ?');
       params.push(since);
     }
+
+    const orderBy = query.sortBy === 'recency' ? 'fetched_at' : query.sortBy === 'engagement' ? 'score_engagement' : 'score_composite';
+
+    // Keyset pagination: cursor is (sortKeyValue, id) tuple encoded as JSON
+    // For DESC ordering: (sortValue < ?) OR (sortValue = ? AND id < ?)
     if (query.cursor) {
-      conditions.push('id > ?');
-      params.push(query.cursor);
+      const cursor = JSON.parse(query.cursor) as { sortValue: unknown; id: string };
+      conditions.push(`(${orderBy} < ?) OR (${orderBy} = ? AND id < ?)`);
+      params.push(cursor.sortValue, cursor.sortValue, cursor.id);
     }
 
     const where   = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-    const orderBy = query.sortBy === 'recency' ? 'fetched_at' : query.sortBy === 'engagement' ? 'score_engagement' : 'score_composite';
     const limit   = (query.limit ?? 50) + 1; // fetch one extra to detect next page
     params.push(limit);
 
     const rows = this.db.prepare(
-      `SELECT * FROM social_media_items ${where} ORDER BY ${orderBy} DESC LIMIT ?`,
+      `SELECT * FROM social_media_items ${where} ORDER BY ${orderBy} DESC, id DESC LIMIT ?`,
     ).all(...params) as Array<Record<string, unknown>>;
 
     const hasMore = rows.length === limit;
@@ -126,7 +131,7 @@ export class SQLiteSocialRepository implements ISocialRepository {
 
     return {
       items,
-      nextCursor: hasMore ? items[items.length - 1].id : undefined,
+      nextCursor: hasMore ? JSON.stringify({ sortValue: items[items.length - 1][orderBy], id: items[items.length - 1].id }) : undefined,
     };
   }
 
