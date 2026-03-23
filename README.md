@@ -35,12 +35,14 @@ Set these in `backend/.env`:
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `CLAUDE_API_KEY` | Yes | From [console.anthropic.com](https://console.anthropic.com) |
-| `NEWSAPI_API_KEY` | Yes | From [newsapi.org](https://newsapi.org) |
-| `API_SECRET_KEY` | Yes | Any string — used to authenticate `POST /api/refresh-sentiment` |
-| `COINGECKO_API_KEY` | No | Free tier works without it |
+| `BROKER_MASTER_KEY` | Yes | Used to encrypt secret values stored in SQLite (`app_config` + broker credentials) |
+| `CONFIG_ADMIN_PASSWORD` | Yes | Password gate for `/api/admin/config` and Admin UI config editor |
+| `PORT` | No | Server port (default `3000`) |
+| `DATABASE_PATH` | No | SQLite path (default `./sentiment_analyzer.db`) |
+| `REDIS_URL` | No | Enables BullMQ workers when set |
 
-Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`, `TRADING_PROVIDER`, `REDIS_URL`, `TOURNAMENT_WORKER_CONCURRENCY`, `SCRAPER_WORKER_CONCURRENCY`.
+All other app settings can be managed at runtime in the Admin tab and are persisted in the `app_config` table.
+`.env` values are still supported as migration fallbacks.
 
 ### Social Media, NLP & Telemetry Variables
 
@@ -82,6 +84,8 @@ Current top-level tabs:
 - MARL Competition
 - Social Intel
 - Backtesting
+- Trading
+- Admin
 
 Current user-facing Phase 1 controls:
 

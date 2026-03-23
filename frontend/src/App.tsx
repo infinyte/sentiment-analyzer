@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 import { AgentManagementDashboard } from './components/AgentManagementDashboard';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { SocialDashboard } from './components/SocialDashboard';
+import { ConfigEditor } from './components/ConfigEditor';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -2555,7 +2556,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading' | 'admin';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
@@ -2699,6 +2700,9 @@ export default function App() {
           </button>
           <button style={navTabStyle('trading')} onClick={() => setActiveView('trading')}>
             Trading
+          </button>
+          <button style={navTabStyle('admin')} onClick={() => setActiveView('admin')}>
+            Admin
           </button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 0' }}>
@@ -2907,6 +2911,9 @@ export default function App() {
         )}
         {activeView === 'trading' && (
           <TradingWorkspace />
+        )}
+        {activeView === 'admin' && (
+          <ConfigEditor />
         )}
       </main>
 

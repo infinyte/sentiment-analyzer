@@ -15,6 +15,7 @@
 import { Router } from 'express';
 import { ExchangeFactory, getTradingConfig } from '../services/exchange/exchange-factory.js';
 import { TradingService } from '../services/exchange/trading-service.js';
+import { appConfigService } from '../services/app-config-service.js';
 import logger from '../logger.js';
 
 export function createTradingRouter(): Router {
@@ -38,8 +39,8 @@ export function createTradingRouter(): Router {
     startupError = err instanceof Error ? err.message : String(err);
     logger.error('trading router disabled due to configuration error', {
       error: startupError,
-      mode: process.env.TRADING_MODE ?? 'paper',
-      provider: process.env.TRADING_PROVIDER ?? 'crypto-com',
+      mode: appConfigService.get('TRADING_MODE') ?? 'paper',
+      provider: appConfigService.get('TRADING_PROVIDER') ?? 'crypto-com',
     });
   }
 
@@ -48,8 +49,8 @@ export function createTradingRouter(): Router {
       res.status(503).json({
         error: 'Trading service unavailable due to configuration error.',
         details: startupError,
-        mode: process.env.TRADING_MODE ?? 'paper',
-        provider: process.env.TRADING_PROVIDER ?? 'crypto-com',
+        mode: appConfigService.get('TRADING_MODE') ?? 'paper',
+        provider: appConfigService.get('TRADING_PROVIDER') ?? 'crypto-com',
       });
     });
 

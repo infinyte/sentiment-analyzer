@@ -10,6 +10,7 @@
  */
 
 import logger from '../logger.js';
+import { appConfigService } from './app-config-service.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -243,8 +244,10 @@ class StocktwitsAdapter implements PlatformAdapter {
 
 class XAdapter implements PlatformAdapter {
   readonly platform = 'x' as const;
-  private readonly bearerToken =
-    process.env.X_BEARER_TOKEN ?? process.env.TWITTER_BEARER_TOKEN ?? '';
+
+  private get bearerToken(): string {
+    return appConfigService.get('X_BEARER_TOKEN') ?? appConfigService.get('TWITTER_BEARER_TOKEN') ?? '';
+  }
 
   async scrape(symbol: string, _query: string): Promise<ScrapedPost[]> {
     if (!this.bearerToken) return [];

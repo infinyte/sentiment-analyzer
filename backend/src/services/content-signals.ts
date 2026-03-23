@@ -6,6 +6,7 @@ import type {
 } from '../types.js';
 import logger from '../logger.js';
 import { NewsAPIService } from './newsapi.js';
+import { appConfigService } from './app-config-service.js';
 import { detectSarcasm } from './social-media/scoring/sarcasm-detector.js';
 import { normalizeText } from './social-media/scoring/normalize-text.js';
 
@@ -147,10 +148,9 @@ class RedditContentAdapter implements ContentSourceAdapter {
 }
 
 class XContentAdapter implements ContentSourceAdapter {
-  private readonly bearerToken = process.env.X_BEARER_TOKEN ?? process.env.TWITTER_BEARER_TOKEN ?? '';
-
   async collect(topic: string, symbol: string, _days: number): Promise<NormalizedSourceItem[]> {
-    if (!this.bearerToken) return [];
+    const bearerToken = appConfigService.get('X_BEARER_TOKEN') ?? appConfigService.get('TWITTER_BEARER_TOKEN') ?? '';
+    if (!bearerToken) return [];
 
     try {
       const query = encodeURIComponent(`(${topic} OR ${symbol}) lang:en -is:retweet`);
@@ -159,7 +159,7 @@ class XContentAdapter implements ContentSourceAdapter {
         {
           headers: {
             Accept: 'application/json',
-            Authorization: `Bearer ${this.bearerToken}`,
+            Authorization: `Bearer ${bearerToken}`,
           },
         }
       );

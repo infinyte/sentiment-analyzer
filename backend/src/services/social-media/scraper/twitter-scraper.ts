@@ -11,8 +11,11 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem, SocialSource } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const BEARER_TOKEN = process.env.X_BEARER_TOKEN ?? process.env.TWITTER_BEARER_TOKEN ?? '';
+function getBearerToken(): string {
+  return appConfigService.get('X_BEARER_TOKEN') ?? appConfigService.get('TWITTER_BEARER_TOKEN') ?? '';
+}
 const BASE_URL = 'https://api.twitter.com/2';
 
 // Per-symbol query strategies
@@ -54,10 +57,11 @@ async function rateLimit(): Promise<void> {
 export class TwitterScraper {
   readonly source: SocialSource = 'twitter';
 
-  isConfigured(): boolean { return BEARER_TOKEN.length > 0; }
+  isConfigured(): boolean { return getBearerToken().length > 0; }
 
   async fetch(symbol: string, coinName: string, maxResults = 25): Promise<SocialMediaItem[]> {
     if (!this.isConfigured()) return [];
+    const bearerToken = getBearerToken();
 
     const allItems: SocialMediaItem[] = [];
     // Use first two query templates per symbol to stay within budget
@@ -74,7 +78,7 @@ export class TwitterScraper {
           `&expansions=author_id&user.fields=public_metrics`;
 
         const response = await fetch(url, {
-          headers: { Authorization: `Bearer ${BEARER_TOKEN}`, Accept: 'application/json' },
+          headers: { Authorization: `Bearer ${bearerToken}`, Accept: 'application/json' },
         });
 
         if (response.status === 429) {

@@ -1,4 +1,5 @@
 import logger from '../logger.js';
+import { appConfigService } from './app-config-service.js';
 
 export interface NewsArticle {
   title: string;
@@ -21,11 +22,15 @@ interface NewsApiResponse {
 }
 
 export class NewsAPIService {
-  private apiKey: string;
+  private readonly _overrideApiKey: string | undefined;
   private apiUrl = 'https://newsapi.org/v2';
 
   constructor(apiKey?: string) {
-    this.apiKey = apiKey ?? process.env.NEWSAPI_API_KEY ?? '';
+    this._overrideApiKey = apiKey;
+  }
+
+  private get apiKey(): string {
+    return this._overrideApiKey ?? appConfigService.get('NEWSAPI_API_KEY') ?? '';
   }
 
   async getArticles(topic: string, days: number = 7): Promise<NewsArticle[]> {

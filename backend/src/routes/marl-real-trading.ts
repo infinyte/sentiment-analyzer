@@ -18,13 +18,14 @@ import { randomUUID } from 'node:crypto';
 import type { IBrokerRepository } from '../repositories/interfaces/broker.repository.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import { createBrokerAdapter } from '../services/brokers/broker-factory.js';
+import { appConfigService } from '../services/app-config-service.js';
 import type { BrokerProvider, ExchangeMode } from '../types/broker.js';
 import logger from '../logger.js';
 
 // ─── Auth guard ────────────────────────────────────────────────────────────────
 
 function requireApiKey(req: Request, res: Response): boolean {
-  if (req.headers['x-api-key'] !== process.env.API_SECRET_KEY) {
+  if (req.headers['x-api-key'] !== appConfigService.get('API_SECRET_KEY')) {
     res.status(401).json({ error: 'Unauthorized — x-api-key required' });
     return false;
   }

@@ -20,10 +20,18 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN ?? '';
-const CHANNEL_USERNAMES = (process.env.TELEGRAM_CHANNEL_USERNAMES ?? '')
-  .split(',').map(s => s.trim()).filter(Boolean);
+function getBotToken(): string {
+  return appConfigService.get('TELEGRAM_BOT_TOKEN') ?? '';
+}
+
+function getChannelUsernames(): string[] {
+  return (appConfigService.get('TELEGRAM_CHANNEL_USERNAMES') ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
 // Default public channels to scrape in MODE A when no explicit list is given
 const DEFAULT_PUBLIC_CHANNELS = [
@@ -152,13 +160,13 @@ function tgMessageToItem(msg: TgPublicMessage): SocialMediaItem {
 
 export class TelegramScraper {
   readonly source = 'telegram' as const;
-  private readonly channels: string[];
-
-  constructor() {
-    this.channels = CHANNEL_USERNAMES.length ? CHANNEL_USERNAMES : DEFAULT_PUBLIC_CHANNELS;
-  }
 
   isConfigured(): boolean { return true; } // MODE A requires no config
+
+  private getChannels(): string[] {
+    const configured = getChannelUsernames();
+    return configured.length ? configured : DEFAULT_PUBLIC_CHANNELS;
+  }
 
   /** Fetch recent posts from all monitored channels, filtered to symbol mentions. */
   async fetch(symbol: string, _coinName: string): Promise<SocialMediaItem[]> {
@@ -172,7 +180,7 @@ export class TelegramScraper {
 
   /** Fetch all recent posts across monitored channels (no symbol filter). */
   async fetchAll(): Promise<SocialMediaItem[]> {
-    if (BOT_TOKEN) {
+    if (getBotToken()) {
       return this.fetchViaBotApi();
     }
     return this.fetchViaPublicWeb();
@@ -182,7 +190,7 @@ export class TelegramScraper {
 
   private async fetchViaPublicWeb(): Promise<SocialMediaItem[]> {
     const results = await Promise.allSettled(
-      this.channels.map(ch => this.fetchPublicChannel(ch))
+      this.getChannels().map(ch => this.fetchPublicChannel(ch))
     );
     return results
       .filter((r): r is PromiseFulfilledResult<SocialMediaItem[]> => r.status === 'fulfilled')
@@ -216,11 +224,13 @@ export class TelegramScraper {
   // ── MODE B: Bot API (requires token + bot membership) ─────────────────────
 
   private async fetchViaBotApi(): Promise<SocialMediaItem[]> {
+    const botToken = getBotToken();
+    if (!botToken) return [];
     const items: SocialMediaItem[] = [];
     try {
       // getUpdates pulls messages sent/forwarded to the bot
       const response = await fetch(
-        `${BOT_API}/bot${BOT_TOKEN}/getUpdates?limit=100&timeout=0`,
+        `${BOT_API}/bot${botToken}/getUpdates?limit=100&timeout=0`,
         { headers: { Accept: 'application/json' } }
       );
       if (!response.ok) {

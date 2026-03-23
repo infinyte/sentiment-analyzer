@@ -19,10 +19,18 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const BOT_TOKEN   = process.env.DISCORD_BOT_TOKEN   ?? '';
-const CHANNEL_IDS = (process.env.DISCORD_CHANNEL_IDS ?? '')
-  .split(',').map(s => s.trim()).filter(Boolean);
+function getBotToken(): string {
+  return appConfigService.get('DISCORD_BOT_TOKEN') ?? '';
+}
+
+function getChannelIds(): string[] {
+  return (appConfigService.get('DISCORD_CHANNEL_IDS') ?? '')
+    .split(',')
+    .map(s => s.trim())
+    .filter(Boolean);
+}
 
 const API_BASE = 'https://discord.com/api/v10';
 
@@ -62,22 +70,24 @@ export class DiscordScraper {
   readonly source = 'discord' as const;
 
   isConfigured(): boolean {
-    return BOT_TOKEN.length > 0 && CHANNEL_IDS.length > 0;
+    return getBotToken().length > 0 && getChannelIds().length > 0;
   }
 
   async fetch(symbol: string, _coinName: string, limit = 50): Promise<SocialMediaItem[]> {
     if (!this.isConfigured()) return [];
+    const botToken = getBotToken();
+    const channelIds = getChannelIds();
 
     const items: SocialMediaItem[] = [];
     const symLower = symbol.toLowerCase();
 
-    for (const channelId of CHANNEL_IDS) {
+    for (const channelId of channelIds) {
       try {
         const response = await fetch(
           `${API_BASE}/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`,
           {
             headers: {
-              Authorization: `Bot ${BOT_TOKEN}`,
+              Authorization: `Bot ${botToken}`,
               Accept: 'application/json',
             },
           }
@@ -142,13 +152,15 @@ export class DiscordScraper {
    */
   async fetchAll(limit = 25): Promise<SocialMediaItem[]> {
     if (!this.isConfigured()) return [];
+    const botToken = getBotToken();
+    const channelIds = getChannelIds();
 
     const all: SocialMediaItem[] = [];
-    for (const channelId of CHANNEL_IDS) {
+    for (const channelId of channelIds) {
       try {
         const response = await fetch(
           `${API_BASE}/channels/${channelId}/messages?limit=${Math.min(limit, 100)}`,
-          { headers: { Authorization: `Bot ${BOT_TOKEN}`, Accept: 'application/json' } }
+          { headers: { Authorization: `Bot ${botToken}`, Accept: 'application/json' } }
         );
         if (!response.ok) continue;
         const messages = (await response.json()) as DiscordMessage[];

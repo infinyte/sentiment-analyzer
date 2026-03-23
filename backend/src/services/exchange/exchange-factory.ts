@@ -31,6 +31,7 @@ import { CoinbaseExchange }  from './coinbase-exchange.js';
 import { AlpacaClient }      from './alpaca-client.js';
 import { AlpacaExchange }    from './alpaca-exchange.js';
 import type { ExchangeInterface } from './exchange-interface.js';
+import { appConfigService } from '../app-config-service.js';
 
 /** Low-level adapter providers (for ExchangeRegistry / real-trading routes). */
 export type ExchangeProvider = 'COINBASE' | 'BINANCE';
@@ -90,13 +91,17 @@ export interface TradingConfig {
   requireManualApproval:      boolean;
 }
 
+function cfg(key: string): string | undefined {
+  return appConfigService.get(key);
+}
+
 export function getTradingConfig(): TradingConfig {
-  const raw  = (process.env.TRADING_MODE ?? 'paper').toLowerCase();
+  const raw  = (cfg('TRADING_MODE') ?? 'paper').toLowerCase();
   const mode = Object.values(TradingMode).includes(raw as TradingMode)
     ? (raw as TradingMode)
     : TradingMode.PAPER;
 
-  const rawProvider = (process.env.TRADING_PROVIDER ?? 'crypto-com').toLowerCase();
+  const rawProvider = (cfg('TRADING_PROVIDER') ?? 'crypto-com').toLowerCase();
   if (!SUPPORTED_TRADING_PROVIDERS.includes(rawProvider as TradingProvider)) {
     throw new Error(
       `[exchange-factory] unsupported TRADING_PROVIDER: "${rawProvider}". ` +
@@ -109,11 +114,11 @@ export function getTradingConfig(): TradingConfig {
   return {
     mode,
     provider,
-    initialCapital:            parseInt(process.env.TRADING_INITIAL_CAPITAL      ?? '10000', 10),
-    maxLossPercentage:         parseInt(process.env.TRADING_MAX_LOSS_PERCENT      ?? '5',     10),
-    maxPositionSizePercentage: parseInt(process.env.TRADING_MAX_POSITION_PERCENT  ?? '15',    10),
-    maxOpenPositions:          parseInt(process.env.TRADING_MAX_OPEN_POSITIONS    ?? '3',     10),
-    requireManualApproval:     process.env.REQUIRE_MANUAL_APPROVAL === 'true',
+    initialCapital:            parseInt(cfg('TRADING_INITIAL_CAPITAL')      ?? '10000', 10),
+    maxLossPercentage:         parseInt(cfg('TRADING_MAX_LOSS_PERCENT')      ?? '5',     10),
+    maxPositionSizePercentage: parseInt(cfg('TRADING_MAX_POSITION_PERCENT')  ?? '15',    10),
+    maxOpenPositions:          parseInt(cfg('TRADING_MAX_OPEN_POSITIONS')    ?? '3',     10),
+    requireManualApproval:     (cfg('REQUIRE_MANUAL_APPROVAL') ?? '').toLowerCase() === 'true',
   };
 }
 
@@ -128,9 +133,9 @@ export class ExchangeFactory {
 
     // ── Crypto.com ──────────────────────────────────────────────────────────
     if (provider === 'crypto-com') {
-      const apiKey    = process.env.CRYPTO_COM_API_KEY;
-      const apiSecret = process.env.CRYPTO_COM_API_SECRET;
-      const pair      = process.env.CRYPTO_COM_TRADING_PAIR ?? 'BTC_USDT';
+      const apiKey    = cfg('CRYPTO_COM_API_KEY');
+      const apiSecret = cfg('CRYPTO_COM_API_SECRET');
+      const pair      = cfg('CRYPTO_COM_TRADING_PAIR') ?? 'BTC_USDT';
 
       if (!apiKey || !apiSecret) {
         throw new Error(
@@ -139,13 +144,13 @@ export class ExchangeFactory {
       }
 
       if (config.mode === TradingMode.SANDBOX) {
-        const baseUrl = process.env.CRYPTO_COM_REST_URL ?? 'https://uat.crypto.com/exchange/v1';
+        const baseUrl = cfg('CRYPTO_COM_REST_URL') ?? 'https://uat.crypto.com/exchange/v1';
         const client  = new CryptoComClient({ apiKey, apiSecret, baseUrl, sandbox: true });
         return new CryptoComExchange(client, { defaultPair: pair });
       }
 
       if (config.mode === TradingMode.LIVE) {
-        const baseUrl = process.env.CRYPTO_COM_LIVE_URL ?? 'https://api.crypto.com/exchange/v1';
+        const baseUrl = cfg('CRYPTO_COM_LIVE_URL') ?? 'https://api.crypto.com/exchange/v1';
         const client  = new CryptoComClient({ apiKey, apiSecret, baseUrl, sandbox: false });
         return new CryptoComExchange(client, { defaultPair: pair });
       }
@@ -153,9 +158,9 @@ export class ExchangeFactory {
 
     // ── Coinbase Advanced Trade ──────────────────────────────────────────────
     if (provider === 'coinbase') {
-      const apiKey    = process.env.COINBASE_API_KEY;
-      const apiSecret = process.env.COINBASE_API_SECRET;
-      const product   = process.env.COINBASE_TRADING_PAIR ?? 'BTC-USD';
+      const apiKey    = cfg('COINBASE_API_KEY');
+      const apiSecret = cfg('COINBASE_API_SECRET');
+      const product   = cfg('COINBASE_TRADING_PAIR') ?? 'BTC-USD';
 
       if (!apiKey || !apiSecret) {
         throw new Error(
@@ -178,8 +183,8 @@ export class ExchangeFactory {
 
     // ── Alpaca ─────────────────────────────────────────────────────────────
     if (provider === 'alpaca') {
-      const apiKey    = process.env.ALPACA_API_KEY;
-      const apiSecret = process.env.ALPACA_API_SECRET;
+      const apiKey    = cfg('ALPACA_API_KEY');
+      const apiSecret = cfg('ALPACA_API_SECRET');
 
       if (!apiKey || !apiSecret) {
         throw new Error(
@@ -187,10 +192,10 @@ export class ExchangeFactory {
         );
       }
 
-      const dataBaseUrl = process.env.ALPACA_DATA_URL ?? 'https://data.alpaca.markets';
+      const dataBaseUrl = cfg('ALPACA_DATA_URL') ?? 'https://data.alpaca.markets';
 
       if (config.mode === TradingMode.SANDBOX) {
-        const baseUrl = process.env.ALPACA_PAPER_API_URL ?? 'https://paper-api.alpaca.markets';
+        const baseUrl = cfg('ALPACA_PAPER_API_URL') ?? 'https://paper-api.alpaca.markets';
         const client  = new AlpacaClient({
           apiKey,
           apiSecret,
@@ -202,7 +207,7 @@ export class ExchangeFactory {
       }
 
       if (config.mode === TradingMode.LIVE) {
-        const baseUrl = process.env.ALPACA_LIVE_API_URL ?? 'https://api.alpaca.markets';
+        const baseUrl = cfg('ALPACA_LIVE_API_URL') ?? 'https://api.alpaca.markets';
         const client  = new AlpacaClient({
           apiKey,
           apiSecret,
@@ -216,9 +221,9 @@ export class ExchangeFactory {
 
     // ── Binance.US ─────────────────────────────────────────────────────────
     if (provider === 'binance-us' && config.mode === TradingMode.SANDBOX) {
-      const apiKey    = process.env.BINANCE_SANDBOX_API_KEY;
-      const apiSecret = process.env.BINANCE_SANDBOX_API_SECRET;
-      const baseUrl   = process.env.BINANCE_SANDBOX_TEST_NET ?? 'https://testnet.binance.vision';
+      const apiKey    = cfg('BINANCE_SANDBOX_API_KEY');
+      const apiSecret = cfg('BINANCE_SANDBOX_API_SECRET');
+      const baseUrl   = cfg('BINANCE_SANDBOX_TEST_NET') ?? 'https://testnet.binance.vision';
 
       if (!apiKey || !apiSecret) {
         throw new Error(
@@ -229,9 +234,9 @@ export class ExchangeFactory {
     }
 
     if (provider === 'binance-us' && config.mode === TradingMode.LIVE) {
-      const apiKey    = process.env.BINANCE_LIVE_API_KEY;
-      const apiSecret = process.env.BINANCE_LIVE_API_SECRET;
-      const baseUrl   = process.env.BINANCE_LIVE_URL ?? 'https://api.binance.us';
+      const apiKey    = cfg('BINANCE_LIVE_API_KEY');
+      const apiSecret = cfg('BINANCE_LIVE_API_SECRET');
+      const baseUrl   = cfg('BINANCE_LIVE_URL') ?? 'https://api.binance.us';
 
       if (!apiKey || !apiSecret) {
         throw new Error(

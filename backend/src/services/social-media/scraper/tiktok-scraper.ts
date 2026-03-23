@@ -23,10 +23,19 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const RAPIDAPI_KEY  = process.env.RAPIDAPI_KEY ?? '';
-const RAPIDAPI_HOST = process.env.RAPIDAPI_TIKTOK_HOST ?? 'tiktok-scraper7.p.rapidapi.com';
-const BASE_URL      = `https://${RAPIDAPI_HOST}`;
+function getRapidApiKey(): string {
+  return appConfigService.get('RAPIDAPI_KEY') ?? '';
+}
+
+function getRapidApiHost(): string {
+  return appConfigService.get('RAPIDAPI_TIKTOK_HOST') ?? 'tiktok-scraper7.p.rapidapi.com';
+}
+
+function getBaseUrl(): string {
+  return `https://${getRapidApiHost()}`;
+}
 
 interface TikTokAuthor {
   unique_id?: string;
@@ -87,19 +96,21 @@ function toMetric(value: string | number | undefined): number {
 export class TikTokScraper {
   readonly source = 'tiktok' as const;
 
-  isConfigured(): boolean { return RAPIDAPI_KEY.length > 0; }
+  isConfigured(): boolean { return getRapidApiKey().length > 0; }
 
   async fetch(symbol: string, coinName: string, count = 20): Promise<SocialMediaItem[]> {
     if (!this.isConfigured()) return [];
+    const rapidApiKey = getRapidApiKey();
+    const rapidApiHost = getRapidApiHost();
 
     const query = encodeURIComponent(`${coinName} ${symbol} crypto`);
-    const url = `${BASE_URL}/feed/search?keywords=${query}&count=${count}&region=US&publish_time=1&sort_type=0`;
+    const url = `${getBaseUrl()}/feed/search?keywords=${query}&count=${count}&region=US&publish_time=1&sort_type=0`;
 
     try {
       const response = await fetch(url, {
         headers: {
-          'x-rapidapi-key':  RAPIDAPI_KEY,
-          'x-rapidapi-host': RAPIDAPI_HOST,
+          'x-rapidapi-key':  rapidApiKey,
+          'x-rapidapi-host': rapidApiHost,
           Accept: 'application/json',
         },
         signal: AbortSignal.timeout(12_000),

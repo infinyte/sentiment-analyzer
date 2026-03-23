@@ -21,6 +21,7 @@
 
 import Transport from 'winston-transport';
 import type { TransportStreamOptions } from 'winston-transport';
+import { appConfigService } from '../services/app-config-service.js';
 
 // ── App Insights severity levels ──────────────────────────────────────────────
 
@@ -135,7 +136,7 @@ export class AppInsightsTransport extends Transport {
   constructor(opts?: TransportStreamOptions) {
     super(opts);
 
-    const cs = process.env.APPLICATIONINSIGHTS_CONNECTION_STRING ?? '';
+    const cs = appConfigService.get('APPLICATIONINSIGHTS_CONNECTION_STRING') ?? '';
     const parsed = parseConnectionString(cs);
 
     if (!parsed) {

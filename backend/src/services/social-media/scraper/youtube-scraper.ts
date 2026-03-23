@@ -18,8 +18,11 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const API_KEY  = process.env.YOUTUBE_API_KEY ?? '';
+function getApiKey(): string {
+  return appConfigService.get('YOUTUBE_API_KEY') ?? '';
+}
 const BASE_URL = 'https://www.googleapis.com/youtube/v3';
 
 // Published-after date: last 7 days
@@ -55,7 +58,7 @@ interface YtVideoStats {
 export class YouTubeScraper {
   readonly source = 'youtube' as const;
 
-  isConfigured(): boolean { return API_KEY.length > 0; }
+  isConfigured(): boolean { return getApiKey().length > 0; }
 
   async fetch(symbol: string, coinName: string, maxResults = 10): Promise<SocialMediaItem[]> {
     if (!this.isConfigured()) return [];
@@ -75,6 +78,8 @@ export class YouTubeScraper {
   }
 
   private async searchVideos(symbol: string, coinName: string, maxResults: number): Promise<string[]> {
+    const apiKey = getApiKey();
+    if (!apiKey) return [];
     const query = encodeURIComponent(`${coinName} ${symbol} crypto`);
     const url =
       `${BASE_URL}/search?part=snippet` +
@@ -84,7 +89,7 @@ export class YouTubeScraper {
       `&publishedAfter=${publishedAfterParam()}` +
       `&maxResults=${Math.min(maxResults, 50)}` +
       `&relevanceLanguage=en` +
-      `&key=${API_KEY}`;
+      `&key=${apiKey}`;
 
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
 
@@ -105,12 +110,14 @@ export class YouTubeScraper {
 
   private async fetchVideoDetails(videoIds: string[]): Promise<YtVideoStats[]> {
     if (videoIds.length === 0) return [];
+    const apiKey = getApiKey();
+    if (!apiKey) return [];
 
     const ids = videoIds.join(',');
     const url =
       `${BASE_URL}/videos?part=snippet,statistics` +
       `&id=${ids}` +
-      `&key=${API_KEY}`;
+      `&key=${apiKey}`;
 
     const response = await fetch(url, { headers: { Accept: 'application/json' } });
     if (!response.ok) {

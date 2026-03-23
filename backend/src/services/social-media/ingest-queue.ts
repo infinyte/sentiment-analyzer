@@ -23,6 +23,7 @@ import { extractCoins } from './scoring/coin-extractor.js';
 import { botDetectionService } from '../bot-detection.js';
 import { scoreItemsAsync } from './scoring/item-scorer.js';
 import { socialStore } from '../../database/sqlite-social-store.js';
+import { appConfigService } from '../app-config-service.js';
 import logger from '../../logger.js';
 import type { SocialMediaItem, SocialSource } from '../../types/social-media.js';
 
@@ -72,7 +73,7 @@ export class IngestQueue extends EventEmitter {
 
   constructor(concurrency?: number) {
     super();
-    const configuredConcurrency = parseInt(process.env.INGEST_QUEUE_CONCURRENCY ?? '4', 10) || 4;
+    const configuredConcurrency = parseInt(appConfigService.get('INGEST_QUEUE_CONCURRENCY') ?? '4', 10) || 4;
     this.concurrency = Math.max(
       1,
       concurrency ?? configuredConcurrency,

@@ -6,10 +6,12 @@ type FnMock = ReturnType<typeof jest.fn>;
 type MockContext = {
 	scheduleMock: FnMock;
 	scheduledTasks: Array<{ stop: FnMock }>;
+	onChangeHandlers: Map<string, () => void>;
 	listenMock: FnMock;
 	closeServerMock: FnMock;
 	initPubSubMock: FnMock;
 	configInitMock: FnMock;
+	appConfigOnChangeMock: FnMock;
 	logOpenBrokerOrderWarningMock: FnMock;
 	disconnectAllMock: FnMock;
 	terminateAllMock: FnMock;
@@ -21,6 +23,7 @@ type MockContext = {
 
 async function loadLifecycleWithMocks(): Promise<{ lifecycle: LifecycleModule; mocks: MockContext }> {
 	const scheduledTasks: Array<{ stop: jest.Mock }> = [];
+	const onChangeHandlers = new Map<string, () => void>();
 	const scheduleMock = jest.fn((_expr: string, _handler: () => void) => {
 		const task = { stop: jest.fn() };
 		scheduledTasks.push(task);
@@ -38,6 +41,9 @@ async function loadLifecycleWithMocks(): Promise<{ lifecycle: LifecycleModule; m
 
 	const initPubSubMock = jest.fn(async () => undefined);
 	const configInitMock = jest.fn(async () => undefined);
+	const appConfigOnChangeMock = jest.fn((key: string, handler: () => void) => {
+		onChangeHandlers.set(key, handler);
+	});
 	const logOpenBrokerOrderWarningMock = jest.fn();
 	const runSentimentCronJobMock = jest.fn(async () => undefined);
 	const runTrendingCronJobMock = jest.fn(async () => undefined);
@@ -76,6 +82,18 @@ async function loadLifecycleWithMocks(): Promise<{ lifecycle: LifecycleModule; m
 		configService: { init: configInitMock },
 	}));
 
+	jest.doMock('../../services/app-config-service.js', () => ({
+		appConfigService: {
+			get: (key: string) => {
+				if (key === 'SENTIMENT_JOB_CRON') return '*/5 * * * *';
+				if (key === 'TRENDING_JOB_CRON') return '*/10 * * * *';
+				if (key === 'SOCIAL_SCRAPE_CRON') return '*/15 * * * *';
+				return undefined;
+			},
+			onChange: appConfigOnChangeMock,
+		},
+	}));
+
 	jest.doMock('../../services/worker-pool.js', () => ({
 		workerPool: { terminateAll: terminateAllMock },
 	}));
@@ -108,10 +126,12 @@ async function loadLifecycleWithMocks(): Promise<{ lifecycle: LifecycleModule; m
 		mocks: {
 			scheduleMock,
 			scheduledTasks,
+			onChangeHandlers,
 			listenMock,
 			closeServerMock,
 			initPubSubMock,
 			configInitMock,
+			appConfigOnChangeMock,
 			logOpenBrokerOrderWarningMock,
 			disconnectAllMock,
 			terminateAllMock,
@@ -161,5 +181,24 @@ describe('lifecycle runtime idempotency', () => {
 		expect(mocks.closeQueueEventsListenerMock).toHaveBeenCalledTimes(1);
 		expect(mocks.storageCloseMock).toHaveBeenCalledTimes(1);
 		expect(mocks.socialStoreCloseMock).toHaveBeenCalledTimes(1);
+	});
+
+	it('reschedules cron jobs when app-config cron key changes', async () => {
+		const { lifecycle, mocks } = await loadLifecycleWithMocks();
+
+		lifecycle.startRuntime();
+		expect(mocks.scheduleMock).toHaveBeenCalledTimes(4);
+		expect(mocks.appConfigOnChangeMock).toHaveBeenCalledTimes(3);
+
+		const previousTasks = [...mocks.scheduledTasks];
+		const sentimentChange = mocks.onChangeHandlers.get('SENTIMENT_JOB_CRON');
+		expect(sentimentChange).toBeDefined();
+
+		sentimentChange?.();
+
+		expect(mocks.scheduleMock).toHaveBeenCalledTimes(8);
+		for (const task of previousTasks) {
+			expect(task.stop).toHaveBeenCalledTimes(1);
+		}
 	});
 });

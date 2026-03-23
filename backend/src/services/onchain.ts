@@ -1,6 +1,7 @@
 import logger from '../logger.js';
 import type { OnChainMetrics } from '../types.js';
 import { Cache } from './cache.js';
+import { appConfigService } from './app-config-service.js';
 
 const DEFAULT_API_URL = 'https://api.glassnode.com/v1/metrics';
 const CACHE_TTL_MS = 15 * 60 * 1000;
@@ -25,16 +26,24 @@ const COIN_TO_ASSET: Record<string, string> = {
 };
 
 export class OnChainService {
-  private readonly apiKey: string;
-  private readonly apiUrl: string;
+  private readonly overrideApiKey: string;
+  private readonly overrideApiUrl: string;
 
   constructor(
-    apiKey = process.env.ONCHAIN_API_KEY ?? '',
-    apiUrl = process.env.ONCHAIN_API_URL ?? DEFAULT_API_URL,
+    apiKey = '',
+    apiUrl = '',
     private readonly cache = new Cache()
   ) {
-    this.apiKey = apiKey.trim();
-    this.apiUrl = apiUrl.replace(/\/$/, '');
+    this.overrideApiKey = apiKey.trim();
+    this.overrideApiUrl = apiUrl.replace(/\/$/, '');
+  }
+
+  private get apiKey(): string {
+    return this.overrideApiKey || (appConfigService.get('ONCHAIN_API_KEY') ?? '').trim();
+  }
+
+  private get apiUrl(): string {
+    return this.overrideApiUrl || (appConfigService.get('ONCHAIN_API_URL') ?? DEFAULT_API_URL).replace(/\/$/, '');
   }
 
   isAvailable(): boolean {

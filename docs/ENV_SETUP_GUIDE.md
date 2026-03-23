@@ -9,6 +9,14 @@
 
 Variables are grouped by the subsystem that reads them. Defaults shown are what the code falls back to when the variable is absent.
 
+### Runtime Config Model (Config-to-DB)
+
+The backend now supports DB-backed runtime configuration via the `app_config` table and `/api/admin/config/*` endpoints.
+
+- `.env` should only hold bootstrap/security values and infrastructure startup values.
+- Most application variables (API keys, cron schedules, social integrations, exchange settings) can be edited at runtime from the Admin UI and are persisted in SQLite.
+- Runtime lookups use this priority: DB value -> `.env` fallback -> code default.
+
 ---
 
 ### Server
@@ -34,8 +42,9 @@ Variables are grouped by the subsystem that reads them. Defaults shown are what 
 
 | Variable | Required | Default | Example | Description |
 |---|---|---|---|---|
-| `API_SECRET_KEY` | **Yes** | — | `mysecretkey123` | Bearer token that gates `POST /api/refresh-sentiment` and all MARL broker routes (`X-API-Key` header). Without this, those endpoints return 401. |
-| `BROKER_MASTER_KEY` | Conditional | — | `aabbccddeeff00112233445566778899` | 32-character hex key used for AES-256-GCM encryption of broker credentials in SQLite. Required for broker credential storage via `/api/marl/broker/*`; not required for exchange-only provider mode. |
+| `BROKER_MASTER_KEY` | **Yes** | — | `aabbccddeeff00112233445566778899` | AES-256-GCM key used to encrypt DB-stored secrets (broker credentials and secret app config values). |
+| `CONFIG_ADMIN_PASSWORD` | **Yes** | — | `choose-a-strong-password` | Password gate for `/api/admin/config` endpoints and Admin tab operations. |
+| `API_SECRET_KEY` | No | — | `mysecretkey123` | Optional in `.env`; can be set in DB. Used for `POST /api/refresh-sentiment` and MARL broker route auth (`X-API-Key`). |
 
 ---
 
@@ -260,23 +269,19 @@ The variables below follow Vite naming conventions (`VITE_` prefix). They are do
 The smallest `backend/.env` needed to run the full stack locally:
 
 ```bash
-# Auth
-API_SECRET_KEY=localdevkey
-
-# AI & News
-CLAUDE_API_KEY=sk-ant-api03-...
-NEWSAPI_API_KEY=your_newsapi_key
-
-# Trading (paper mode needs no exchange keys)
-TRADING_MODE=paper
+# Required bootstrap/security values
+BROKER_MASTER_KEY=replace-with-strong-value
+CONFIG_ADMIN_PASSWORD=replace-with-strong-password
 ```
 
-Everything else uses safe defaults. Add social scraper keys one at a time as you need them.
+Everything else can be configured in the Admin tab (`/api/admin/config`) after startup.
+You can still keep values in `.env` as migration fallbacks if preferred.
 
 ---
 
 ## Security Notes
 
+- `CONFIG_ADMIN_PASSWORD` — protect it like a production admin credential.
 - `API_SECRET_KEY` — treat like a password; rotate if exposed.
 - `BROKER_MASTER_KEY` — losing this key makes stored broker credentials unrecoverable. Back it up securely.
 - `CRYPTO_COM_API_SECRET` / `BINANCE_LIVE_API_SECRET` — grant only the minimum permissions needed (`trading.order.create`, `trading.order.cancel`, `trading.order.view`). Never grant withdrawal permissions to a bot key.

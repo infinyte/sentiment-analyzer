@@ -25,6 +25,7 @@ import type { RiskProfile } from '../services/pre-trainer.js';
 import type { MarketRegime } from '../services/synthetic-market-generator.js';
 import { getTournamentQueue } from '../queues/tournament.queue.js';
 import { isQueueAvailable } from '../queues/connection.js';
+import { appConfigService } from '../services/app-config-service.js';
 import { QueueEvents } from 'bullmq';
 import { createConnectionOptions } from '../queues/connection.js';
 import logger from '../logger.js';
@@ -106,13 +107,13 @@ export type MarlRateLimitConfig = {
 
 const rateLimitStore = new Map<string, RateLimitEntry>();
 
-function readPositiveIntEnv(
-  env: NodeJS.ProcessEnv,
+function readPositiveIntConfig(
+  env: NodeJS.ProcessEnv | undefined,
   name: string,
   fallback: number,
   minimum = 1
 ): number {
-  const raw = env[name];
+  const raw = env?.[name] ?? appConfigService.get(name);
   if (!raw) return fallback;
 
   const parsed = Number.parseInt(raw, 10);
@@ -124,12 +125,12 @@ function readPositiveIntEnv(
   return parsed;
 }
 
-export function resolveMarlRateLimitConfig(env: NodeJS.ProcessEnv = process.env): MarlRateLimitConfig {
+export function resolveMarlRateLimitConfig(env?: NodeJS.ProcessEnv): MarlRateLimitConfig {
   return {
-    windowMs: readPositiveIntEnv(env, 'MARL_RATE_LIMIT_WINDOW_MS', 60_000, 1_000),
-    startMax: readPositiveIntEnv(env, 'MARL_START_RATE_LIMIT_MAX', 5),
-    compareMax: readPositiveIntEnv(env, 'MARL_COMPARE_RATE_LIMIT_MAX', 10),
-    readMax: readPositiveIntEnv(env, 'MARL_READ_RATE_LIMIT_MAX', 120),
+    windowMs: readPositiveIntConfig(env, 'MARL_RATE_LIMIT_WINDOW_MS', 60_000, 1_000),
+    startMax: readPositiveIntConfig(env, 'MARL_START_RATE_LIMIT_MAX', 5),
+    compareMax: readPositiveIntConfig(env, 'MARL_COMPARE_RATE_LIMIT_MAX', 10),
+    readMax: readPositiveIntConfig(env, 'MARL_READ_RATE_LIMIT_MAX', 120),
   };
 }
 
@@ -366,7 +367,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
     // When not explicitly set: enable sentiment features if a known NLP API key is configured
     const enableSentimentFeatures = typeof body.enableSentimentFeatures === 'boolean'
       ? body.enableSentimentFeatures
-      : !!(process.env.FINBERT_API_URL || process.env.LUNARCRUSH_API_KEY);
+      : !!(appConfigService.get('FINBERT_API_URL') || appConfigService.get('LUNARCRUSH_API_KEY'));
 
     // ─── exchangeMode / broker validation ────────────────────────────────────
     const VALID_EXCHANGE_MODES = ['SIMULATED', 'PAPER', 'LIVE'] as const;
@@ -807,7 +808,7 @@ router.get('/api/marl/agents/learning', competitionReadRateLimit, (_req, res) =>
  */
 router.delete('/api/marl/agents/:agentId/learning', (req, res) => {
   const apiKey = req.headers['x-api-key'];
-  if (!apiKey || apiKey !== process.env.API_SECRET_KEY) {
+  if (!apiKey || apiKey !== appConfigService.get('API_SECRET_KEY')) {
     return res.status(401).json({ error: 'Unauthorized — x-api-key header required' });
   }
 

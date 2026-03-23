@@ -14,6 +14,7 @@
  *
  * This lets callers always fall back gracefully to keyword-based scoring.
  */
+import { appConfigService } from './app-config-service.js';
 
 export interface FinBertResult {
   /** Model-assigned sentiment label. */
@@ -29,10 +30,14 @@ interface HFClassificationEntry {
 }
 
 export class FinBertService {
-  private readonly apiUrl: string;
+  private readonly overrideApiUrl: string | undefined;
 
-  constructor(apiUrl = process.env.FINBERT_API_URL ?? '') {
-    this.apiUrl = apiUrl.trim();
+  constructor(apiUrl?: string) {
+    this.overrideApiUrl = apiUrl?.trim();
+  }
+
+  private get apiUrl(): string {
+    return this.overrideApiUrl ?? appConfigService.get('FINBERT_API_URL')?.trim() ?? '';
   }
 
   /** True when FINBERT_API_URL is configured. */

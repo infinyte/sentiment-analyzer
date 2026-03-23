@@ -14,7 +14,7 @@
 
 import Database from 'better-sqlite3';
 import path from 'path';
-import { createCipheriv, createDecipheriv, randomBytes, createHash } from 'node:crypto';
+import { encryptWithMasterKey, decryptWithMasterKey } from './services/crypto-utils.js';
 import type { SimulationResult } from './services/backtesting-engine.js';
 import type { Sentiment } from './types.js';
 import type {
@@ -585,6 +585,16 @@ export class StorageService {
       );
 
       CREATE INDEX IF NOT EXISTS idx_evo_tournaments_started ON evolutionary_tournaments (started_at DESC);
+
+          CREATE TABLE IF NOT EXISTS app_config (
+            key         TEXT PRIMARY KEY,
+            value       TEXT,
+            category    TEXT NOT NULL DEFAULT 'General',
+            description TEXT NOT NULL DEFAULT '',
+            is_secret   INTEGER NOT NULL DEFAULT 0,
+            updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+
     `);
   }
 
@@ -613,44 +623,6 @@ function dateReviver(_key: string, value: unknown): unknown {
     return new Date((value as { __date__: string }).__date__);
   }
   return value;
-}
-
-// ─── AES-256-GCM Encryption ───────────────────────────────────────────────────
-//
-// Master key is read from BROKER_MASTER_KEY env var at call time (not module load).
-// If the env var is missing, encryption/decryption throws — intentional fail-fast.
-//
-// Key derivation: if BROKER_MASTER_KEY is 64 hex chars → use directly as 32-byte key.
-//                 Otherwise → SHA-256 hash the string to produce 32 bytes.
-
-function getMasterKey(): Buffer {
-  const raw = process.env.BROKER_MASTER_KEY;
-  if (!raw) throw new Error('[storage] BROKER_MASTER_KEY env var is not set');
-  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
-    return Buffer.from(raw, 'hex');
-  }
-  // Derive 32 bytes via SHA-256 of the provided string
-  return createHash('sha256').update(raw).digest();
-}
-
-function encryptWithMasterKey(plaintext: string): EncryptedBlob {
-  const key = getMasterKey();
-  const iv  = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return {
-    iv:         iv.toString('hex'),
-    authTag:    cipher.getAuthTag().toString('hex'),
-    ciphertext: ciphertext.toString('hex'),
-  };
-}
-
-function decryptWithMasterKey(blob: EncryptedBlob): string {
-  const key     = getMasterKey();
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(blob.iv, 'hex'));
-  decipher.setAuthTag(Buffer.from(blob.authTag, 'hex'));
-  return decipher.update(Buffer.from(blob.ciphertext, 'hex')).toString('utf8')
-       + decipher.final('utf8');
 }
 
 // ─── Module-level singleton ───────────────────────────────────────────────────

@@ -31,6 +31,7 @@ import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
 import { createTradingRouter }      from './routes/trading.js';
+import { createAdminConfigRouter }  from './routes/admin-config.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
@@ -41,6 +42,7 @@ import { ingestQueue } from './services/social-media/ingest-queue.js';
 import { getScraperQueue } from './queues/scraper.queue.js';
 import { isQueueAvailable } from './queues/connection.js';
 import logger from './logger.js';
+import { appConfigService } from './services/app-config-service.js';
 
 dotenv.config();
 
@@ -99,6 +101,10 @@ try {
   storage.connect();
   const pruned = storage.pruneExpiredSentiment();
   if (pruned > 0) logger.info('storage pruned expired rows', { count: pruned });
+  if (storage.isHealthy()) {
+    appConfigService.init(storage.getDb()!);
+    logger.info('app-config-service initialized');
+  }
 } catch (err) {
   logger.warn('storage unavailable, using in-memory only', { error: String(err) });
 }
@@ -464,7 +470,7 @@ app.get('/api/coins/:symbol', async (req, res) => {
 app.post('/api/refresh-sentiment', async (req, res) => {
   try {
     const token = req.headers['x-api-key'];
-    if (token !== process.env.API_SECRET_KEY) {
+    if (token !== appConfigService.get('API_SECRET_KEY')) {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
@@ -482,7 +488,7 @@ app.post('/api/refresh-sentiment', async (req, res) => {
       try {
         // Use cached coin list if available, otherwise fetch fresh
         let coins: Coin[] = cache.get<Coin[]>('coins') || await coingecko.getTopCoins(
-          parseInt(process.env.SENTIMENT_BATCH_SIZE || '50')
+          parseInt(appConfigService.get('SENTIMENT_BATCH_SIZE') ?? '50', 10)
         );
 
         // Filter to specific symbols if provided
@@ -529,8 +535,8 @@ app.get('/api/sentiment/:symbol', (req, res) => {
 
 // GET /api/health - Health check
 app.get('/api/health', (req, res) => {
-  const claudeStatus = process.env.CLAUDE_API_KEY ? 'ok' : 'misconfigured';
-  const newsapiStatus = process.env.NEWSAPI_API_KEY ? 'ok' : 'misconfigured';
+  const claudeStatus = appConfigService.get('CLAUDE_API_KEY') ? 'ok' : 'misconfigured';
+  const newsapiStatus = appConfigService.get('NEWSAPI_API_KEY') ? 'ok' : 'misconfigured';
   const sqliteStatus = storage.isHealthy() ? 'ok' : 'unavailable';
   const allHealthy = claudeStatus === 'ok' && newsapiStatus === 'ok';
 
@@ -962,6 +968,7 @@ if (storage.isHealthy()) {
   app.use(createMarlRealTradingRouter(repos.broker));
   app.use(createAgentStatsRouter(repos.agents));
   app.use(createEvolutionaryRouter(storage.getDb(), repos.agents));
+  app.use('/api/admin/config', createAdminConfigRouter());
 } else {
   logger.warn('DB-dependent routes skipped (storage not connected)');
 }
@@ -975,7 +982,7 @@ app.use((req, res) => {
 });
 
 export async function runSentimentCronJob(schedule: string): Promise<void> {
-  const batchSize = parseInt(process.env.SENTIMENT_BATCH_SIZE || '50');
+  const batchSize = parseInt(appConfigService.get('SENTIMENT_BATCH_SIZE') ?? '50', 10);
   const started = Date.now();
   logger.info('cron started', { batchSize, schedule });
 
@@ -1035,11 +1042,11 @@ export async function runSocialCronJob(): Promise<void> {
 
       logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
 
-      const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
+      const trendWindow = parseInt(appConfigService.get('TRENDING_WINDOW_HOURS') ?? '24', 10);
       const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
       logger.info('social cron: trending topics updated', { count: topics.length });
 
-      const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
+      const retainDays = parseInt(appConfigService.get('SOCIAL_HISTORY_DAYS') ?? '30', 10);
       const pruned = socialStore.pruneOldItems(retainDays);
       if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
     }

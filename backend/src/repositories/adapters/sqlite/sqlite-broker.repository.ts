@@ -1,40 +1,10 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
 import type Database from 'better-sqlite3';
 import type { BrokerCredentials, StoredCredential, BrokerOrder, EncryptedBlob } from '../../../types/broker.js';
 import type { IBrokerRepository } from '../../interfaces/broker.repository.js';
+import { encryptWithMasterKey, decryptWithMasterKey } from '../../../services/crypto-utils.js';
 
-// ── AES-256-GCM helpers ───────────────────────────────────────────────────────
-// Key derivation mirrors storage.ts: 64-char hex → use directly; else SHA-256.
-
-function getMasterKey(): Buffer {
-  const raw = process.env['BROKER_MASTER_KEY'];
-  if (!raw) throw new Error('[broker-repository] BROKER_MASTER_KEY env var is not set');
-  return /^[0-9a-fA-F]{64}$/.test(raw)
-    ? Buffer.from(raw, 'hex')
-    : createHash('sha256').update(raw).digest();
-}
-
-function encrypt(plaintext: string): EncryptedBlob {
-  const key        = getMasterKey();
-  const iv         = randomBytes(12);
-  const cipher     = createCipheriv('aes-256-gcm', key, iv);
-  const ciphertext = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-  return {
-    iv:         iv.toString('hex'),
-    authTag:    cipher.getAuthTag().toString('hex'),
-    ciphertext: ciphertext.toString('hex'),
-  };
-}
-
-function decrypt(blob: EncryptedBlob): string {
-  const key      = getMasterKey();
-  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(blob.iv, 'hex'));
-  decipher.setAuthTag(Buffer.from(blob.authTag, 'hex'));
-  return (
-    decipher.update(Buffer.from(blob.ciphertext, 'hex')).toString('utf8') +
-    decipher.final('utf8')
-  );
-}
+const encrypt = encryptWithMasterKey;
+const decrypt = decryptWithMasterKey;
 
 // ── Order row → BrokerOrder mapper ───────────────────────────────────────────
 

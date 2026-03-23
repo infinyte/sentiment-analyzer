@@ -15,6 +15,7 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import { socialStore } from '../../../database/sqlite-social-store.js';
+import { appConfigService } from '../../app-config-service.js';
 import { extractAll } from '../scoring/coin-extractor.js';
 import type { ScoredSocialItem, TrendingTopicRecord, TopicType } from '../../../types/social-media.js';
 
@@ -128,7 +129,7 @@ export class TrendingTopicDiscoveryEngine {
   async discoverTrends(
     timeWindowHours = 24,
     topN = 30,
-    minMentions = parseInt(process.env.TRENDING_MIN_MENTIONS ?? '3')
+    minMentions = parseInt(appConfigService.get('TRENDING_MIN_MENTIONS') ?? '3', 10)
   ): Promise<TrendingTopicRecord[]> {
     const start = Date.now();
 

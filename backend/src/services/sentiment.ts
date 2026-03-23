@@ -5,6 +5,7 @@ import type {
   SentimentSourceBreakdown,
 } from '../types.js';
 import logger from '../logger.js';
+import { appConfigService } from './app-config-service.js';
 
 interface SentimentAnalysisContext {
   aggregateScore?: number;
@@ -28,11 +29,15 @@ interface ClaudeAnalysisPayload {
 }
 
 export class SentimentService {
-  private apiKey: string;
+  private readonly _overrideApiKey: string | undefined;
   private apiUrl = 'https://api.anthropic.com/v1/messages';
 
   constructor(apiKey?: string) {
-    this.apiKey = apiKey ?? process.env.CLAUDE_API_KEY ?? '';
+    this._overrideApiKey = apiKey;
+  }
+
+  private get apiKey(): string {
+    return this._overrideApiKey ?? appConfigService.get('CLAUDE_API_KEY') ?? '';
   }
 
   async analyzeSentiment(
@@ -120,7 +125,7 @@ Respond with ONLY this JSON (no markdown, no explanation):
           'anthropic-version': '2023-06-01',
         },
         body: JSON.stringify({
-          model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-6',
+          model: appConfigService.get('CLAUDE_MODEL') ?? 'claude-sonnet-4-6',
           max_tokens: 500,
           messages: [{ role: 'user', content: prompt }],
         }),

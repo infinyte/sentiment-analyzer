@@ -23,6 +23,8 @@ import { Worker } from 'bullmq';
 import { SocialMediaScraperManager } from '../services/social-media/scraper/scraper-manager.js';
 import { TrendingTopicDiscoveryEngine } from '../services/social-media/trending/trending-discovery-engine.js';
 import { socialStore } from '../database/sqlite-social-store.js';
+import { storage } from '../storage.js';
+import { appConfigService } from '../services/app-config-service.js';
 import type { ScraperJobData } from '../queues/scraper.queue.js';
 import { createConnectionOptions } from '../queues/connection.js';
 import logger from '../logger.js';
@@ -30,6 +32,16 @@ import logger from '../logger.js';
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
 logger.info('[scraper-worker] starting up');
+
+try {
+  storage.connect();
+  if (storage.isHealthy()) {
+    appConfigService.init(storage.getDb()!);
+    logger.info('[scraper-worker] app-config-service initialized');
+  }
+} catch (err) {
+  logger.warn('[scraper-worker] storage unavailable for app-config initialization', { error: String(err) });
+}
 
 const scraperManager  = new SocialMediaScraperManager();
 const discoveryEngine = new TrendingTopicDiscoveryEngine();
@@ -60,12 +72,12 @@ const worker = new Worker<ScraperJobData>(
     });
 
     // Recompute trending topics in DB after fresh scrape
-    const trendWindow = parseInt(process.env['TRENDING_WINDOW_HOURS'] ?? '24', 10);
+    const trendWindow = parseInt(appConfigService.get('TRENDING_WINDOW_HOURS') ?? '24', 10);
     const topics = await discoveryEngine.discoverTrends(trendWindow, 30);
     logger.info('[scraper-worker] trending topics updated', { count: topics.length });
 
     // Prune old items
-    const retainDays = parseInt(process.env['SOCIAL_HISTORY_DAYS'] ?? '30', 10);
+    const retainDays = parseInt(appConfigService.get('SOCIAL_HISTORY_DAYS') ?? '30', 10);
     const pruned = socialStore.pruneOldItems(retainDays);
     if (pruned > 0) {
       logger.info('[scraper-worker] pruned old items', { count: pruned });

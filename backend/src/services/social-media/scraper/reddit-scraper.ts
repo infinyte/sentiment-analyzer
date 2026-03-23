@@ -11,11 +11,21 @@
 import { randomUUID } from 'crypto';
 import logger from '../../../logger.js';
 import type { SocialMediaItem } from '../../../types/social-media.js';
+import { appConfigService } from '../../app-config-service.js';
 
-const CLIENT_ID     = process.env.REDDIT_CLIENT_ID ?? '';
-const CLIENT_SECRET = process.env.REDDIT_CLIENT_SECRET ?? '';
-const REDDIT_USER   = process.env.REDDIT_USERNAME ?? '';
-const REDDIT_PASS   = process.env.REDDIT_PASSWORD ?? '';
+function getRedditConfig(): {
+  clientId: string;
+  clientSecret: string;
+  username: string;
+  password: string;
+} {
+  return {
+    clientId: appConfigService.get('REDDIT_CLIENT_ID') ?? '',
+    clientSecret: appConfigService.get('REDDIT_CLIENT_SECRET') ?? '',
+    username: appConfigService.get('REDDIT_USERNAME') ?? '',
+    password: appConfigService.get('REDDIT_PASSWORD') ?? '',
+  };
+}
 
 const CRYPTO_SUBREDDITS = [
   'CryptoCurrency', 'CryptoMarkets', 'Bitcoin', 'ethereum',
@@ -63,12 +73,13 @@ interface RedditListingResponse {
 }
 
 async function getOAuthToken(): Promise<string | null> {
-  if (!CLIENT_ID || !CLIENT_SECRET) return null;
+  const { clientId, clientSecret, username, password } = getRedditConfig();
+  if (!clientId || !clientSecret) return null;
   if (oauthToken && Date.now() < oauthExpiry) return oauthToken;
 
   try {
-    const creds = Buffer.from(`${CLIENT_ID}:${CLIENT_SECRET}`).toString('base64');
-    const body   = new URLSearchParams({ grant_type: 'password', username: REDDIT_USER, password: REDDIT_PASS });
+    const creds = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+    const body   = new URLSearchParams({ grant_type: 'password', username, password });
     const res    = await fetch('https://www.reddit.com/api/v1/access_token', {
       method: 'POST',
       headers: {
