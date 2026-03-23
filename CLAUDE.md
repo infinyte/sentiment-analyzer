@@ -129,7 +129,7 @@ backend/src/workers/
 - Evolutionary tables: `agent_registry`, `agent_statistics`, `agent_competitions`, `evolutionary_tournaments`
 
 ### Exchange / Trading
-- Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us` or `TRADING_PROVIDER=coinbase` to switch)
+- Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us`, `TRADING_PROVIDER=coinbase`, or `TRADING_PROVIDER=alpaca` to switch)
 - PAPER mode always uses `PaperExchange` (in-memory, no real orders) regardless of provider
 - `TradingService` wraps any `ExchangeInterface` with 4 safety guards: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
 - SELL orders bypass the kill switch; only BUY orders are blocked when the loss threshold is hit
@@ -191,8 +191,9 @@ Current high-value frontend coverage includes:
 - `API_SECRET_KEY` — Auth for `POST /api/refresh-sentiment`
 
 ### Key Optional
-- `BROKER_MASTER_KEY` — AES-256-GCM key; required for SANDBOX/LIVE broker modes
-- `TRADING_PROVIDER` — `crypto-com` (default), `binance-us`, or `coinbase`; selects exchange for SANDBOX/LIVE mode
+- `BROKER_MASTER_KEY` — AES-256-GCM key for encrypted broker credential storage (`/api/marl/broker/*`)
+- `TRADING_PROVIDER` — `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`; selects exchange for SANDBOX/LIVE mode
+- `ALPACA_API_KEY` / `ALPACA_API_SECRET` — Alpaca credentials (required when `TRADING_PROVIDER=alpaca` and mode is SANDBOX/LIVE)
 - `COINBASE_API_KEY` / `COINBASE_API_SECRET` — Coinbase Advanced Trade credentials (required when `TRADING_PROVIDER=coinbase`)
 - `COINBASE_TRADING_PAIR` — default Coinbase product ID, e.g. `BTC-USD` (default)
 - `FINBERT_API_URL` / `HUGGINGFACE_API_TOKEN` — remote FinBERT scoring

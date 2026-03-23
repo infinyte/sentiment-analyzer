@@ -31,7 +31,6 @@ describe('SQLiteAgentRepository', () => {
     db.close();
   });
 
-<<<<<<< HEAD
   describe('findAgentsPaginated', () => {
     beforeAll(async () => {
       // Clear before test (delete in correct order to respect foreign keys)
@@ -42,15 +41,6 @@ describe('SQLiteAgentRepository', () => {
       db.exec('DELETE FROM agent_registry');
       db.exec('PRAGMA foreign_keys = ON');
 
-=======
-  describe('countAgentsByStatus', () => {
-    it('should return 0 for empty database', async () => {
-      const count = await repo.countAgentsByStatus('ACTIVE');
-      expect(count).toBe(0);
-    });
-
-    it('should count only ACTIVE agents', async () => {
->>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
       const genome: AgentGenome = {
         epsilon: 0.1,
         learningRate: 0.01,
@@ -65,7 +55,6 @@ describe('SQLiteAgentRepository', () => {
         holdDurationMax: 5,
       };
 
-<<<<<<< HEAD
       // Create 5 active agents with different win rates
       for (let i = 0; i < 5; i++) {
         const agentId = `agent-${i}`;
@@ -77,29 +66,20 @@ describe('SQLiteAgentRepository', () => {
           initialGenome: genome,
         });
 
-        // Initialize stats with different win rates
         await repo.initializeStats(agentId);
-        // Manually update to set different win rates
         const winRate = (i + 1) * 20; // 20%, 40%, 60%, 80%, 100%
         db.prepare(
           'UPDATE agent_statistics SET win_rate_percent = ?, total_competitions = 10 WHERE agent_id = ?'
         ).run(winRate, agentId);
       }
 
-      // Create one retired agent
       const retiredId = 'agent-retired';
       await repo.registerAgent({
         agentId: retiredId,
-=======
-      // Register two agents
-      await repo.registerAgent({
-        agentId: 'agent-1',
->>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
         agentType: 'ML_BASED',
         riskProfile: 'CONSERVATIVE',
         initialGenome: genome,
       });
-<<<<<<< HEAD
       await repo.initializeStats(retiredId);
       await repo.updateAgentStatus(retiredId, 'RETIRED');
       db.prepare(
@@ -112,7 +92,6 @@ describe('SQLiteAgentRepository', () => {
 
       expect(result.agents).toHaveLength(5);
       expect(result.total).toBe(5);
-      // Should be sorted by win_rate_percent descending (100, 80, 60, 40, 20)
       expect(result.agents[0].win_rate_percent).toBe(100);
       expect(result.agents[1].win_rate_percent).toBe(80);
       expect(result.agents[2].win_rate_percent).toBe(60);
@@ -121,21 +100,18 @@ describe('SQLiteAgentRepository', () => {
     });
 
     it('should respect LIMIT and OFFSET', async () => {
-      // Get first page
       const page1 = await repo.findAgentsPaginated('ACTIVE', 2, 0);
       expect(page1.agents).toHaveLength(2);
       expect(page1.total).toBe(5);
       expect(page1.agents[0].win_rate_percent).toBe(100);
       expect(page1.agents[1].win_rate_percent).toBe(80);
 
-      // Get second page
       const page2 = await repo.findAgentsPaginated('ACTIVE', 2, 2);
       expect(page2.agents).toHaveLength(2);
       expect(page2.total).toBe(5);
       expect(page2.agents[0].win_rate_percent).toBe(60);
       expect(page2.agents[1].win_rate_percent).toBe(40);
 
-      // Get last page
       const page3 = await repo.findAgentsPaginated('ACTIVE', 2, 4);
       expect(page3.agents).toHaveLength(1);
       expect(page3.total).toBe(5);
@@ -144,8 +120,6 @@ describe('SQLiteAgentRepository', () => {
 
     it('should exclude RETIRED agents', async () => {
       const result = await repo.findAgentsPaginated('ACTIVE', 100, 0);
-
-      // Only 5 ACTIVE agents, not the 6th retired one
       expect(result.agents).toHaveLength(5);
       expect(result.total).toBe(5);
       expect(result.agents.every(a => a.status === 'ACTIVE')).toBe(true);
@@ -153,15 +127,11 @@ describe('SQLiteAgentRepository', () => {
 
     it('should include agent fields', async () => {
       const result = await repo.findAgentsPaginated('ACTIVE', 1, 0);
-
       const agent = result.agents[0];
-      // Check that agent fields are present
       expect(agent.id).toBeDefined();
       expect(agent.agent_type).toBe('ML_BASED');
       expect(agent.risk_profile).toBeDefined();
       expect(agent.status).toBe('ACTIVE');
-
-      // Check that stats fields are present
       expect(agent.total_competitions).toBeDefined();
       expect(agent.win_rate_percent).toBeDefined();
     });
@@ -170,28 +140,6 @@ describe('SQLiteAgentRepository', () => {
       const result = await repo.findAgentsPaginated('ACTIVE', 10, 100);
       expect(result.agents).toHaveLength(0);
       expect(result.total).toBe(5);
-=======
-
-      await repo.registerAgent({
-        agentId: 'agent-2',
-        agentType: 'ML_BASED',
-        riskProfile: 'AGGRESSIVE',
-        initialGenome: genome,
-      });
-
-      // Both should be ACTIVE initially
-      let activeCount = await repo.countAgentsByStatus('ACTIVE');
-      expect(activeCount).toBe(2);
-
-      // Retire one agent
-      await repo.updateAgentStatus('agent-1', 'RETIRED');
-
-      activeCount = await repo.countAgentsByStatus('ACTIVE');
-      expect(activeCount).toBe(1);
-
-      const retiredCount = await repo.countAgentsByStatus('RETIRED');
-      expect(retiredCount).toBe(1);
->>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
     });
   });
 

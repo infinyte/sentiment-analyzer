@@ -19,6 +19,7 @@ module.exports = {
     '.*services/worker-pool(\\.js)?$': '<rootDir>/src/services/__mocks__/worker-pool.ts',
     '^(\\.{1,2}/.*)\\.js$': '$1',
   },
+  setupFiles: ['<rootDir>/src/__tests__/setup-env.ts'],
   clearMocks: true,
   restoreMocks: true,
   // Force-exit after all tests complete to close the Express server handle

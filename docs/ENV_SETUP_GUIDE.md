@@ -35,7 +35,7 @@ Variables are grouped by the subsystem that reads them. Defaults shown are what 
 | Variable | Required | Default | Example | Description |
 |---|---|---|---|---|
 | `API_SECRET_KEY` | **Yes** | — | `mysecretkey123` | Bearer token that gates `POST /api/refresh-sentiment` and all MARL broker routes (`X-API-Key` header). Without this, those endpoints return 401. |
-| `BROKER_MASTER_KEY` | Conditional | — | `aabbccddeeff00112233445566778899` | 32-character hex key used for AES-256-GCM encryption of broker credentials in SQLite. Required whenever `TRADING_MODE` is `sandbox` or `live`. Paper mode does not need it. |
+| `BROKER_MASTER_KEY` | Conditional | — | `aabbccddeeff00112233445566778899` | 32-character hex key used for AES-256-GCM encryption of broker credentials in SQLite. Required for broker credential storage via `/api/marl/broker/*`; not required for exchange-only provider mode. |
 
 ---
 
@@ -81,7 +81,7 @@ Variables are grouped by the subsystem that reads them. Defaults shown are what 
 | Variable | Required | Default | Example | Description |
 |---|---|---|---|---|
 | `TRADING_MODE` | No | `paper` | `sandbox` | `paper` — fully simulated, no API calls. `sandbox` — real exchange API with test funds. `live` — real money. ⚠️ Start with `paper`. |
-| `TRADING_PROVIDER` | No | `crypto-com` | `binance-us` | Which exchange to use for `sandbox`/`live` modes. `crypto-com` (default) or `binance-us`. Ignored when `TRADING_MODE=paper`. |
+| `TRADING_PROVIDER` | No | `crypto-com` | `alpaca` | Which exchange to use for `sandbox`/`live` modes. `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`. Ignored when `TRADING_MODE=paper`. |
 
 ---
 
@@ -137,6 +137,20 @@ Only needed when `TRADING_PROVIDER=binance-us`. Crypto.com is the recommended de
 | `BINANCE_LIVE_API_KEY` | Conditional | — | `blkey_abc` | Live Binance.US API key. ⚠️ Real money. |
 | `BINANCE_LIVE_API_SECRET` | Conditional | — | `blsecret_xyz` | Live Binance.US API secret. |
 | `BINANCE_LIVE_URL` | No | `https://api.binance.us` | `https://api.binance.us` | Binance.US production base URL. |
+
+---
+
+### Alpaca Exchange
+
+Only needed when `TRADING_PROVIDER=alpaca` and `TRADING_MODE` is `sandbox` or `live`.
+
+| Variable | Required | Default | Example | Description |
+|---|---|---|---|---|
+| `ALPACA_API_KEY` | Conditional | — | `PKABC123...` | Alpaca API key for trading and data APIs. |
+| `ALPACA_API_SECRET` | Conditional | — | `secret_xyz` | Alpaca API secret paired with the API key. |
+| `ALPACA_PAPER_API_URL` | No | `https://paper-api.alpaca.markets` | `https://paper-api.alpaca.markets` | Alpaca paper trading URL used in `sandbox` mode. |
+| `ALPACA_LIVE_API_URL` | No | `https://api.alpaca.markets` | `https://api.alpaca.markets` | Alpaca live trading URL used in `live` mode. |
+| `ALPACA_DATA_URL` | No | `https://data.alpaca.markets` | `https://data.alpaca.markets` | Alpaca crypto market-data URL used for latest trade prices. |
 
 ---
 

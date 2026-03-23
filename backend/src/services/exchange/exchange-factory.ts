@@ -15,6 +15,7 @@
  *   TRADING_PROVIDER=crypto-com  → uses CryptoComExchange (default)
  *   TRADING_PROVIDER=binance-us  → uses BinanceUSExchange
  *   TRADING_PROVIDER=coinbase    → uses CoinbaseExchange (Advanced Trade API v3)
+ *   TRADING_PROVIDER=alpaca      → uses AlpacaExchange (Trading + Crypto Data APIs)
  */
 
 import type { AccountMode } from './exchange-adapter.js';
@@ -27,13 +28,17 @@ import { CryptoComClient }   from './crypto-com-client.js';
 import { CryptoComExchange } from './crypto-com-exchange.js';
 import { CoinbaseClient }    from './coinbase-client.js';
 import { CoinbaseExchange }  from './coinbase-exchange.js';
+import { AlpacaClient }      from './alpaca-client.js';
+import { AlpacaExchange }    from './alpaca-exchange.js';
 import type { ExchangeInterface } from './exchange-interface.js';
 
 /** Low-level adapter providers (for ExchangeRegistry / real-trading routes). */
 export type ExchangeProvider = 'COINBASE' | 'BINANCE';
 
 /** Higher-level provider selector read from TRADING_PROVIDER env var. */
-export type TradingProvider = 'binance-us' | 'crypto-com' | 'coinbase';
+export type TradingProvider = 'binance-us' | 'crypto-com' | 'coinbase' | 'alpaca';
+
+const SUPPORTED_TRADING_PROVIDERS = ['binance-us', 'crypto-com', 'coinbase', 'alpaca'] as const;
 
 export interface ExchangeAdapterConfig {
   provider:    ExchangeProvider;
@@ -92,10 +97,14 @@ export function getTradingConfig(): TradingConfig {
     : TradingMode.PAPER;
 
   const rawProvider = (process.env.TRADING_PROVIDER ?? 'crypto-com').toLowerCase();
-  const provider: TradingProvider =
-    rawProvider === 'binance-us' ? 'binance-us' :
-    rawProvider === 'coinbase'   ? 'coinbase'   :
-    'crypto-com';
+  if (!SUPPORTED_TRADING_PROVIDERS.includes(rawProvider as TradingProvider)) {
+    throw new Error(
+      `[exchange-factory] unsupported TRADING_PROVIDER: "${rawProvider}". ` +
+      `Supported values: ${SUPPORTED_TRADING_PROVIDERS.join(', ')}`,
+    );
+  }
+
+  const provider = rawProvider as TradingProvider;
 
   return {
     mode,
@@ -167,8 +176,46 @@ export class ExchangeFactory {
       }
     }
 
-    // ── Binance.US ──────────────────────────────────────────────────────────
-    if (config.mode === TradingMode.SANDBOX) {
+    // ── Alpaca ─────────────────────────────────────────────────────────────
+    if (provider === 'alpaca') {
+      const apiKey    = process.env.ALPACA_API_KEY;
+      const apiSecret = process.env.ALPACA_API_SECRET;
+
+      if (!apiKey || !apiSecret) {
+        throw new Error(
+          'ALPACA_API_KEY and ALPACA_API_SECRET must be set for alpaca mode.',
+        );
+      }
+
+      const dataBaseUrl = process.env.ALPACA_DATA_URL ?? 'https://data.alpaca.markets';
+
+      if (config.mode === TradingMode.SANDBOX) {
+        const baseUrl = process.env.ALPACA_PAPER_API_URL ?? 'https://paper-api.alpaca.markets';
+        const client  = new AlpacaClient({
+          apiKey,
+          apiSecret,
+          baseUrl,
+          dataBaseUrl,
+          paper: true,
+        });
+        return new AlpacaExchange(client);
+      }
+
+      if (config.mode === TradingMode.LIVE) {
+        const baseUrl = process.env.ALPACA_LIVE_API_URL ?? 'https://api.alpaca.markets';
+        const client  = new AlpacaClient({
+          apiKey,
+          apiSecret,
+          baseUrl,
+          dataBaseUrl,
+          paper: false,
+        });
+        return new AlpacaExchange(client);
+      }
+    }
+
+    // ── Binance.US ─────────────────────────────────────────────────────────
+    if (provider === 'binance-us' && config.mode === TradingMode.SANDBOX) {
       const apiKey    = process.env.BINANCE_SANDBOX_API_KEY;
       const apiSecret = process.env.BINANCE_SANDBOX_API_SECRET;
       const baseUrl   = process.env.BINANCE_SANDBOX_TEST_NET ?? 'https://testnet.binance.vision';
@@ -181,7 +228,7 @@ export class ExchangeFactory {
       return new BinanceUSExchange({ apiKey, apiSecret, baseUrl, useTestnet: true });
     }
 
-    if (config.mode === TradingMode.LIVE) {
+    if (provider === 'binance-us' && config.mode === TradingMode.LIVE) {
       const apiKey    = process.env.BINANCE_LIVE_API_KEY;
       const apiSecret = process.env.BINANCE_LIVE_API_SECRET;
       const baseUrl   = process.env.BINANCE_LIVE_URL ?? 'https://api.binance.us';
@@ -194,8 +241,8 @@ export class ExchangeFactory {
       return new BinanceUSExchange({ apiKey, apiSecret, baseUrl, useTestnet: false });
     }
 
-    // exhaustive check
-    const _: never = config.mode;
-    throw new Error(`[ExchangeFactory] unknown trading mode: ${_}`);
+    throw new Error(
+      `[ExchangeFactory] unsupported provider/mode combination: provider=${provider} mode=${config.mode}`,
+    );
   }
 }

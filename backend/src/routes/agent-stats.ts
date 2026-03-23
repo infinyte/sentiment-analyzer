@@ -25,35 +25,7 @@ export function createAgentStatsRouter(agentRepo: IAgentRepository): Router {
       const limit  = Math.min(parseInt(req.query.limit  as string) || 50, 100);
       const offset = Math.max(parseInt(req.query.offset as string) || 0, 0);
 
-<<<<<<< HEAD
-<<<<<<< Updated upstream
-      const agents = db.prepare(`
-        SELECT
-          r.id, r.agent_type, r.risk_profile, r.status,
-          r.custom_name, r.emoji, r.color, r.biography, r.nickname,
-          r.age_iterations, r.generation_number, r.created_at,
-          s.total_competitions, s.total_wins, s.total_losses,
-          s.win_rate_percent, s.total_pnl, s.sharpe_ratio, s.roi_percent
-        FROM agent_registry r
-        LEFT JOIN agent_statistics s ON r.id = s.agent_id
-        WHERE r.status = 'ACTIVE'
-        ORDER BY COALESCE(s.win_rate_percent, 0) DESC
-        LIMIT ? OFFSET ?
-      `).all(limit, offset);
-
-      const total = (db.prepare(
-        "SELECT COUNT(*) AS count FROM agent_registry WHERE status = 'ACTIVE'"
-      ).get() as { count: number }).count;
-=======
       const result = await agentRepo.findAgentsPaginated('ACTIVE', limit, offset);
->>>>>>> Stashed changes
-=======
-      const [agents, total] = await Promise.all([
-        agentRepo.findActiveAgentsWithStats(limit, offset),
-        agentRepo.countAgentsByStatus('ACTIVE'),
-      ]);
->>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
-
       res.json({ agents: result.agents, total: result.total, limit, offset });
     } catch (error: unknown) {
       res.status(500).json({ error: String(error) });

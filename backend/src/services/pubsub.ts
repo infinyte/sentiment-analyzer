@@ -160,7 +160,6 @@ export async function initPubSub(): Promise<void> {
   try {
     // Dynamic import: only resolves when ioredis is installed.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    // @ts-ignore ioredis is an optional runtime dependency; not present at compile time
     const mod = await import('ioredis') as any;
     const IORedis = mod.default ?? mod;
     const pub = new IORedis(url);

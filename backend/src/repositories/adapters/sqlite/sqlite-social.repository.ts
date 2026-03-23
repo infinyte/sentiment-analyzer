@@ -137,7 +137,6 @@ export class SQLiteSocialRepository implements ISocialRepository {
     const hasMore = rows.length === limit;
     const items   = (hasMore ? rows.slice(0, -1) : rows).map(r => this.mapRow(r));
 
-<<<<<<< HEAD
     let nextCursor: string | undefined;
     if (hasMore && items.length > 0) {
       const last = items[items.length - 1];
@@ -148,12 +147,6 @@ export class SQLiteSocialRepository implements ISocialRepository {
     }
 
     return { items, nextCursor };
-=======
-    return {
-      items,
-      nextCursor: hasMore ? items[items.length - 1].id : undefined,
-    };
->>>>>>> c15425f6a17aa057de9bd356c7ea2403b8910ad9
   }
 
   async findItemsForCoin(coin: string, hours: number): Promise<ScoredSocialItem[]> {

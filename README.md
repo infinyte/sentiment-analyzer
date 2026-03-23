@@ -61,8 +61,8 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 | `HUGGINGFACE_API_TOKEN` | No | Hugging Face token used with `FINBERT_API_URL` |
 | `TRANSLATION_API_KEY` | No | Reserved for future multilingual translation routing; language detection is already active without it |
 | `APPLICATIONINSIGHTS_CONNECTION_STRING` | No | Azure Application Insights telemetry |
-| `BROKER_MASTER_KEY` | No | 64-hex or passphrase used to AES-256-GCM encrypt stored broker credentials; required for PAPER/LIVE exchange mode |
-| `TRADING_PROVIDER` | No | `crypto-com` (default) or `binance-us`; selects the real exchange for SANDBOX/LIVE trading mode |
+| `BROKER_MASTER_KEY` | No | AES-256-GCM key used to encrypt stored broker credentials (for `/api/marl/broker/*`); only required when using broker credential storage |
+| `TRADING_PROVIDER` | No | `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`; selects exchange for SANDBOX/LIVE trading mode |
 | `SOCIAL_SCRAPE_CRON` | No | Cron for hourly scrape (default: `0 * * * *`) |
 | `TRENDING_MIN_MENTIONS` | No | Min mentions to appear in trending (default: `3`) |
 | `REDIS_URL` | No | Redis connection URL (e.g. `redis://localhost:6379`). When set, enables BullMQ-backed tournament and scraper worker processes. Omit to keep all work in-process. |
