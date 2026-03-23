@@ -434,8 +434,74 @@ interface DashboardProps {
   onCoinSelect: (symbol: string) => void;
 }
 
+type SentimentMode = 'BASIC' | 'ADVANCED' | 'TRADING_SIGNALS' | 'SMART';
+type SentimentLabTab = 'analyze' | 'lookup' | 'rankings' | 'modes';
+
+interface SentimentAnalyzeResponse {
+  mode: SentimentMode;
+  results: Record<string, unknown>;
+}
+
+interface SentimentRankingCoin {
+  rank: number;
+  symbol: string;
+  name: string;
+  sentiment: 'BULL' | 'NEUTRAL' | 'BEAR';
+  confidence: number;
+  compositeScore: number;
+  price_usd: number;
+  price_change_7d_percent: number;
+}
+
+interface SentimentRankingResponse {
+  timeframe: string;
+  sentimentMode: string;
+  coins: SentimentRankingCoin[];
+}
+
+interface SentimentModesResponse {
+  analysisMode: Record<string, string>;
+  agentTypes: Record<string, string>;
+  riskProfiles: Record<string, unknown>;
+  slippageModels: Record<string, string>;
+}
+
+interface SentimentLookupResponse {
+  symbol: string;
+  sentiment_score: 'BULL' | 'NEUTRAL' | 'BEAR';
+  confidence: number;
+  summary: string;
+  short_term_outlook?: string;
+  key_catalysts?: string[];
+  risk_factors?: string[];
+}
+
 function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: DashboardProps) {
   const [sortBy, setSortBy] = useState<SortBy>('market_cap');
+  const [analysisMode, setAnalysisMode] = useState<SentimentMode>('BASIC');
+  const [analysisSymbolsInput, setAnalysisSymbolsInput] = useState('BTC, ETH');
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
+  const [analyzeSuccess, setAnalyzeSuccess] = useState<string | null>(null);
+  const [analyzeResult, setAnalyzeResult] = useState<SentimentAnalyzeResponse | null>(null);
+
+  const [lookupSymbol, setLookupSymbol] = useState('BTC');
+  const [lookupLoading, setLookupLoading] = useState(false);
+  const [lookupError, setLookupError] = useState<string | null>(null);
+  const [lookupSuccess, setLookupSuccess] = useState<string | null>(null);
+  const [lookupResult, setLookupResult] = useState<SentimentLookupResponse | null>(null);
+
+  const [rankingTimeframe, setRankingTimeframe] = useState('1d');
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [rankingError, setRankingError] = useState<string | null>(null);
+  const [rankingSuccess, setRankingSuccess] = useState<string | null>(null);
+  const [rankingResult, setRankingResult] = useState<SentimentRankingResponse | null>(null);
+  const [labTab, setLabTab] = useState<SentimentLabTab>('analyze');
+
+  const [modesOpen, setModesOpen] = useState(false);
+  const [modesLoading, setModesLoading] = useState(false);
+  const [modesError, setModesError] = useState<string | null>(null);
+  const [modesData, setModesData] = useState<SentimentModesResponse | null>(null);
 
   if (error) {
     return (
@@ -471,6 +537,149 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
     // market_cap: sort explicitly by market_rank ascending (rank 1 = largest cap)
     return arr.sort((a, b) => safeNum(a.market_rank) - safeNum(b.market_rank));
   })();
+
+  const parseSymbols = () =>
+    analysisSymbolsInput
+      .split(',')
+      .map(s => s.trim().toUpperCase())
+      .filter(Boolean);
+
+  const runAnalyze = async () => {
+    const symbols = parseSymbols();
+    if (symbols.length === 0) {
+      setAnalyzeError('Provide at least one symbol (comma-separated).');
+      setAnalyzeSuccess(null);
+      return;
+    }
+
+    setAnalyzeLoading(true);
+    setAnalyzeError(null);
+    setAnalyzeSuccess(null);
+
+    try {
+      const marketData = symbols.reduce<Record<string, {
+        symbol: string;
+        price_usd: number;
+        price_change_24h_percent: number;
+        price_change_7d_percent: number;
+        volatility_24h: number;
+        volume_24h_usd: number;
+      }>>((acc, sym) => {
+        const coin = coins.find(c => c.symbol.toUpperCase() === sym);
+        if (!coin) return acc;
+
+        acc[sym] = {
+          symbol: sym,
+          price_usd: coin.price_usd,
+          price_change_24h_percent: coin.price_change_24h_percent,
+          price_change_7d_percent: coin.price_change_7d_percent,
+          volatility_24h: coin.volatility_24h,
+          volume_24h_usd: coin.volume_24h_usd,
+        };
+        return acc;
+      }, {});
+
+      const response = await fetch('/api/sentiment/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols, mode: analysisMode, marketData }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+
+      setAnalyzeResult(payload as SentimentAnalyzeResponse);
+      setAnalyzeSuccess(`Analyzed ${symbols.length} symbol(s) in ${analysisMode} mode.`);
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : 'Analysis failed');
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
+  const runLookup = async () => {
+    const symbol = lookupSymbol.trim().toUpperCase();
+    if (!symbol) {
+      setLookupError('Enter a symbol to look up.');
+      setLookupSuccess(null);
+      return;
+    }
+
+    setLookupLoading(true);
+    setLookupError(null);
+    setLookupSuccess(null);
+
+    try {
+      const response = await fetch(`/api/sentiment/${symbol}`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+
+      setLookupResult(payload as SentimentLookupResponse);
+      setLookupSuccess(`Loaded sentiment for ${symbol}.`);
+    } catch (err) {
+      setLookupError(err instanceof Error ? err.message : 'Lookup failed');
+      setLookupResult(null);
+    } finally {
+      setLookupLoading(false);
+    }
+  };
+
+  const loadRankings = async () => {
+    setRankingLoading(true);
+    setRankingError(null);
+    setRankingSuccess(null);
+
+    try {
+      const response = await fetch(`/api/rankings/top-coins?timeframe=${encodeURIComponent(rankingTimeframe)}&limit=10`);
+      const payload = await response.json();
+
+      if (!response.ok) {
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+
+      setRankingResult(payload as SentimentRankingResponse);
+      setRankingSuccess(`Loaded top ${payload.coins?.length ?? 0} ranked coins.`);
+    } catch (err) {
+      setRankingError(err instanceof Error ? err.message : 'Ranking fetch failed');
+      setRankingResult(null);
+    } finally {
+      setRankingLoading(false);
+    }
+  };
+
+  const toggleModes = async () => {
+    const nextOpen = !modesOpen;
+    setModesOpen(nextOpen);
+
+    if (!nextOpen || modesData) return;
+
+    setModesLoading(true);
+    setModesError(null);
+
+    try {
+      const response = await fetch('/api/info/modes');
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload.error ?? `HTTP ${response.status}`);
+      }
+      setModesData(payload as SentimentModesResponse);
+    } catch (err) {
+      setModesError(err instanceof Error ? err.message : 'Failed to load mode reference');
+    } finally {
+      setModesLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (labTab === 'modes' && !modesData && !modesLoading && !modesError) {
+      void toggleModes();
+    }
+  }, [labTab, modesData, modesLoading, modesError]);
 
   return (
     <div style={{ padding: '1.5rem' }}>
@@ -536,6 +745,183 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
       </div>
 
       {/* Grid */}
+      <section
+        style={{
+          marginBottom: '1.5rem',
+          border: '1px solid var(--border)',
+          borderRadius: '0.75rem',
+          backgroundColor: 'var(--surface)',
+          padding: '1rem',
+        }}
+      >
+        <div style={{ marginBottom: '0.875rem' }}>
+          <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '1.25rem', fontWeight: 700 }}>Sentiment Lab</h2>
+          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.875rem' }}>
+            Analyze symbols, fetch cached sentiment, load ranked coins, and inspect analysis modes.
+          </p>
+        </div>
+
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginBottom: '0.875rem' }}>
+          {([
+            ['analyze', 'Analyze'],
+            ['lookup', 'Lookup'],
+            ['rankings', 'Rankings'],
+            ['modes', 'Modes'],
+          ] as Array<[SentimentLabTab, string]>).map(([id, label]) => (
+            <button
+              key={id}
+              onClick={() => setLabTab(id)}
+              aria-pressed={labTab === id}
+              style={{
+                padding: '0.4rem 0.7rem',
+                borderRadius: '999px',
+                border: `1px solid ${labTab === id ? '#2563eb' : 'var(--border)'}`,
+                backgroundColor: labTab === id ? '#dbeafe' : 'var(--surface)',
+                color: labTab === id ? '#1d4ed8' : 'var(--text-subtle)',
+                cursor: 'pointer',
+                fontWeight: 600,
+                fontSize: '0.82rem',
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.85rem' }}>
+          {labTab === 'analyze' && (
+            <>
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Analyze Request</h3>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+                Mode
+              </label>
+              <select
+                value={analysisMode}
+                onChange={e => setAnalysisMode(e.target.value as SentimentMode)}
+                style={{ width: '100%', marginBottom: '0.5rem', padding: '0.45rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              >
+                <option value="BASIC">BASIC</option>
+                <option value="ADVANCED">ADVANCED</option>
+                <option value="TRADING_SIGNALS">TRADING_SIGNALS</option>
+                <option value="SMART">SMART</option>
+              </select>
+
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+                Symbols (comma-separated)
+              </label>
+              <input
+                value={analysisSymbolsInput}
+                onChange={e => setAnalysisSymbolsInput(e.target.value)}
+                placeholder="BTC, ETH"
+                style={{ width: '100%', marginBottom: '0.5rem', padding: '0.45rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              />
+              <button
+                onClick={runAnalyze}
+                disabled={analyzeLoading}
+                style={{ padding: '0.45rem 0.7rem', border: 'none', borderRadius: '0.375rem', backgroundColor: analyzeLoading ? '#93c5fd' : '#2563eb', color: '#fff', cursor: analyzeLoading ? 'wait' : 'pointer', fontWeight: 600 }}
+              >
+                {analyzeLoading ? 'Analyzing...' : 'Run Analysis'}
+              </button>
+              {analyzeSuccess && <div style={{ marginTop: '0.5rem', color: '#047857', fontSize: '0.8rem' }}>{analyzeSuccess}</div>}
+              {analyzeError && <div style={{ marginTop: '0.5rem', color: '#b91c1c', fontSize: '0.8rem' }}>{analyzeError}</div>}
+              {analyzeResult && (
+                <pre style={{ marginTop: '0.5rem', fontSize: '0.72rem', maxHeight: '140px', overflow: 'auto', backgroundColor: 'var(--surface-2)', padding: '0.5rem', borderRadius: '0.375rem' }}>
+                  {JSON.stringify(analyzeResult.results, null, 2)}
+                </pre>
+              )}
+            </>
+          )}
+
+          {labTab === 'lookup' && (
+            <>
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Symbol Lookup</h3>
+              <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.3rem' }}>
+                Symbol
+              </label>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <input
+                  value={lookupSymbol}
+                  onChange={e => setLookupSymbol(e.target.value)}
+                  placeholder="BTC"
+                  style={{ flex: 1, minWidth: '180px', padding: '0.45rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                />
+                <button
+                  onClick={runLookup}
+                  disabled={lookupLoading}
+                  style={{ padding: '0.45rem 0.7rem', border: 'none', borderRadius: '0.375rem', backgroundColor: lookupLoading ? '#93c5fd' : '#2563eb', color: '#fff', cursor: lookupLoading ? 'wait' : 'pointer', fontWeight: 600 }}
+                >
+                  {lookupLoading ? 'Loading...' : 'Fetch'}
+                </button>
+              </div>
+              {lookupSuccess && <div style={{ color: '#047857', fontSize: '0.8rem' }}>{lookupSuccess}</div>}
+              {lookupError && <div style={{ color: '#b91c1c', fontSize: '0.8rem' }}>{lookupError}</div>}
+              {lookupResult && (
+                <div style={{ marginTop: '0.5rem', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem', backgroundColor: 'var(--surface-2)' }}>
+                  <div style={{ fontWeight: 700 }}>{lookupResult.symbol}</div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{lookupResult.sentiment_score} ({(lookupResult.confidence * 100).toFixed(0)}%)</div>
+                  <div style={{ marginTop: '0.25rem', fontSize: '0.8rem' }}>{lookupResult.summary}</div>
+                </div>
+              )}
+            </>
+          )}
+
+          {labTab === 'rankings' && (
+            <>
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Top Rankings</h3>
+              <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                <select
+                  value={rankingTimeframe}
+                  onChange={e => setRankingTimeframe(e.target.value)}
+                  style={{ flex: 1, minWidth: '180px', padding: '0.45rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+                >
+                  <option value="1d">1d</option>
+                  <option value="7d">7d</option>
+                  <option value="30d">30d</option>
+                </select>
+                <button
+                  onClick={loadRankings}
+                  disabled={rankingLoading}
+                  style={{ padding: '0.45rem 0.7rem', border: 'none', borderRadius: '0.375rem', backgroundColor: rankingLoading ? '#93c5fd' : '#2563eb', color: '#fff', cursor: rankingLoading ? 'wait' : 'pointer', fontWeight: 600 }}
+                >
+                  {rankingLoading ? 'Loading...' : 'Load'}
+                </button>
+              </div>
+              {rankingSuccess && <div style={{ color: '#047857', fontSize: '0.8rem' }}>{rankingSuccess}</div>}
+              {rankingError && <div style={{ color: '#b91c1c', fontSize: '0.8rem' }}>{rankingError}</div>}
+              {rankingResult?.coins?.length ? (
+                <div style={{ marginTop: '0.5rem', maxHeight: '200px', overflow: 'auto', fontSize: '0.75rem' }}>
+                  {rankingResult.coins.map(coin => (
+                    <div key={coin.symbol} style={{ display: 'grid', gridTemplateColumns: '1.75rem 1fr auto', gap: '0.4rem', padding: '0.3rem 0', borderBottom: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>#{coin.rank}</span>
+                      <span>{coin.symbol} - {coin.sentiment}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>{coin.compositeScore.toFixed(2)}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+
+          {labTab === 'modes' && (
+            <>
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Mode Reference</h3>
+              {modesLoading && <div style={{ marginTop: '0.5rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>Loading mode details...</div>}
+              {modesError && <div style={{ marginTop: '0.5rem', color: '#b91c1c', fontSize: '0.8rem' }}>{modesError}</div>}
+              {modesData && (
+                <div style={{ marginTop: '0.5rem', border: '1px solid var(--border)', borderRadius: '0.375rem', padding: '0.5rem', backgroundColor: 'var(--surface-2)' }}>
+                  {Object.entries(modesData.analysisMode).map(([mode, desc]) => (
+                    <div key={mode} style={{ marginBottom: '0.45rem' }}>
+                      <div style={{ fontWeight: 700, fontSize: '0.78rem' }}>{mode}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-subtle)' }}>{desc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </section>
+
       <div
         style={{
           display: 'grid',
