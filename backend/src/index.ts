@@ -28,7 +28,7 @@ import { configService } from './services/config-service.js';
 import { storage } from './storage.js';
 import { createRepositories } from './repositories/factory.js';
 import { socialStore } from './database/sqlite-social-store.js';
-import marlRoutes from './routes/marl-competition.js';
+import marlRoutes, { closeQueueEventsListener } from './routes/marl-competition.js';
 import { createMarlRealTradingRouter } from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
@@ -139,6 +139,7 @@ async function shutdown() {
     brokerRegistry.disconnectAll(),
     workerPool.terminateAll(),
     closePubSub(),
+    closeQueueEventsListener(),
   ]);
   storage.close();
   socialStore.close();
@@ -797,7 +798,7 @@ app.post('/api/backtest/run', async (req, res) => {
 
 // GET /api/backtest/results/:testId
 // Retrieve full details (equity curves, all trades) for a completed backtest.
-// Results are always persisted to SQLite by the worker at completion time.
+// Results are persisted to SQLite by the API process (via saveBacktestResult) after the worker completes.
 app.get('/api/backtest/results/:testId', (req, res) => {
   const testId = req.params.testId;
   const result = storage.getBacktestResult(testId);

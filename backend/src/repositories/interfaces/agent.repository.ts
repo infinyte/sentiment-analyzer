@@ -117,11 +117,18 @@ export interface GenealogyRecord {
 
 // ── Repository interface ──────────────────────────────────────────────────────
 
+export interface AgentPage {
+  agents: Array<AgentRecord & Partial<AgentStats>>;
+  total: number;
+}
+
 export interface IAgentRepository {
   // Registry
   registerAgent(opts: RegisterAgentOptions): Promise<void>;
   findAgentById(id: string): Promise<AgentRecord | null>;
   findAllAgents(status?: AgentStatus): Promise<AgentRecord[]>;
+  /** Returns a paginated JOIN of agent_registry + agent_statistics, ordered by win_rate_percent DESC. */
+  findAgentsPaginated(status: AgentStatus, limit: number, offset: number): Promise<AgentPage>;
   updateAgentStatus(id: string, status: AgentStatus): Promise<void>;
 
   // Cosmetics

@@ -78,6 +78,13 @@ function ensureQueueEventsListener(): void {
   logger.info('marl-competition: BullMQ QueueEvents listener attached');
 }
 
+export async function closeQueueEventsListener(): Promise<void> {
+  if (_queueEvents) {
+    await _queueEvents.close();
+    _queueEvents = null;
+  }
+}
+
 type RateLimitEntry = {
   count: number;
   resetAt: number;
