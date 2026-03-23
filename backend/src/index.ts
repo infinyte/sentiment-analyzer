@@ -42,6 +42,8 @@ import { SocialMediaScraperManager } from './services/social-media/scraper/scrap
 import { TrendingTopicDiscoveryEngine } from './services/social-media/trending/trending-discovery-engine.js';
 import { MultiSourceTrendingScoreCalculator } from './services/social-media/trending/multi-source-calculator.js';
 import { ingestQueue } from './services/social-media/ingest-queue.js';
+import { getScraperQueue } from './queues/scraper.queue.js';
+import { isQueueAvailable } from './queues/connection.js';
 import logger from './logger.js';
 
 dotenv.config();
@@ -1063,29 +1065,34 @@ cron.schedule(socialCronSchedule, async () => {
   try {
     const coins = cache.get<{ symbol: string }[]>('coins');
     const top = coins?.slice(0, 10).map(c => c.symbol) ?? [];
-    const scrapeResult = await socialScraperManager.scrapeAll(top);
-    logger.info('social cron: scrape phase complete', {
-      symbols: top.length,
-      rss: scrapeResult.rss_items,
-      discord: scrapeResult.discord_items,
-      telegram: scrapeResult.telegram_items,
-      total_scraped: scrapeResult.total_items_scraped,
-      total_stored: scrapeResult.total_items_stored,
-      duration_ms: scrapeResult.duration_ms,
-    });
 
-    // Log ingest queue health after scraping phase completes
-    logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
+    if (isQueueAvailable()) {
+      // Delegate to the scraper worker process via BullMQ
+      await getScraperQueue().add('cron-social-scrape', { targets: top, rss_only: false });
+      logger.info('social cron: scrape job enqueued', { symbols: top.length });
+    } else {
+      // Fallback: run in-process when Redis is not configured
+      const scrapeResult = await socialScraperManager.scrapeAll(top);
+      logger.info('social cron: scrape phase complete', {
+        symbols: top.length,
+        rss: scrapeResult.rss_items,
+        discord: scrapeResult.discord_items,
+        telegram: scrapeResult.telegram_items,
+        total_scraped: scrapeResult.total_items_scraped,
+        total_stored: scrapeResult.total_items_stored,
+        duration_ms: scrapeResult.duration_ms,
+      });
 
-    // Recompute trending topics in DB
-    const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
-    const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
-    logger.info('social cron: trending topics updated', { count: topics.length });
+      logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
 
-    // Prune old items (keep last 30 days by default)
-    const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
-    const pruned = socialStore.pruneOldItems(retainDays);
-    if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+      const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
+      const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
+      logger.info('social cron: trending topics updated', { count: topics.length });
+
+      const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
+      const pruned = socialStore.pruneOldItems(retainDays);
+      if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+    }
   } catch (error) {
     logger.error('social cron failed', { error: String(error) });
   }

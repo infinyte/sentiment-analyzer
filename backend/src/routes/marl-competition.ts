@@ -13,7 +13,7 @@
 
 import { NextFunction, Request, Response, Router } from 'express';
 import { MarlCompetitionEngine } from '../services/marl-competition-engine.js';
-import type { CompetitionConfig, CompetitionAgentSpec, SymbolSelectionMode } from '../services/marl-competition-engine.js';
+import type { CompetitionConfig, CompetitionAgentSpec, CompetitionResult, SymbolSelectionMode } from '../services/marl-competition-engine.js';
 import { brokerRegistry } from '../services/brokers/broker-registry.js';
 import type { ExchangeMode, RiskConfig } from '../types/broker.js';
 import { workerPool } from '../services/worker-pool.js';
@@ -23,11 +23,60 @@ import { configService } from '../services/config-service.js';
 import { PreTrainer } from '../services/pre-trainer.js';
 import type { RiskProfile } from '../services/pre-trainer.js';
 import type { MarketRegime } from '../services/synthetic-market-generator.js';
+import { getTournamentQueue } from '../queues/tournament.queue.js';
+import { isQueueAvailable } from '../queues/connection.js';
+import { QueueEvents } from 'bullmq';
+import { createConnectionOptions } from '../queues/connection.js';
 import logger from '../logger.js';
 
 const router     = Router();
 const engine     = new MarlCompetitionEngine();
 const preTrainer = new PreTrainer();
+
+// ── BullMQ QueueEvents bridge ─────────────────────────────────────────────────
+// When tournaments run in a separate worker process via BullMQ, the API process
+// must listen for job completion / failure events and update the in-memory
+// competition registry accordingly.
+
+let _queueEvents: QueueEvents | null = null;
+
+function ensureQueueEventsListener(): void {
+  if (_queueEvents || !isQueueAvailable()) return;
+
+  _queueEvents = new QueueEvents('tournament', { connection: createConnectionOptions() });
+
+  _queueEvents.on('progress', ({ jobId, data }) => {
+    engine.updateRecord(jobId, { progress: data as number });
+  });
+
+  _queueEvents.on('completed', ({ jobId, returnvalue }) => {
+    try {
+      const result: CompetitionResult =
+        typeof returnvalue === 'string' ? JSON.parse(returnvalue) : returnvalue;
+      engine.updateRecord(jobId, {
+        status:         'COMPLETED',
+        completedAt:    new Date(),
+        result,
+        progress:       100,
+        topPerformerId: result.finalRankings?.[0]?.agentId,
+      });
+    } catch (err) {
+      logger.error('queueEvents: failed to parse completed returnvalue', { jobId, error: String(err) });
+      engine.updateRecord(jobId, { status: 'FAILED', progress: 0 });
+    }
+  });
+
+  _queueEvents.on('failed', ({ jobId, failedReason }) => {
+    logger.error('queueEvents: tournament job failed', { competitionId: jobId, reason: failedReason });
+    engine.updateRecord(jobId, { status: 'FAILED', progress: 0 });
+  });
+
+  _queueEvents.on('error', (err) => {
+    logger.error('queueEvents: connection error', { error: String(err) });
+  });
+
+  logger.info('marl-competition: BullMQ QueueEvents listener attached');
+}
 
 type RateLimitEntry = {
   count: number;
@@ -422,12 +471,25 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
     };
 
     if (isSimulated) {
-      const handle = workerPool.runMarlCompetition(
-        competitionId,
-        config,
-        (progress) => engine.updateRecord(competitionId, { progress }),
-      );
-      handle.result.then(onSuccess).catch(onFailure);
+      if (isQueueAvailable()) {
+        // BullMQ path: enqueue job in Redis; a tournament-worker-process picks it up.
+        // Use competitionId as the job ID so QueueEvents can map events back to records.
+        ensureQueueEventsListener();
+        getTournamentQueue()
+          .add('tournament', { competitionId, config }, { jobId: competitionId })
+          .catch((err: unknown) => {
+            logger.error('failed to enqueue tournament job', { competitionId, error: String(err) });
+            engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
+          });
+      } else {
+        // Fallback: Worker Thread (no Redis configured)
+        const handle = workerPool.runMarlCompetition(
+          competitionId,
+          config,
+          (progress) => engine.updateRecord(competitionId, { progress }),
+        );
+        handle.result.then(onSuccess).catch(onFailure);
+      }
     } else {
       engine
         .runCompetition(config, (progress) => {

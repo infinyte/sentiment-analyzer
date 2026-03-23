@@ -14,6 +14,12 @@ npm run lint         # ESLint
 npm test             # All Jest tests
 npm test -- --testPathPattern=cache   # Single test file by pattern
 npm test -- --testNamePattern="should" # Single test by name
+
+# Worker processes (require REDIS_URL to be set)
+npm run dev:tournament-worker  # Tournament BullMQ worker (dev, watch mode)
+npm run dev:scraper-worker     # Scraper BullMQ worker (dev, watch mode)
+npm run worker:tournament      # Tournament BullMQ worker (production)
+npm run worker:scraper         # Scraper BullMQ worker (production)
 ```
 
 ### Frontend
@@ -85,6 +91,23 @@ backend/src/services/
 ├── brokers/                     # Alpaca adapter + broker registry + factory
 └── backtesting-engine.ts
 ```
+
+### Queue & Worker Infrastructure
+```
+backend/src/queues/
+├── connection.ts          # Parses REDIS_URL → IORedis ConnectionOptions; exports isQueueAvailable()
+├── tournament.queue.ts    # BullMQ Queue<TournamentJobData> singleton via getTournamentQueue()
+└── scraper.queue.ts       # BullMQ Queue<ScraperJobData> singleton via getScraperQueue()
+
+backend/src/workers/
+├── tournament-worker-process.ts   # Stand-alone process: consumes tournament queue → runs MarlCompetitionEngine
+└── scraper-worker-process.ts      # Stand-alone process: consumes scraper queue → runs SocialMediaScraperManager
+```
+
+**Fallback behavior:** when `REDIS_URL` is not set, `isQueueAvailable()` returns `false` and:
+- SIMULATED tournament starts fall back to Worker Threads (same behavior as before queues were added)
+- The social scraper cron and `POST /api/social-media/refresh` fall back to in-process execution via `setImmediate`
+- PAPER/LIVE tournaments always run on the main API thread regardless of Redis availability
 
 ### Route Routers
 | Router | File | Mount |
@@ -175,6 +198,9 @@ Current high-value frontend coverage includes:
 - `FINBERT_API_URL` / `HUGGINGFACE_API_TOKEN` — remote FinBERT scoring
 - `TWITTER_BEARER_TOKEN`, `REDDIT_CLIENT_ID/SECRET`, `DISCORD_BOT_TOKEN`, `TELEGRAM_BOT_TOKEN`, `YOUTUBE_API_KEY` — social scrapers
 - `APPLICATIONINSIGHTS_CONNECTION_STRING` — Azure telemetry
+- `REDIS_URL` — Redis connection URL (e.g. `redis://localhost:6379`); enables BullMQ-backed tournament and scraper worker processes; all queue paths degrade gracefully when absent
+- `TOURNAMENT_WORKER_CONCURRENCY` — concurrent tournament jobs in the worker process (default: `2`)
+- `SCRAPER_WORKER_CONCURRENCY` — concurrent scraper jobs in the worker process (default: `1`)
 
 ## CI Pipeline
 GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to main:
@@ -184,14 +210,3 @@ GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to main:
 
 Always run `npm run type-check` in `backend/` before committing backend changes.
 
-
-## Current TODO Tasks
-
- ### TODO
-
- 1. Implement PostgreSQL adapter bundle
- 2. Implement MySQL adapter bundle
- 3. Implement MongoDB adapter for social domain
- 4. Implement BlobStore interface + adapter (S3/Azure)
- 5. Service decomposition: extract Tournament Worker process with BullMQ
- 6. Service decomposition: extract Scraper Service process

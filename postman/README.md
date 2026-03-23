@@ -9,6 +9,7 @@ Complete API test suite for testing the Sentiment Analyzer backend. All endpoint
 - **Backend running** on `http://localhost:3000`
 - API credentials:
   - `API_SECRET_KEY` from your `.env` file
+- **Optional:** `REDIS_URL` in `backend/.env` — when set, tournament jobs and social-media scraping are offloaded to BullMQ worker processes instead of running in-process. All endpoints behave identically either way; the only observable difference is that `POST /api/social-media/refresh` returns immediately (job enqueued) rather than waiting for the scrape to complete.
 
 ### Import into Postman
 
@@ -252,6 +253,7 @@ Test the SQLite-backed social-media endpoints.
 **Tests:**
 - `GET /api/social-media/trending-topics` - clustered topic view
 - `GET /api/social-media/items` - scored items with cursor pagination
+- `POST /api/social-media/refresh` - trigger an immediate scrape (enqueues to BullMQ scraper queue when `REDIS_URL` is set; runs in-process via `setImmediate` otherwise)
 
 **Validations:**
 - ✓ Related topics that share a `coin_symbol` can be returned as one clustered topic entry
