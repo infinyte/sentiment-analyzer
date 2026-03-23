@@ -106,6 +106,7 @@ const mockEngine = {
   runSingleTournament: jest.fn().mockResolvedValue(mockCompetitionResult),
   getRecord: jest.fn().mockReturnValue(null),
   getAllRecords: jest.fn().mockReturnValue([]),
+  getLiveEquitySnapshots: jest.fn().mockReturnValue([]),
 };
 
 jest.mock('../../services/marl-competition-engine.js', () => ({
@@ -127,6 +128,7 @@ interface MockEngine {
   runSingleTournament: jest.Mock;
   getRecord: jest.Mock;
   getAllRecords: jest.Mock;
+  getLiveEquitySnapshots: jest.Mock;
 }
 
 const engine = mockEngine as MockEngine;
@@ -139,6 +141,7 @@ beforeEach(() => {
   engine.updateRecord.mockClear();
   engine.getRecord.mockReturnValue(null);
   engine.getAllRecords.mockReturnValue([]);
+  engine.getLiveEquitySnapshots.mockReturnValue([]);
   engine.runCompetition.mockResolvedValue(mockCompetitionResult);
   engine.runSingleTournament.mockResolvedValue(mockCompetitionResult);
 });
@@ -474,6 +477,62 @@ describe('GET /api/marl/competition/:id/results', () => {
     expect(res.status).toBe(200);
     // totalReturn of 0.1 should become 10 (percent)
     expect(res.body.finalRankings[0].totalReturn).toBeCloseTo(10, 1);
+  });
+});
+
+// ── GET /api/marl/competition/:id/equity-curves ─────────────────────────────
+
+describe('GET /api/marl/competition/:id/equity-curves', () => {
+  it('returns 404 for an unknown competition id', async () => {
+    engine.getRecord.mockReturnValue(null);
+    const res = await request(app).get('/api/marl/competition/nonexistent/equity-curves');
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 200 with partial curves when competition is RUNNING', async () => {
+    const now = new Date('2026-03-23T00:00:00.000Z');
+    engine.getRecord.mockReturnValue({
+      competitionId: 'running-equity',
+      status: 'RUNNING',
+      progress: 33,
+      config: mockCompletedRecord.config,
+      startedAt: now,
+    });
+    engine.getLiveEquitySnapshots.mockReturnValue([
+      {
+        timestamp: now,
+        agentEquities: [
+          { agentId: 'alpha', equity: 10100 },
+          { agentId: 'beta', equity: 9900 },
+        ],
+      },
+    ]);
+
+    const res = await request(app).get('/api/marl/competition/running-equity/equity-curves');
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('RUNNING');
+    expect(res.body.progress).toBe(33);
+    expect(res.body.snapshotCount).toBe(1);
+    expect(res.body.equityCurves).toHaveLength(1);
+  });
+
+  it('returns 200 with empty curves when RUNNING and no snapshots exist yet', async () => {
+    engine.getRecord.mockReturnValue({
+      competitionId: 'running-empty',
+      status: 'RUNNING',
+      progress: 2,
+      config: mockCompletedRecord.config,
+      startedAt: new Date('2026-03-23T00:00:00.000Z'),
+    });
+    engine.getLiveEquitySnapshots.mockReturnValue([]);
+
+    const res = await request(app).get('/api/marl/competition/running-empty/equity-curves');
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('RUNNING');
+    expect(res.body.snapshotCount).toBe(0);
+    expect(res.body.equityCurves).toEqual([]);
   });
 });
 

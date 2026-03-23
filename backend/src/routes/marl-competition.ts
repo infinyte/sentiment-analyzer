@@ -1174,11 +1174,16 @@ router.get('/api/marl/competition/:competitionId/equity-curves', competitionRead
   if (!record) return res.status(404).json({ error: 'Competition not found' });
 
   if (record.status === 'RUNNING') {
-    return res.status(202).json({
+    const curves = engine.getLiveEquitySnapshots(competitionId);
+    return res.status(200).json({
       competitionId,
       status: 'RUNNING',
-      message: 'Equity curves are available after the competition completes.',
       progress: record.progress,
+      snapshotCount: curves.length,
+      equityCurves:  curves.map(snap => ({
+        timestamp: snap.timestamp,
+        agentEquities: snap.agentEquities,
+      })),
     });
   }
 

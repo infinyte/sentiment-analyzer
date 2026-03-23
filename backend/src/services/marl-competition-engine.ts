@@ -23,6 +23,7 @@ import { storage } from '../storage.js';
 import logger from '../logger.js';
 import type { IAgentRepository } from '../repositories/interfaces/agent.repository.js';
 import type { IBrokerRepository, BrokerOrder } from '../repositories/interfaces/broker.repository.js';
+import { getPubSub, competitionChannel } from './pubsub.js';
 
 // ─── Order Book Types ────────────────────────────────────────────────────────
 
@@ -958,6 +959,14 @@ interface ActionExecutionResult {
   reward: number;
   tradeExecuted: boolean;
   realizedPnl: number;
+  executedTrade?: {
+    agentId: string;
+    symbol: string;
+    side: 'BUY' | 'SELL';
+    quantity: number;
+    price: number;
+    timestamp: string;
+  };
 }
 
 interface MarketRegimeState {
@@ -1020,6 +1029,7 @@ export class MarlCompetitionEngine {
   private static learningStateCache: Map<string, LearningStateSnapshot> = new Map();
 
   private results: Map<string, CompetitionRecord> = new Map();
+  private liveEquitySnapshots: Map<string, EquitySnapshot[]> = new Map();
   private coinGecko: CoinGeckoService;
   private readonly sentimentEngine: SentimentAnalyzerEngine;
 
@@ -1491,6 +1501,7 @@ export class MarlCompetitionEngine {
     let tradeExecuted = false;
     let reward = 0;
     let realizedPnl = 0;
+    let executedTrade: ActionExecutionResult['executedTrade'];
 
     if (action.type === 'BUY' && action.quantity && state.cash >= action.quantity * price) {
       const qty = action.quantity;
@@ -1498,6 +1509,14 @@ export class MarlCompetitionEngine {
       const cost = result.filled * result.avgFillPrice;
       if (result.filled > 0) {
         tradeExecuted = true;
+        executedTrade = {
+          agentId: state.agentId,
+          symbol,
+          side: 'BUY',
+          quantity: result.filled,
+          price: result.avgFillPrice,
+          timestamp: new Date().toISOString(),
+        };
         state.cash -= cost;
         const existing = state.portfolio.get(symbol);
         if (existing) {
@@ -1526,6 +1545,14 @@ export class MarlCompetitionEngine {
         const proceeds = result.filled * result.avgFillPrice;
         if (result.filled > 0) {
           tradeExecuted = true;
+          executedTrade = {
+            agentId: state.agentId,
+            symbol,
+            side: 'SELL',
+            quantity: result.filled,
+            price: result.avgFillPrice,
+            timestamp: new Date().toISOString(),
+          };
           state.cash += proceeds;
           realizedPnl = result.filled * (result.avgFillPrice - avgEntryPrice);
           reward = this.normalizedReward(result.avgFillPrice - nextPrice, result.avgFillPrice, result.filled);
@@ -1550,7 +1577,7 @@ export class MarlCompetitionEngine {
     if (tradeExecuted) {
       state.agent.recordMarlTradeOutcome(reward);
     }
-    return { reward, tradeExecuted, realizedPnl };
+    return { reward, tradeExecuted, realizedPnl, executedTrade };
   }
 
   // ── Core tournament step ─────────────────────────────────────────────────
@@ -1565,6 +1592,7 @@ export class MarlCompetitionEngine {
     orderBook: SharedOrderBook,
     learningEnabled: boolean,
     enableSentimentFeatures = false,
+    competitionId?: string,
   ): void {
     // CHECKPOINT 5 — Price updates + synthetic market-maker seeding
     // Clear stale resting orders and inject synthetic BID+ASK at exact market price.
@@ -1612,7 +1640,20 @@ export class MarlCompetitionEngine {
         const competitors = agentStates.filter(s => s.agentId !== state.agentId);
 
         // CHECKPOINT 3 — order execution
-        const { reward, tradeExecuted, realizedPnl } = this.executeAction(state, action, prices, nextPrices, orderBook, competitors);
+        const { reward, tradeExecuted, realizedPnl, executedTrade } = this.executeAction(state, action, prices, nextPrices, orderBook, competitors);
+
+        if (competitionId && executedTrade) {
+          void getPubSub().publish(competitionChannel(competitionId), {
+            type: 'trade_executed',
+            competitionId,
+            agentId: executedTrade.agentId,
+            symbol: executedTrade.symbol,
+            side: executedTrade.side,
+            quantity: executedTrade.quantity,
+            price: executedTrade.price,
+            timestamp: executedTrade.timestamp,
+          });
+        }
 
         // CHECKPOINT 4 — portfolio update
         if (tradeExecuted) {
@@ -1749,6 +1790,7 @@ export class MarlCompetitionEngine {
     const agentStates = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeatures));
     const orderBook = new SharedOrderBook();
     const equitySnapshots: EquitySnapshot[] = [];
+    this.liveEquitySnapshots.set(competitionId, equitySnapshots);
 
     // Initialise base prices from live CoinGecko data
     const basePrices = await this.fetchBasePrices(config.symbols);
@@ -1759,30 +1801,43 @@ export class MarlCompetitionEngine {
       const prices = priceSeries[step];
       const nextPrices = priceSeries[Math.min(step + 1, STEPS - 1)];
 
-      this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeatures);
+      this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeatures, competitionId);
 
       if (step % SNAPSHOT_INTERVAL === 0) {
-        equitySnapshots.push({
+        const snapshot: EquitySnapshot = {
           timestamp: new Date(),
           agentEquities: agentStates.map(s => ({
             agentId: s.agentId,
             equity: computeEquity(s, prices),
           })),
+        };
+        equitySnapshots.push(snapshot);
+        const progress = Math.round((step / STEPS) * 100);
+        void getPubSub().publish(competitionChannel(competitionId), {
+          type: 'equity_snapshot',
+          competitionId,
+          progress,
+          timestamp: snapshot.timestamp.toISOString(),
+          agentEquities: snapshot.agentEquities,
         });
-        onProgress?.(Math.round((step / STEPS) * 100));
+        onProgress?.(progress);
       }
     }
 
     const finalPrices = priceSeries[STEPS - 1];
     this.persistLearningStates(agentStates);
-    return this.buildResult(
-      competitionId,
-      'SINGLE',
-      agentStates,
-      finalPrices,
-      equitySnapshots,
-      config.duration
-    );
+    try {
+      return this.buildResult(
+        competitionId,
+        'SINGLE',
+        agentStates,
+        finalPrices,
+        equitySnapshots,
+        config.duration
+      );
+    } finally {
+      this.liveEquitySnapshots.delete(competitionId);
+    }
   }
 
   // ── REAL / PAPER tournament (wall-clock setInterval) ─────────────────────
@@ -1810,6 +1865,7 @@ export class MarlCompetitionEngine {
     const riskGuard = new RiskGuard(config.riskConfig ?? DEFAULT_RISK_CONFIG);
     const agentStates = config.agents.map(spec => this.createAgentState(spec));
     const equitySnapshots: EquitySnapshot[] = [];
+    this.liveEquitySnapshots.set(competitionId, equitySnapshots);
 
     // Seed live prices
     const initialPrices = await this.fetchBasePrices(validSymbols);
@@ -1990,6 +2046,17 @@ export class MarlCompetitionEngine {
                 }
               }
 
+              void getPubSub().publish(competitionChannel(competitionId), {
+                type: 'trade_executed',
+                competitionId,
+                agentId: state.agentId,
+                symbol,
+                side: action.type,
+                quantity: filled.filledQuantity,
+                price: fillPrice,
+                timestamp: new Date().toISOString(),
+              });
+
               state.orderCounter += 1;
 
               if (config.learningEnabled) {
@@ -2003,12 +2070,21 @@ export class MarlCompetitionEngine {
 
           // Snapshot equity every 10 ticks
           if (stepCount % 10 === 0) {
-            equitySnapshots.push({
+            const snapshot: EquitySnapshot = {
               timestamp: new Date(),
               agentEquities: agentStates.map(s => ({
                 agentId: s.agentId,
                 equity:  computeEquity(s, currentPrices),
               })),
+            };
+            equitySnapshots.push(snapshot);
+            const progress = Math.min(100, Math.round(((Date.now() - startTime) / durationMs) * 100));
+            void getPubSub().publish(competitionChannel(competitionId), {
+              type: 'equity_snapshot',
+              competitionId,
+              progress,
+              timestamp: snapshot.timestamp.toISOString(),
+              agentEquities: snapshot.agentEquities,
             });
           }
 
@@ -2026,7 +2102,11 @@ export class MarlCompetitionEngine {
       logger.info('marl real: cancelled remaining open orders', { competitionId, count: openOrderCount });
     }
 
-    return this.buildResult(competitionId, 'SINGLE', agentStates, currentPrices, equitySnapshots, config.duration);
+    try {
+      return this.buildResult(competitionId, 'SINGLE', agentStates, currentPrices, equitySnapshots, config.duration);
+    } finally {
+      this.liveEquitySnapshots.delete(competitionId);
+    }
   }
 
   /** Poll an order until it reaches a terminal status or the timeout elapses. */
@@ -2062,6 +2142,7 @@ export class MarlCompetitionEngine {
     const useSentimentFeaturesEvo = config.enableSentimentFeatures ?? false;
     let population = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeaturesEvo));
     const allEquitySnapshots: EquitySnapshot[] = [];
+    this.liveEquitySnapshots.set(competitionId, allEquitySnapshots);
     let finalRoundStates = population;
 
     for (let round = 0; round < rounds; round++) {
@@ -2072,15 +2153,24 @@ export class MarlCompetitionEngine {
         const prevPrices = priceSeries[Math.max(step - 1, 0)];
         const prices = priceSeries[step];
         const nextPrices = priceSeries[Math.min(step + 1, stepsPerRound - 1)];
-        this.runStep(population, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeaturesEvo);
+        this.runStep(population, prevPrices, prices, nextPrices, config.symbols, step, orderBook, config.learningEnabled, useSentimentFeaturesEvo, competitionId);
 
         if (step % Math.max(Math.floor(stepsPerRound / 10), 1) === 0) {
-          allEquitySnapshots.push({
+          const snapshot: EquitySnapshot = {
             timestamp: new Date(),
             agentEquities: population.map(s => ({
               agentId: `${s.agentId}_r${round}`,
               equity: computeEquity(s, prices),
             })),
+          };
+          allEquitySnapshots.push(snapshot);
+          const roundProgress = ((round * stepsPerRound) + step) / Math.max(rounds * stepsPerRound, 1);
+          void getPubSub().publish(competitionChannel(competitionId), {
+            type: 'equity_snapshot',
+            competitionId,
+            progress: Math.round(roundProgress * 100),
+            timestamp: snapshot.timestamp.toISOString(),
+            agentEquities: snapshot.agentEquities,
           });
         }
       }
@@ -2135,14 +2225,18 @@ export class MarlCompetitionEngine {
       config.symbols.map(sym => [sym, basePrices.get(sym) ?? 1000])
     );
     this.persistLearningStates(finalRoundStates);
-    return this.buildResult(
-      competitionId,
-      'EVOLUTIONARY',
-      finalRoundStates,
-      finalBasePrices,
-      allEquitySnapshots,
-      config.duration
-    );
+    try {
+      return this.buildResult(
+        competitionId,
+        'EVOLUTIONARY',
+        finalRoundStates,
+        finalBasePrices,
+        allEquitySnapshots,
+        config.duration
+      );
+    } finally {
+      this.liveEquitySnapshots.delete(competitionId);
+    }
   }
 
   // ── CONTINUOUS learning ───────────────────────────────────────────────────
@@ -2160,6 +2254,7 @@ export class MarlCompetitionEngine {
     const agentStates = config.agents.map(spec => this.createAgentState(spec, spec.initialCapital ?? 10000, undefined, undefined, useSentimentFeaturesCont));
     const orderBook = new SharedOrderBook();
     const allSnapshots: EquitySnapshot[] = [];
+    this.liveEquitySnapshots.set(competitionId, allSnapshots);
     const basePrices = await this.fetchBasePrices(config.symbols);
     const priceSeries = this.simulatePrices(config.symbols, totalSteps, basePrices);
 
@@ -2172,7 +2267,7 @@ export class MarlCompetitionEngine {
         const prevPrices = priceSeries[Math.max(i - 1, 0)];
         const prices = priceSeries[i];
         const nextPrices = priceSeries[Math.min(i + 1, totalSteps - 1)];
-        this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, i, orderBook, true, useSentimentFeaturesCont);
+        this.runStep(agentStates, prevPrices, prices, nextPrices, config.symbols, i, orderBook, true, useSentimentFeaturesCont, competitionId);
       }
 
       // Learning phase: replay 100 experiences
@@ -2180,26 +2275,39 @@ export class MarlCompetitionEngine {
         state.agent.replayExperiences(100);
       }
 
-      allSnapshots.push({
+      const snapshot: EquitySnapshot = {
         timestamp: new Date(),
         agentEquities: agentStates.map(s => ({
           agentId: s.agentId,
           equity: computeEquity(s, priceSeries[offset + STEPS_PER_HOUR - 1]),
         })),
+      };
+      allSnapshots.push(snapshot);
+      const progress = Math.round(((hour + 1) / HOURS) * 100);
+      void getPubSub().publish(competitionChannel(competitionId), {
+        type: 'equity_snapshot',
+        competitionId,
+        progress,
+        timestamp: snapshot.timestamp.toISOString(),
+        agentEquities: snapshot.agentEquities,
       });
-      onProgress?.(Math.round(((hour + 1) / HOURS) * 100));
+      onProgress?.(progress);
     }
 
     const finalPrices = priceSeries[totalSteps - 1];
     this.persistLearningStates(agentStates);
-    return this.buildResult(
-      competitionId,
-      'CONTINUOUS',
-      agentStates,
-      finalPrices,
-      allSnapshots,
-      config.duration
-    );
+    try {
+      return this.buildResult(
+        competitionId,
+        'CONTINUOUS',
+        agentStates,
+        finalPrices,
+        allSnapshots,
+        config.duration
+      );
+    } finally {
+      this.liveEquitySnapshots.delete(competitionId);
+    }
   }
 
   // ── Analytics helpers ─────────────────────────────────────────────────────
@@ -2330,6 +2438,10 @@ export class MarlCompetitionEngine {
 
   getRecord(competitionId: string): CompetitionRecord | undefined {
     return this.results.get(competitionId);
+  }
+
+  getLiveEquitySnapshots(competitionId: string): EquitySnapshot[] {
+    return this.liveEquitySnapshots.get(competitionId) ?? [];
   }
 
   getAllRecords(): CompetitionRecord[] {

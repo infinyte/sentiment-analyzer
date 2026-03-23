@@ -36,10 +36,32 @@ export interface CompetitionFailedEvent {
   error:         string;
 }
 
+export interface CompetitionEquitySnapshotEvent {
+  type:          'equity_snapshot';
+  competitionId: string;
+  /** 0-100 */
+  progress:      number;
+  timestamp:     string;
+  agentEquities: { agentId: string; equity: number }[];
+}
+
+export interface CompetitionTradeExecutedEvent {
+  type:          'trade_executed';
+  competitionId: string;
+  agentId:       string;
+  symbol:        string;
+  side:          'BUY' | 'SELL';
+  quantity:      number;
+  price:         number;
+  timestamp:     string;
+}
+
 export type CompetitionPubSubEvent =
   | CompetitionProgressEvent
   | CompetitionCompletedEvent
-  | CompetitionFailedEvent;
+  | CompetitionFailedEvent
+  | CompetitionEquitySnapshotEvent
+  | CompetitionTradeExecutedEvent;
 
 // ── Channel helper ────────────────────────────────────────────────────────────
 
