@@ -5,6 +5,7 @@ import type {
   IAgentRepository,
   AgentRecord,
   AgentStatus,
+  AgentPage,
   RegisterAgentOptions,
   AgentCosmetics,
   AgentStats,
@@ -59,6 +60,26 @@ export class SQLiteAgentRepository implements IAgentRepository {
       ).all(status) as AgentRecord[];
     }
     return this.db.prepare('SELECT * FROM agent_registry ORDER BY created_at DESC').all() as AgentRecord[];
+  }
+
+  async findAgentsPaginated(status: AgentStatus, limit: number, offset: number): Promise<AgentPage> {
+    const total = (this.db.prepare(
+      'SELECT COUNT(*) AS cnt FROM agent_registry WHERE status = ?',
+    ).get(status) as { cnt: number }).cnt;
+
+    const agents = this.db.prepare(`
+      SELECT r.*, s.total_competitions, s.total_wins, s.total_losses,
+             s.win_rate_percent, s.total_pnl, s.max_drawdown_percent,
+             s.sharpe_ratio, s.roi_percent, s.trades_executed,
+             s.consistency_score, s.avg_trade_profit, s.last_updated
+      FROM   agent_registry r
+      LEFT JOIN agent_statistics s ON s.agent_id = r.id
+      WHERE  r.status = ?
+      ORDER  BY COALESCE(s.win_rate_percent, 0) DESC
+      LIMIT  ? OFFSET ?
+    `).all(status, limit, offset) as Array<AgentRecord & Partial<AgentStats>>;
+
+    return { agents, total };
   }
 
   async updateAgentStatus(id: string, status: AgentStatus): Promise<void> {

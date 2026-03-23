@@ -108,8 +108,17 @@ export class SQLiteSocialRepository implements ISocialRepository {
       params.push(since);
     }
     if (query.cursor) {
-      conditions.push('id > ?');
-      params.push(query.cursor);
+      // Decode compound cursor: { v: sortColumnValue, id: lastId }
+      // Use (sortCol, id) composite comparison so the cursor matches the ORDER BY.
+      try {
+        const { v, id: cursorId } = JSON.parse(Buffer.from(query.cursor, 'base64').toString('utf8')) as { v: unknown; id: string };
+        const orderBy = query.sortBy === 'recency' ? 'fetched_at' : query.sortBy === 'engagement' ? 'score_engagement' : 'score_composite';
+        // For DESC ordering: next page has (col < v) OR (col = v AND id < cursorId)
+        conditions.push(`(${orderBy} < ? OR (${orderBy} = ? AND id < ?))`);
+        params.push(v, v, cursorId);
+      } catch {
+        // Ignore malformed cursors — return from the start
+      }
     }
 
     const where   = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -118,16 +127,22 @@ export class SQLiteSocialRepository implements ISocialRepository {
     params.push(limit);
 
     const rows = this.db.prepare(
-      `SELECT * FROM social_media_items ${where} ORDER BY ${orderBy} DESC LIMIT ?`,
+      `SELECT * FROM social_media_items ${where} ORDER BY ${orderBy} DESC, id DESC LIMIT ?`,
     ).all(...params) as Array<Record<string, unknown>>;
 
     const hasMore = rows.length === limit;
     const items   = (hasMore ? rows.slice(0, -1) : rows).map(r => this.mapRow(r));
 
-    return {
-      items,
-      nextCursor: hasMore ? items[items.length - 1].id : undefined,
-    };
+    let nextCursor: string | undefined;
+    if (hasMore && items.length > 0) {
+      const last = items[items.length - 1];
+      const sortVal = orderBy === 'fetched_at' ? last.fetched_at
+                    : orderBy === 'score_engagement' ? last.score_engagement
+                    : last.score_composite;
+      nextCursor = Buffer.from(JSON.stringify({ v: sortVal, id: last.id })).toString('base64');
+    }
+
+    return { items, nextCursor };
   }
 
   async findItemsForCoin(coin: string, hours: number): Promise<ScoredSocialItem[]> {
