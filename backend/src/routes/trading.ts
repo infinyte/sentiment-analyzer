@@ -15,27 +15,60 @@
 import { Router } from 'express';
 import { ExchangeFactory, getTradingConfig } from '../services/exchange/exchange-factory.js';
 import { TradingService } from '../services/exchange/trading-service.js';
+import logger from '../logger.js';
 
 export function createTradingRouter(): Router {
   const router = Router();
-  const config  = getTradingConfig();
-  const exchange = ExchangeFactory.create(config);
-  const tradingService = new TradingService(exchange, {
-    initialCapital:            config.initialCapital,
-    maxLossPercentage:         config.maxLossPercentage,
-    maxPositionSizePercentage: config.maxPositionSizePercentage,
-    maxOpenPositions:          config.maxOpenPositions,
-    requireManualApproval:     config.requireManualApproval,
-  });
+  let config: ReturnType<typeof getTradingConfig>;
+  let exchange: ReturnType<typeof ExchangeFactory.create>;
+  let tradingService: TradingService;
+  let startupError: string | null = null;
+
+  try {
+    config = getTradingConfig();
+    exchange = ExchangeFactory.create(config);
+    tradingService = new TradingService(exchange, {
+      initialCapital:            config.initialCapital,
+      maxLossPercentage:         config.maxLossPercentage,
+      maxPositionSizePercentage: config.maxPositionSizePercentage,
+      maxOpenPositions:          config.maxOpenPositions,
+      requireManualApproval:     config.requireManualApproval,
+    });
+  } catch (err: unknown) {
+    startupError = err instanceof Error ? err.message : String(err);
+    logger.error('trading router disabled due to configuration error', {
+      error: startupError,
+      mode: process.env.TRADING_MODE ?? 'paper',
+      provider: process.env.TRADING_PROVIDER ?? 'crypto-com',
+    });
+  }
+
+  if (startupError) {
+    router.use((_req, res) => {
+      res.status(503).json({
+        error: 'Trading service unavailable due to configuration error.',
+        details: startupError,
+        mode: process.env.TRADING_MODE ?? 'paper',
+        provider: process.env.TRADING_PROVIDER ?? 'crypto-com',
+      });
+    });
+
+    return router;
+  }
+
+  // Defensive fallback: initialization guarantees these are set.
+  const safeConfig = config!;
+  const safeExchange = exchange!;
+  const safeTradingService = tradingService!;
 
   // GET /api/trading/exchange-status
   router.get('/exchange-status', async (_req, res) => {
     try {
       const [connected, name] = await Promise.all([
-        exchange.isConnected(),
-        exchange.getExchangeName(),
+        safeExchange.isConnected(),
+        safeExchange.getExchangeName(),
       ]);
-      res.json({ connected, name, mode: config.mode, provider: config.provider ?? 'crypto-com' });
+      res.json({ connected, name, mode: safeConfig.mode, provider: safeConfig.provider ?? 'crypto-com' });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }
@@ -44,7 +77,7 @@ export function createTradingRouter(): Router {
   // GET /api/trading/price/:symbol
   router.get('/price/:symbol', async (req, res) => {
     try {
-      const price = await exchange.getCurrentPrice(req.params.symbol!);
+      const price = await safeExchange.getCurrentPrice(req.params.symbol!);
       res.json({ symbol: req.params.symbol, price });
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -54,7 +87,7 @@ export function createTradingRouter(): Router {
   // GET /api/trading/balances
   router.get('/balances', async (_req, res) => {
     try {
-      const balances = await exchange.getAllBalances();
+      const balances = await safeExchange.getAllBalances();
       res.json(balances);
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -81,7 +114,7 @@ export function createTradingRouter(): Router {
     }
 
     try {
-      const result = await tradingService.executeOrder({ symbol, side, size, price, orderType });
+      const result = await safeTradingService.executeOrder({ symbol, side, size, price, orderType });
       res.status(result.success ? 200 : 400).json(result);
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
@@ -91,8 +124,8 @@ export function createTradingRouter(): Router {
   // GET /api/trading/stats
   router.get('/stats', async (_req, res) => {
     try {
-      await tradingService.updateCapital();
-      res.json(tradingService.getStats());
+      await safeTradingService.updateCapital();
+      res.json(safeTradingService.getStats());
     } catch (err: unknown) {
       res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
     }

@@ -41,6 +41,8 @@ $BackendDir   = Join-Path $RepoRoot 'backend'
 $FrontendDir  = Join-Path $RepoRoot 'frontend'
 $BackendPort  = 3000
 $FrontendPort = 5173
+$NpmCmd       = (Get-Command npm.cmd -ErrorAction SilentlyContinue).Source
+if (-not $NpmCmd) { $NpmCmd = 'npm.cmd' }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -150,17 +152,17 @@ if ($NoBuild) {
     Push-Location $BackendDir
 
     Invoke-Step 'Backend - type-check' {
-        npm run type-check 2>&1 | ForEach-Object { Write-Host $_ }
+        & $NpmCmd run type-check 2>&1 | ForEach-Object { Write-Host $_ }
     }
 
     if (-not $SkipTests) {
         Invoke-Step 'Backend - tests (Jest)' {
-            npm test 2>&1 | ForEach-Object { Write-Host $_ }
+            & $NpmCmd test 2>&1 | ForEach-Object { Write-Host $_ }
         }
     }
 
     Invoke-Step 'Backend - build (tsc)' {
-        npm run build 2>&1 | ForEach-Object { Write-Host $_ }
+        & $NpmCmd run build 2>&1 | ForEach-Object { Write-Host $_ }
     }
 
     Pop-Location
@@ -169,17 +171,17 @@ if ($NoBuild) {
     Push-Location $FrontendDir
 
     Invoke-Step 'Frontend - type-check' {
-        npm run type-check 2>&1 | ForEach-Object { Write-Host $_ }
+        & $NpmCmd run type-check 2>&1 | ForEach-Object { Write-Host $_ }
     }
 
     if (-not $SkipTests) {
         Invoke-Step 'Frontend - tests (Vitest)' {
-            npm test 2>&1 | ForEach-Object { Write-Host $_ }
+            & $NpmCmd test 2>&1 | ForEach-Object { Write-Host $_ }
         }
     }
 
     Invoke-Step 'Frontend - build (vite)' {
-        npm run build 2>&1 | ForEach-Object { Write-Host $_ }
+        & $NpmCmd run build 2>&1 | ForEach-Object { Write-Host $_ }
     }
 
     Pop-Location
@@ -195,7 +197,7 @@ $backendScript = [string]::Format(
 )
 
 $backendProc = Start-Process powershell `
-    -ArgumentList '-NoExit', '-Command', $backendScript `
+    -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', $backendScript `
     -PassThru `
     -WindowStyle Normal
 
@@ -217,12 +219,12 @@ if (Wait-PortOpen -Port $BackendPort -TimeoutSeconds 30) {
 Write-Step "Launching frontend dev server  (port $FrontendPort)"
 
 $frontendScript = [string]::Format(
-    "Set-Location '{0}'; Write-Host '=== Frontend dev server (port {1}) ===' -ForegroundColor Magenta; npm run dev",
+    "Set-Location '{0}'; Write-Host '=== Frontend dev server (port {1}) ===' -ForegroundColor Magenta; npm.cmd run dev",
     $FrontendDir, $FrontendPort
 )
 
 $frontendProc = Start-Process powershell `
-    -ArgumentList '-NoExit', '-Command', $frontendScript `
+    -ArgumentList '-NoExit', '-ExecutionPolicy', 'Bypass', '-Command', $frontendScript `
     -PassThru `
     -WindowStyle Normal
 
