@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { MarlCompetitionViewer } from '../components/MarlCompetitionViewer';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
 
@@ -39,14 +39,82 @@ const defaultHook = {
 };
 
 const mockUseMarl = vi.mocked(useMarlCompetition);
+let mockFetch: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseMarl.mockReturnValue(defaultHook);
+  mockFetch = vi.fn((input: string | URL | Request) => {
+    const url = String(input);
+
+    if (url.includes('/api/marl/info')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          description: 'MARL Competitive Trading Framework — Phase 2',
+          tournamentModes: {
+            SINGLE: 'Single mode',
+            EVOLUTIONARY: 'Evolutionary mode',
+            CONTINUOUS: 'Continuous mode',
+          },
+          riskProfiles: {
+            CONSERVATIVE: { maxRiskPct: '1%' },
+            AGGRESSIVE: { maxRiskPct: '5%' },
+            SCALPING: { maxRiskPct: '3%' },
+          },
+          learningAlgorithm: {
+            type: 'Q-Learning + Policy Gradient',
+            stateSpace: '50 features',
+            actionSpace: ['BUY', 'SELL', 'HOLD'],
+            policyNetwork: '50→64→32→5',
+            explorationStrategy: 'Epsilon-greedy',
+            replayBuffer: '1000 experiences',
+          },
+          endpoints: {
+            'GET /api/marl/info': 'This documentation',
+            'GET /api/marl/competition/:id/equity-curves': 'Reload equity curves',
+          },
+        }),
+      });
+    }
+
+    if (url.includes('/api/marl/competition/done-123/equity-curves')) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          competitionId: 'done-123',
+          status: 'COMPLETED',
+          snapshotCount: 2,
+          equityCurves: [
+            { timestamp: '2026-03-23T10:00:00.000Z', agentEquities: [{ agentId: 'alpha', equity: 10000 }, { agentId: 'beta', equity: 9800 }] },
+            { timestamp: '2026-03-23T10:05:00.000Z', agentEquities: [{ agentId: 'alpha', equity: 11000 }, { agentId: 'beta', equity: 9500 }] },
+          ],
+        }),
+      });
+    }
+
+    if (url.includes('/api/marl/competition/running-456/equity-curves')) {
+      return Promise.resolve({
+        ok: true,
+        status: 202,
+        json: async () => ({
+          competitionId: 'running-456',
+          status: 'RUNNING',
+          message: 'Equity curves are available after the competition completes.',
+          progress: 64,
+        }),
+      });
+    }
+
+    return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
+  });
+  vi.stubGlobal('fetch', mockFetch);
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
@@ -278,5 +346,32 @@ describe('MarlCompetitionViewer — results', () => {
     render(<MarlCompetitionViewer />);
     expect(screen.getByText('#1')).toBeInTheDocument();
     expect(screen.getByText('#2')).toBeInTheDocument();
+  });
+
+  it('loads the MARL info panel on demand', async () => {
+    render(<MarlCompetitionViewer />);
+
+    fireEvent.click(screen.getByRole('button', { name: /marl info panel/i }));
+
+    expect(await screen.findByText('Tournament Modes')).toBeInTheDocument();
+    expect(screen.getByText('Q-Learning + Policy Gradient')).toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/marl/info');
+    });
+  });
+
+  it('reloads equity curves into the existing chart area and shows running fallback state', async () => {
+    mockUseMarl.mockReturnValue({ ...defaultHook, results: mockResults });
+    render(<MarlCompetitionViewer />);
+
+    fireEvent.click(screen.getByRole('button', { name: /reload curves/i }));
+
+    expect(await screen.findByText('Loaded 2 equity snapshots for done-123.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Competition ID'), { target: { value: 'running-456' } });
+    fireEvent.click(screen.getByRole('button', { name: /reload curves/i }));
+
+    expect(await screen.findByText('Equity curves are available after the competition completes.')).toBeInTheDocument();
   });
 });

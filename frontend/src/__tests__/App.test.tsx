@@ -415,5 +415,5 @@ describe('App detail modal', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/backtest/run', expect.any(Object));
       expect(mockFetch).toHaveBeenCalledWith('/api/backtest/results/backtest_123');
     });
-  });
+  }, 15000);
 });

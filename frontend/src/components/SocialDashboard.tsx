@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   useTrendingTopics,
   useSocialItems,
@@ -6,6 +6,19 @@ import {
   useTrendScore,
 } from '../hooks/useSocialMedia';
 import type { ClusteredTrendingTopic, ScoredSocialItem, SocialSource, SourceStat } from '../types/social-media';
+
+interface SocialItemDetail extends ScoredSocialItem {
+  scoring_breakdown: {
+    score_sentiment: number;
+    score_engagement: number;
+    score_authority: number;
+    score_recency: number;
+    score_composite: number;
+    context_window_used: boolean;
+    weights: Record<string, string>;
+    feature_attribution: Record<string, number>;
+  };
+}
 
 // ── Palette ────────────────────────────────────────────────────────────────────
 
@@ -107,11 +120,19 @@ function TrendingTopicRow({ topic }: { topic: ClusteredTrendingTopic }) {
   );
 }
 
-function SocialItemCard({ item }: { item: ScoredSocialItem }) {
+function SocialItemCard({
+  item,
+  onOpenDetail,
+  isSelected,
+}: {
+  item: ScoredSocialItem;
+  onOpenDetail: (id: string) => void;
+  isSelected: boolean;
+}) {
   const sentColor = item.score_sentiment > 65 ? C.bull : item.score_sentiment < 40 ? C.bear : C.neutral;
   const displayText = item.title || item.content;
   return (
-    <div style={{ padding: '0.875rem 1rem', border: `1px solid ${C.border}`, borderRadius: '0.5rem', backgroundColor: C.card, marginBottom: '0.5rem' }}>
+    <div style={{ padding: '0.875rem 1rem', border: `1px solid ${isSelected ? C.blue : C.border}`, borderRadius: '0.5rem', backgroundColor: C.card, marginBottom: '0.5rem', boxShadow: isSelected ? '0 0 0 2px rgba(59,130,246,0.12)' : undefined }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '1rem', marginBottom: '0.5rem' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem', flexWrap: 'wrap' }}>
@@ -137,6 +158,13 @@ function SocialItemCard({ item }: { item: ScoredSocialItem }) {
         <div style={{ textAlign: 'right', minWidth: '80px' }}>
           <div style={{ fontSize: '1.25rem', fontWeight: '700', color: sentColor }}>{item.score_composite.toFixed(0)}</div>
           <div style={{ fontSize: '0.65rem', color: C.gray }}>composite</div>
+          <button
+            type="button"
+            onClick={() => onOpenDetail(item.id)}
+            style={{ marginTop: '0.35rem', fontSize: '0.7rem', padding: '0.2rem 0.45rem', borderRadius: '0.25rem', border: `1px solid ${C.border}`, backgroundColor: C.card, cursor: 'pointer', color: C.blue, fontWeight: 600 }}
+          >
+            Details
+          </button>
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', fontSize: '0.7rem', color: C.gray }}>
@@ -145,6 +173,94 @@ function SocialItemCard({ item }: { item: ScoredSocialItem }) {
         <span>Authority <strong>{item.score_authority.toFixed(0)}</strong></span>
         <span>Recency <strong>{item.score_recency.toFixed(0)}</strong></span>
       </div>
+    </div>
+  );
+}
+
+function SocialItemDetailPanel({
+  detail,
+  loading,
+  error,
+  onClose,
+}: {
+  detail: SocialItemDetail | null;
+  loading: boolean;
+  error: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div style={{ border: `1px solid ${C.border}`, borderRadius: '0.5rem', backgroundColor: C.card, padding: '1rem', marginBottom: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+        <div>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: '700' }}>Item Detail</h3>
+          <div style={{ fontSize: '0.75rem', color: C.gray }}>Score breakdown and source metadata</div>
+        </div>
+        <button onClick={onClose} style={{ border: 'none', background: 'none', cursor: 'pointer', color: C.gray, fontSize: '1.25rem' }}>✕</button>
+      </div>
+
+      {loading && <div style={{ color: C.gray, fontSize: '0.875rem' }}>Loading item detail...</div>}
+      {error && <div style={{ color: C.bear, fontSize: '0.875rem' }}>{error}</div>}
+
+      {detail && (
+        <div style={{ display: 'grid', gap: '0.9rem' }}>
+          <div>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <span style={{ fontSize: '0.7rem', fontWeight: '700', color: C.blue, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                {sourceLabel(detail.source)}
+              </span>
+              {detail.author && <span style={{ fontSize: '0.75rem', color: C.gray }}>by {detail.author}</span>}
+              <span style={{ fontSize: '0.75rem', color: C.gray }}>{relTime(detail.fetched_at)}</span>
+            </div>
+            <div style={{ fontSize: '0.95rem', color: C.text, lineHeight: 1.5 }}>{detail.title || detail.content}</div>
+            {detail.url && (
+              <a href={detail.url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: '0.4rem', fontSize: '0.8rem', color: C.blue }}>
+                Open source
+              </a>
+            )}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
+            {([
+              ['Sentiment', detail.scoring_breakdown.score_sentiment, detail.score_sentiment > 65 ? C.bull : detail.score_sentiment < 40 ? C.bear : C.neutral],
+              ['Engagement', detail.scoring_breakdown.score_engagement, C.blue],
+              ['Authority', detail.scoring_breakdown.score_authority, C.blue],
+              ['Recency', detail.scoring_breakdown.score_recency, C.blue],
+              ['Composite', detail.scoring_breakdown.score_composite, C.blue],
+            ] as Array<[string, number, string]>).map(([label, value, color]) => (
+              <div key={label}>
+                <div style={{ fontSize: '0.75rem', color: C.gray, marginBottom: '0.25rem' }}>{label}</div>
+                {scoreBar(value, color)}
+              </div>
+            ))}
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem' }}>Feature Attribution</div>
+              <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.78rem', color: C.gray }}>
+                {Object.entries(detail.scoring_breakdown.feature_attribution).map(([key, value]) => (
+                  <div key={key} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem' }}>
+                    <span>{key}</span>
+                    <strong style={{ color: C.text }}>{value.toFixed(2)}</strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ border: `1px solid ${C.border}`, borderRadius: '0.5rem', padding: '0.75rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: '700', marginBottom: '0.5rem' }}>Source Metadata</div>
+              <div style={{ display: 'grid', gap: '0.35rem', fontSize: '0.78rem', color: C.gray }}>
+                <div><strong style={{ color: C.text }}>Source ID:</strong> {detail.source_id}</div>
+                {detail.author && <div><strong style={{ color: C.text }}>Author:</strong> {detail.author}</div>}
+                <div><strong style={{ color: C.text }}>Created:</strong> {new Date(detail.content_created_at).toLocaleString()}</div>
+                <div><strong style={{ color: C.text }}>Fetched:</strong> {new Date(detail.fetched_at).toLocaleString()}</div>
+                <div><strong style={{ color: C.text }}>Coins:</strong> {detail.coins_mentioned.length ? detail.coins_mentioned.join(', ') : 'None tagged'}</div>
+                <div><strong style={{ color: C.text }}>Context window:</strong> {detail.scoring_breakdown.context_window_used ? 'Used' : 'Not used'}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -403,11 +519,20 @@ export function SocialDashboard() {
   const [sourceFilter, setSourceFilter] = useState<SocialSource | ''>('');
   const [sortBy, setSortBy] = useState<'score' | 'recency' | 'engagement'>('score');
   const [trendSymbol, setTrendSymbol] = useState<string | null>(null);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [selectedItemDetail, setSelectedItemDetail] = useState<SocialItemDetail | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+  const [refreshSymbolsInput, setRefreshSymbolsInput] = useState('');
+  const [refreshRssOnly, setRefreshRssOnly] = useState(false);
+  const [refreshPending, setRefreshPending] = useState(false);
+  const [refreshMessage, setRefreshMessage] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
 
   const { data: topicsData, loading: topicsLoading, error: topicsError, refresh: refreshTopics } =
     useTrendingTopics(timeWindow, 20);
 
-  const { data: itemsData, loading: itemsLoading, error: itemsError } = useSocialItems({
+  const { data: itemsData, loading: itemsLoading, error: itemsError, refresh: refreshItems } = useSocialItems({
     coin: coinFilter || undefined,
     source: sourceFilter || undefined,
     sort: sortBy,
@@ -422,6 +547,70 @@ export function SocialDashboard() {
       setTrendSymbol(prev => prev === topic.coin_symbol ? null : topic.coin_symbol!);
     }
   };
+
+  const openItemDetail = useCallback(async (itemId: string) => {
+    setSelectedItemId(itemId);
+    setDetailLoading(true);
+    setDetailError(null);
+
+    try {
+      const res = await fetch(`/api/social-media/item/${encodeURIComponent(itemId)}`);
+      const payload = await res.json().catch(() => ({})) as SocialItemDetail & { error?: string };
+      if (!res.ok) {
+        throw new Error(payload.error ?? `Failed to fetch item detail (${res.status})`);
+      }
+      setSelectedItemDetail(payload);
+    } catch (err) {
+      setSelectedItemDetail(null);
+      setDetailError(err instanceof Error ? err.message : 'Failed to fetch item detail');
+    } finally {
+      setDetailLoading(false);
+    }
+  }, []);
+
+  const triggerRefresh = useCallback(async () => {
+    setRefreshPending(true);
+    setRefreshError(null);
+    setRefreshMessage(null);
+
+    try {
+      const symbols = refreshSymbolsInput
+        .split(',')
+        .map(symbol => symbol.trim().toUpperCase())
+        .filter(Boolean);
+
+      const res = await fetch('/api/social-media/refresh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          symbols: symbols.length > 0 ? symbols : undefined,
+          rss_only: refreshRssOnly,
+        }),
+      });
+
+      const payload = await res.json().catch(() => ({})) as {
+        error?: string;
+        status?: string;
+        mode?: string;
+        symbols?: string[] | string;
+      };
+
+      if (res.status !== 202) {
+        throw new Error(payload.error ?? `Failed to trigger social refresh (${res.status})`);
+      }
+
+      const targetLabel = Array.isArray(payload.symbols)
+        ? payload.symbols.join(', ')
+        : payload.symbols ?? 'top-coins';
+      setRefreshMessage(`Refresh queued for ${targetLabel} (${payload.mode ?? 'all_sources'}).`);
+
+      void Promise.allSettled([refreshStats(), refreshTopics(), refreshItems()]);
+    } catch (err) {
+      setRefreshError(err instanceof Error ? err.message : 'Failed to trigger social refresh');
+    } finally {
+      setRefreshPending(false);
+    }
+  }, [refreshItems, refreshRssOnly, refreshStats, refreshSymbolsInput, refreshTopics]);
 
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
@@ -441,8 +630,32 @@ export function SocialDashboard() {
             <option value={24}>24h</option>
             <option value={48}>48h</option>
           </select>
+          <input
+            value={refreshSymbolsInput}
+            onChange={e => setRefreshSymbolsInput(e.target.value.toUpperCase())}
+            placeholder="Refresh symbols (BTC,ETH)"
+            aria-label="Refresh symbols"
+            style={{ padding: '0.4rem 0.6rem', borderRadius: '0.375rem', border: `1px solid ${C.border}`, fontSize: '0.8125rem', width: '190px', backgroundColor: C.card, color: C.text }}
+          />
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.8125rem', color: C.gray }}>
+            <input type="checkbox" checked={refreshRssOnly} onChange={e => setRefreshRssOnly(e.target.checked)} />
+            RSS only
+          </label>
+          <button
+            onClick={() => void triggerRefresh()}
+            disabled={refreshPending}
+            style={{ fontSize: '0.75rem', padding: '0.4rem 0.7rem', borderRadius: '0.25rem', border: 'none', background: refreshPending ? '#93c5fd' : C.blue, cursor: refreshPending ? 'wait' : 'pointer', color: '#fff', fontWeight: 600 }}
+          >
+            {refreshPending ? 'Queuing…' : 'Refresh Social'}
+          </button>
         </div>
       </div>
+
+      {(refreshMessage || refreshError) && (
+        <div style={{ marginBottom: '1rem', fontSize: '0.82rem', color: refreshError ? C.bear : C.bull }} role="status">
+          {refreshError ?? refreshMessage}
+        </div>
+      )}
 
       {/* Stats row */}
       {statsData && (
@@ -533,6 +746,19 @@ export function SocialDashboard() {
             </select>
           </div>
 
+          {(selectedItemId || detailLoading || detailError || selectedItemDetail) && (
+            <SocialItemDetailPanel
+              detail={selectedItemDetail}
+              loading={detailLoading}
+              error={detailError}
+              onClose={() => {
+                setSelectedItemId(null);
+                setSelectedItemDetail(null);
+                setDetailError(null);
+              }}
+            />
+          )}
+
           {itemsLoading && (
             <div style={{ padding: '2rem', textAlign: 'center', color: C.gray }}>Loading items...</div>
           )}
@@ -545,7 +771,7 @@ export function SocialDashboard() {
             </div>
           )}
           {itemsData?.items.map((item: ScoredSocialItem) => (
-            <SocialItemCard key={item.id} item={item} />
+            <SocialItemCard key={item.id} item={item} onOpenDetail={openItemDetail} isSelected={selectedItemId === item.id} />
           ))}
           {itemsData && itemsData.total > itemsData.items.length && (
             <div style={{ textAlign: 'center', padding: '0.75rem', fontSize: '0.875rem', color: C.gray }}>

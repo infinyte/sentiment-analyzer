@@ -5,24 +5,12 @@ I audited backend endpoints from index.ts:347 plus all route modules in agent-st
 
 ## Total backend HTTP endpoints found: 64
 
-## Endpoints with frontend usage/control: 31
+## Endpoints with frontend usage/control: 39
 
-## Endpoints with no frontend usage/control: 33
+## Endpoints with no frontend usage/control: 25
 
 * Findings: Endpoints Not Yet Implemented In Frontend
 _ Highest impact first: write/admin/action endpoints with no UI control.
-
-### Sentiment operations missing UI
-POST /api/sentiment/analyze (index.ts:576)
-POST /api/refresh-sentiment (index.ts:485)
-GET /api/sentiment/:symbol (index.ts:540)
-GET /api/rankings/top-coins (index.ts:813)
-GET /api/info/modes (index.ts:845)
-
-### Backtesting missing UI
-POST /api/agents/configure (index.ts:661)
-POST /api/backtest/run (index.ts:702)
-GET /api/backtest/results/:testId (index.ts:802)
 
 ### Trading API missing UI
 GET /api/trading/exchange-status (trading.ts:32)
@@ -30,13 +18,12 @@ GET /api/trading/price/:symbol (trading.ts:45)
 GET /api/trading/balances (trading.ts:55)
 POST /api/trading/order (trading.ts:65)
 GET /api/trading/stats (trading.ts:92)
+
 MARL advanced/admin controls missing UI
 GET /api/marl/agents/learning (marl-competition.ts:793)
 DELETE /api/marl/agents/:agentId/learning (marl-competition.ts:808)
-GET /api/marl/info (marl-competition.ts:907)
 POST /api/marl/agents/:agentId/algorithm (marl-competition.ts:1056)
 GET /api/marl/competition/:competitionId/stream (marl-competition.ts:1104)
-GET /api/marl/competition/:competitionId/equity-curves (marl-competition.ts:1169)
 
 ### Broker lifecycle/admin controls missing UI
 GET /api/marl/broker/credentials (full list) (marl-real-trading.ts:89)
@@ -53,21 +40,29 @@ GET /api/marl/evolution/history (evolutionary.ts:389)
 GET /api/marl/evolution/population (evolutionary.ts:478)
 
 ### Social/trending utility endpoints missing UI
-POST /api/social-media/refresh (social-media.ts:214)
-GET /api/social-media/item/:id (social-media.ts:156)
 GET /api/scrape/social (index.ts:877)
 POST /api/scrape/batch (index.ts:904)
 GET /api/trending (index.ts:942)
 POST /api/trending/ingest (index.ts:959)
-
-### Infra endpoint missing UI
-GET /api/health (index.ts:552)
 
 ## Endpoints/Features That Do Have Frontend Controls
 
 ### Coins dashboard
 GET /api/coins (App.tsx:133)
 GET /api/coins/:symbol (App.tsx:166)
+
+### Dashboard parity additions
+POST /api/sentiment/analyze (App.tsx)
+POST /api/refresh-sentiment (App.tsx)
+GET /api/sentiment/:symbol (App.tsx)
+GET /api/rankings/top-coins (App.tsx)
+GET /api/info/modes (App.tsx)
+GET /api/health (App.tsx)
+
+### Backtesting
+POST /api/agents/configure (App.tsx)
+POST /api/backtest/run (App.tsx)
+GET /api/backtest/results/:testId (App.tsx)
 
 ### Agent management
 GET /api/agents (AgentManagementDashboard.tsx:1483)
@@ -85,6 +80,8 @@ GET /api/marl/competition/:id/results (useMarlCompetition.ts:70)
 POST /api/marl/agents/compare (useMarlCompetition.ts:105)
 GET /api/marl/competitions (useMarlCompetition.ts:129)
 GET /api/marl/competition/:id/trade-log (MarlCompetitionViewer.tsx:212)
+GET /api/marl/info (MarlCompetitionViewer.tsx)
+GET /api/marl/competition/:competitionId/equity-curves (MarlCompetitionViewer.tsx)
 GET /api/marl/coin-universe (MarlCompetitionViewer.tsx:267)
 POST /api/marl/agents/:agentId/pretrain (AgentManagementDashboard.tsx:1816)
 
@@ -101,7 +98,9 @@ GET /api/marl/evolution/best-genome (AgentManagementDashboard.tsx:1486)
 ### Social intelligence
 GET /api/social-media/trending-topics (useSocialMedia.ts:20)
 GET /api/social-media/items (useSocialMedia.ts:62)
+GET /api/social-media/item/:id (SocialDashboard.tsx)
 GET /api/social-media/stats (useSocialMedia.ts:88)
+POST /api/social-media/refresh (SocialDashboard.tsx)
 GET /api/trending-score/:symbol (useSocialMedia.ts:119)
 
 ## Feature-Level Summary
@@ -115,10 +114,8 @@ GET /api/trending-score/:symbol (useSocialMedia.ts:119)
  - pretraining
 
 ### Implemented but UI-missing: 
- - backtesting 
  - general trading panel
- - sentiment analysis tools
  - several MARL admin/learning endpoints
  - broker lifecycle controls beyond create/picker
- - social refresh/ingest utility controls
- - health/admin monitoring
+ - evolutionary analytics history/population workspace
+ - raw social scraping and ingest utilities

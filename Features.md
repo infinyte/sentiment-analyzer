@@ -1,6 +1,6 @@
 # Features & Functionality
 
-> Last updated: 2026-03-22
+> Last updated: 2026-03-23
 
 Status legend: ✅ Fully implemented | ⚠️ Partial / credentials required | 🔴 Stub / not functional
 
@@ -512,10 +512,10 @@ Implementation: `node-cache` (in-memory); no external dependency required.
 
 | Component | File | Description | Status |
 |-----------|------|-------------|--------|
-| **Main dashboard** | `App.tsx` (40 KB) | Coin list, sentiment filters, coin detail modal, multi-source breakdown | ✅ |
-| **MARL Competition Viewer** | `components/MarlCompetitionViewer.tsx` (37 KB) | Tournament launch UI, real-time equity curves, head-to-head comparison, agent cosmetics | ✅ |
+| **Main dashboard** | `App.tsx` (40 KB) | Coin list, sentiment filters, coin detail modal, Sentiment Lab, health pill, sentiment refresh controls, Backtesting tab | ✅ |
+| **MARL Competition Viewer** | `components/MarlCompetitionViewer.tsx` (37 KB) | Tournament launch UI, equity curves, head-to-head comparison, info drawer, manual equity reload, agent cosmetics | ✅ |
 | **Agent Management Dashboard** | `components/AgentManagementDashboard.tsx` | Agent registry, leaderboard, breeding controls, genealogy tree, generation trends, cross-tournament comparison, genome snapshot | ✅ |
-| **Social Dashboard** | `components/SocialDashboard.tsx` | Trending topics table, volume trends | ✅ |
+| **Social Dashboard** | `components/SocialDashboard.tsx` | Trending topics, scraper health, manual refresh, trend score panel, scored item detail drill-in | ✅ |
 
 ### Custom Hooks
 
@@ -524,11 +524,21 @@ Implementation: `node-cache` (in-memory); no external dependency required.
 | `useMarlCompetition.ts` | Tournament lifecycle: start → poll → results → compare → history | ✅ |
 | `useSocialMedia.ts` | Trending topics, scored items, social stats with auto-refresh | ✅ |
 
+### Phase 1 UI Parity Delivered
+
+- `P1-T1` Sentiment Lab in Dashboard: analyze, lookup, rankings, and modes
+- `P1-T2` Sentiment refresh action with API-key entry and async feedback
+- `P1-T3` Global health indicator with expandable backend service detail
+- `P1-T4` Dedicated Backtesting tab with configure, run, and result reload workflow
+- `P1-T5` MARL info panel and equity-curve reload workflow
+- `P1-T6` Social refresh control and item-level detail drill-in
+
 ### Polling Intervals
 
 | Context | Interval |
 |---------|----------|
 | Main dashboard | 10 minutes |
+| Global health pill | 30 seconds |
 | Tournament progress | 2 seconds |
 | Agent management | 5 seconds (via `refreshNonce`) |
 

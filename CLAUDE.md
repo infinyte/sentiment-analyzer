@@ -135,11 +135,11 @@ backend/src/workers/
 - SELL orders bypass the kill switch; only BUY orders are blocked when the loss threshold is hit
 
 ### Frontend
-- `App.tsx` (40KB) — main dashboard, coin list, sentiment filters, coin detail modal
+- `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab
 - `components/AgentManagementDashboard.tsx` — agent registry, leaderboard, breeding controls, genealogy tree, tournament detail drill-down, generation trends, cross-tournament comparisons, genome snapshot
-- `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, agent cosmetics
-- `components/SocialDashboard.tsx` — trending topics, volume trends
-- App dashboard polls every 10 minutes via `useEffect`; agent-management refreshes every 5 seconds via `refreshNonce`
+- `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, info panel, and manual equity reload
+- `components/SocialDashboard.tsx` — trending topics, scraper health, manual social refresh, and scored-item detail drill-in
+- App dashboard polls every 10 minutes via `useEffect`; system health polls every 30 seconds; agent-management refreshes every 5 seconds via `refreshNonce`
 - UI styling is mostly inline styles inside focused components; extend the existing pattern rather than introducing a new design system for isolated changes
 - ChartJS via `react-chartjs-2` for price/equity charts
 
@@ -182,6 +182,9 @@ Tests live in `frontend/src/__tests__/`. Environment: jsdom. Setup file: `__test
 
 Current high-value frontend coverage includes:
 - `AgentManagementDashboard.test.tsx` for registry, customization, breeding, retirement, and evolutionary UI rendering
+- `App.test.tsx` for ticker search, health fallback, and Backtesting workflow coverage
+- `MarlCompetitionViewer.test.tsx` for info drawer and equity reload coverage in addition to tournament flows
+- `SocialDashboard.test.tsx` for manual refresh and item-detail drill-in with filter preservation
 
 ## Environment Variables
 

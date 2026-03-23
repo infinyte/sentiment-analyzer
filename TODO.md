@@ -13,41 +13,54 @@ Definition of done for this document:
 - Each task has acceptance criteria that can be validated in QA.
 - Task placement is tied to existing or proposed UI tabs.
 
+
 ## Phase 1 - Must-Have Controls
 
-### P1-T5: Enhance MARL tab with info and equity reload
-Description:
-Expose currently hidden MARL endpoints for discoverability and historical analysis recovery.
+### Completed
 
-Endpoints:
-- GET /api/marl/info
-- GET /api/marl/competition/:competitionId/equity-curves
+#### P1-T1: Add Sentiment Lab to Dashboard tab
+Status: Done
 
-UI placement:
-- MARL tab in frontend/src/components/MarlCompetitionViewer.tsx.
+Delivered:
+- Dashboard Sentiment Lab with Analyze, Lookup, Rankings, and Modes subtabs
+- Coverage for `POST /api/sentiment/analyze`, `GET /api/sentiment/:symbol`, `GET /api/rankings/top-coins`, and `GET /api/info/modes`
 
-Acceptance criteria:
-1. User can open MARL info panel showing endpoint/mode metadata.
-2. User can request equity curves for a selected competition id.
-3. Equity reload renders in existing chart area without page refresh.
-4. Empty or unavailable data shows clear fallback state.
+#### P1-T2: Add Refresh Sentiment action
+Status: Done
 
-### P1-T6: Add Social refresh + item detail drill-in
-Description:
-Enable manual social refresh and item-level detail access from existing social feed.
+Delivered:
+- Header-level refresh action for `POST /api/refresh-sentiment`
+- API-key entry, pending state, success/error feedback, and session persistence for the key
 
-Endpoints:
-- POST /api/social-media/refresh
-- GET /api/social-media/item/:id
+#### P1-T3: Add System Health indicator
+Status: Done
 
-UI placement:
-- Social tab in frontend/src/components/SocialDashboard.tsx.
+Delivered:
+- Global app-header health pill backed by `GET /api/health`
+- Polling every 30 seconds with expandable service-level detail and non-blocking fallback behavior
 
-Acceptance criteria:
-1. Social refresh button triggers API and shows pending/success/error states.
-2. Clicking an item opens detail panel populated by /item/:id.
-3. Detail panel includes score breakdown and source metadata if present.
-4. Refresh and detail interactions do not disrupt current filter state.
+#### P1-T4: Create Backtesting tab and run flow
+Status: Done
+
+Delivered:
+- Dedicated Backtesting tab in `frontend/src/App.tsx`
+- Agent configuration, backtest submission, stored test-id persistence, KPI cards, and equity chart retrieval
+
+#### P1-T5: Enhance MARL tab with info and equity reload
+Status: Done
+
+Delivered:
+- Lazy-loaded MARL info panel from `GET /api/marl/info`
+- Equity-curve reload control in the existing chart area using `GET /api/marl/competition/:competitionId/equity-curves`
+
+#### P1-T6: Add Social refresh + item detail drill-in
+Status: Done
+
+Delivered:
+- Social refresh controls for `POST /api/social-media/refresh`
+- Feed-item detail panel for `GET /api/social-media/item/:id`
+- Tests confirming refresh and detail flows preserve filter state
+
 
 ## Phase 2 - Admin Controls
 

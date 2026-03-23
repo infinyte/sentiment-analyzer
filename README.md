@@ -1,6 +1,6 @@
 # Sentiment Analyzer
 
-Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with MARL tournament tooling, social media intelligence, and agent-management views backed by the evolutionary system.
+Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with Sentiment Lab tools, a global health indicator, backtesting, MARL tournament tooling, social media intelligence, and agent-management views backed by the evolutionary system.
 
 ## Quick Start
 
@@ -72,6 +72,25 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 ## Architecture
 
 Backend bootstrap lives in `backend/src/index.ts` (routes + cron) with services split into `backend/src/services/`. The frontend is a multi-file React app rooted at `frontend/src/App.tsx` with components, hooks, and types separated under `frontend/src/`.
+
+## Frontend Surface
+
+Current top-level tabs:
+
+- Dashboard
+- Agents
+- MARL Competition
+- Social Intel
+- Backtesting
+
+Current user-facing Phase 1 controls:
+
+- Dashboard Sentiment Lab: analyze symbols, inspect cached sentiment, load rankings, and browse mode metadata
+- Dashboard header refresh action: queue a sentiment cache refresh with API-key entry and feedback
+- Global health pill: polls `/api/health` every 30 seconds with expandable service status
+- Backtesting tab: configure agents, run backtests, persist test ids in session state, and reload stored results with KPI and equity views
+- MARL info and curve reload: on-demand info drawer plus manual equity-curve recovery for historical competition ids
+- Social manual refresh and item drill-in: queue social refresh jobs and inspect per-item scoring breakdowns without losing feed filters
 
 ```
 React Dashboard (polling every 10 min)
@@ -148,6 +167,8 @@ Scraper Worker Process (npm run worker:scraper)
 | GET | `/api/backtest/results/:testId` | Retrieve full backtest report with equity curves |
 | GET | `/api/rankings/top-coins` | Coins ranked by SMART composite score. Params: `limit` |
 | GET | `/api/info/modes` | Documentation — modes, agent types, risk profiles |
+| POST | `/api/social-media/refresh` | Trigger immediate multi-source or RSS-only social refresh |
+| GET | `/api/social-media/item/:id` | Retrieve one social item with full scoring breakdown |
 
 ### Phase 2 — MARL Competitive Trading
 
@@ -216,6 +237,16 @@ Agent Q-tables and policy-network weights are saved to SQLite (`agent_learning_s
 - MARL read endpoints default to 120 requests per 60 seconds per client IP
 - Rate-limited responses include `Retry-After`, `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset`
 - Override these with `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, and `MARL_READ_RATE_LIMIT_MAX`
+
+## Validation
+
+Latest local validation completed successfully:
+
+- Backend build passed
+- Frontend build passed
+- Backend test suite passed
+- Frontend test suite passed
+- `node scripts/validate-docs.mjs` passed
 
 **Example cURL:**
 ```bash

@@ -48,6 +48,8 @@ import logger from './logger.js';
 
 dotenv.config();
 
+const isTestEnv = process.env.NODE_ENV === 'test';
+
 // ============================================================================
 // EXPRESS SERVER SETUP
 // ============================================================================
@@ -117,8 +119,10 @@ try {
 // Initialize optional Redis services (pub/sub fan-out + config hot-reload).
 // Both are fire-and-forget: they fall back to EventEmitter / env defaults
 // if REDIS_URL is not set or ioredis is not installed.
-void initPubSub();
-void configService.init();
+if (!isTestEnv) {
+  void initPubSub();
+  void configService.init();
+}
 
 // Warn about any open real-trading orders that survived a restart.
 // Broker adapters do NOT survive restarts — admin must re-POST
@@ -999,7 +1003,7 @@ app.use((req, res) => {
 // START SERVER
 // ============================================================================
 
-if (process.env.NODE_ENV !== 'test') {
+if (!isTestEnv) {
   app.listen(port, () => {
     logger.info('server started', { port, env: process.env.NODE_ENV || 'development' });
   });
@@ -1011,29 +1015,31 @@ if (process.env.NODE_ENV !== 'test') {
 
 const cronSchedule = process.env.SENTIMENT_JOB_CRON || '0 2 * * *';
 
-cron.schedule(cronSchedule, async () => {
-  const batchSize = parseInt(process.env.SENTIMENT_BATCH_SIZE || '50');
-  const started = Date.now();
-  logger.info('cron started', { batchSize, schedule: cronSchedule });
+if (!isTestEnv) {
+  cron.schedule(cronSchedule, async () => {
+    const batchSize = parseInt(process.env.SENTIMENT_BATCH_SIZE || '50');
+    const started = Date.now();
+    logger.info('cron started', { batchSize, schedule: cronSchedule });
 
-  try {
-    const coins = await coingecko.getTopCoins(batchSize);
+    try {
+      const coins = await coingecko.getTopCoins(batchSize);
 
-    // Force re-analysis by clearing existing sentiment cache entries
-    for (const coin of coins) {
-      sentimentCache.delete(`sentiment_${coin.symbol}`);
+      // Force re-analysis by clearing existing sentiment cache entries
+      for (const coin of coins) {
+        sentimentCache.delete(`sentiment_${coin.symbol}`);
+      }
+
+      for (const coin of coins) {
+        await fetchAndCacheSentiment(coin);
+      }
+
+      const elapsed = ((Date.now() - started) / 1000).toFixed(1);
+      logger.info('cron completed', { coinCount: coins.length, elapsed_s: elapsed });
+    } catch (error) {
+      logger.error('cron failed', { error: String(error) });
     }
-
-    for (const coin of coins) {
-      await fetchAndCacheSentiment(coin);
-    }
-
-    const elapsed = ((Date.now() - started) / 1000).toFixed(1);
-    logger.info('cron completed', { coinCount: coins.length, elapsed_s: elapsed });
-  } catch (error) {
-    logger.error('cron failed', { error: String(error) });
-  }
-});
+  });
+}
 
 // ============================================================================
 // SCHEDULED TRENDING SCRAPE JOB (every 30 minutes) — lightweight in-memory
@@ -1041,18 +1047,20 @@ cron.schedule(cronSchedule, async () => {
 
 const trendingCronSchedule = process.env.TRENDING_JOB_CRON || '*/30 * * * *';
 
-cron.schedule(trendingCronSchedule, async () => {
-  try {
-    const coins = cache.get<{ symbol: string }[]>('coins');
-    if (!coins || coins.length === 0) return;
+if (!isTestEnv) {
+  cron.schedule(trendingCronSchedule, async () => {
+    try {
+      const coins = cache.get<{ symbol: string }[]>('coins');
+      if (!coins || coins.length === 0) return;
 
-    const symbols = coins.slice(0, 20).map(c => c.symbol);
-    const { ingested } = await trendingEngine.scrapeAndIngest(symbols, socialScraper);
-    logger.info('trending cron completed', { symbols: symbols.length, ingested });
-  } catch (error) {
-    logger.error('trending cron failed', { error: String(error) });
-  }
-});
+      const symbols = coins.slice(0, 20).map(c => c.symbol);
+      const { ingested } = await trendingEngine.scrapeAndIngest(symbols, socialScraper);
+      logger.info('trending cron completed', { symbols: symbols.length, ingested });
+    } catch (error) {
+      logger.error('trending cron failed', { error: String(error) });
+    }
+  });
+}
 
 // ============================================================================
 // SOCIAL MEDIA SCRAPING CRON (every 1 hour) — full pipeline with SQLite
@@ -1062,54 +1070,58 @@ cron.schedule(trendingCronSchedule, async () => {
 
 const socialCronSchedule = process.env.SOCIAL_SCRAPE_CRON || '0 * * * *';
 
-cron.schedule(socialCronSchedule, async () => {
-  try {
-    const coins = cache.get<{ symbol: string }[]>('coins');
-    const top = coins?.slice(0, 10).map(c => c.symbol) ?? [];
+if (!isTestEnv) {
+  cron.schedule(socialCronSchedule, async () => {
+    try {
+      const coins = cache.get<{ symbol: string }[]>('coins');
+      const top = coins?.slice(0, 10).map(c => c.symbol) ?? [];
 
-    if (isQueueAvailable()) {
-      // Delegate to the scraper worker process via BullMQ
-      await getScraperQueue().add('cron-social-scrape', { targets: top, rss_only: false });
-      logger.info('social cron: scrape job enqueued', { symbols: top.length });
-    } else {
-      // Fallback: run in-process when Redis is not configured
-      const scrapeResult = await socialScraperManager.scrapeAll(top);
-      logger.info('social cron: scrape phase complete', {
-        symbols: top.length,
-        rss: scrapeResult.rss_items,
-        discord: scrapeResult.discord_items,
-        telegram: scrapeResult.telegram_items,
-        total_scraped: scrapeResult.total_items_scraped,
-        total_stored: scrapeResult.total_items_stored,
-        duration_ms: scrapeResult.duration_ms,
-      });
+      if (isQueueAvailable()) {
+        // Delegate to the scraper worker process via BullMQ
+        await getScraperQueue().add('cron-social-scrape', { targets: top, rss_only: false });
+        logger.info('social cron: scrape job enqueued', { symbols: top.length });
+      } else {
+        // Fallback: run in-process when Redis is not configured
+        const scrapeResult = await socialScraperManager.scrapeAll(top);
+        logger.info('social cron: scrape phase complete', {
+          symbols: top.length,
+          rss: scrapeResult.rss_items,
+          discord: scrapeResult.discord_items,
+          telegram: scrapeResult.telegram_items,
+          total_scraped: scrapeResult.total_items_scraped,
+          total_stored: scrapeResult.total_items_stored,
+          duration_ms: scrapeResult.duration_ms,
+        });
 
-      logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
+        logger.debug('social cron: ingest queue stats', ingestQueue.getStats());
 
-      const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
-      const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
-      logger.info('social cron: trending topics updated', { count: topics.length });
+        const trendWindow = parseInt(process.env.TRENDING_WINDOW_HOURS || '24');
+        const topics = await socialDiscoveryEngine.discoverTrends(trendWindow, 30);
+        logger.info('social cron: trending topics updated', { count: topics.length });
 
-      const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
-      const pruned = socialStore.pruneOldItems(retainDays);
-      if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+        const retainDays = parseInt(process.env.SOCIAL_HISTORY_DAYS || '30');
+        const pruned = socialStore.pruneOldItems(retainDays);
+        if (pruned > 0) logger.info('social cron: pruned old items', { count: pruned });
+      }
+    } catch (error) {
+      logger.error('social cron failed', { error: String(error) });
     }
-  } catch (error) {
-    logger.error('social cron failed', { error: String(error) });
-  }
-});
+  });
+}
 
 // ============================================================================
 // MIDNIGHT CRON — reset daily source fetch counters
 // ============================================================================
 
-cron.schedule('0 0 * * *', () => {
-  try {
-    socialStore.resetDailyCounters();
-    logger.info('midnight cron: daily source counters reset');
-  } catch (error) {
-    logger.error('midnight cron failed', { error: String(error) });
-  }
-});
+if (!isTestEnv) {
+  cron.schedule('0 0 * * *', () => {
+    try {
+      socialStore.resetDailyCounters();
+      logger.info('midnight cron: daily source counters reset');
+    } catch (error) {
+      logger.error('midnight cron failed', { error: String(error) });
+    }
+  });
+}
 
 export default app;

@@ -1,7 +1,7 @@
 SENTIMENT ANALYZER
 CURRENT PROJECT SUMMARY AND REMAINING WORK
 
-Date: March 21, 2026 (updated)
+Date: March 23, 2026 (updated)
 Repository: infinyte/sentiment-analyzer
 Branch: main
 
@@ -20,7 +20,7 @@ Implemented areas:
 - Real trading service with Crypto.com and Binance.US adapters
 - Evolutionary backend primitives and tournament orchestration
 - Agent identity, cosmetics, statistics, history, genome, and genealogy APIs
-- Frontend agent management dashboard integrated into the main UI
+- Frontend parity controls delivered for Phase 1: Sentiment Lab, sentiment refresh, health indicator, Backtesting tab, MARL info/equity reload, and social refresh/detail drill-in
 
 Primary remaining work:
 - Richer evolutionary frontend visualizations
@@ -112,15 +112,22 @@ Key backend files:
 - backend/src/routes/evolutionary.ts
 - backend/src/routes/agent-stats.ts
 
-6. Frontend agent management
-- Agents view integrated into the main app shell
-- Registry, leaderboard, agent detail, customization flow
-- History, genome snapshot, and genealogy data display
-- Frontend tests for agent-management interactions
+6. Frontend workflow coverage
+- Dashboard Sentiment Lab, sentiment refresh action, and global health indicator integrated into `App.tsx`
+- Dedicated Backtesting tab with test-id persistence and stored-result reloads
+- MARL viewer enhancements for info discovery and historical equity recovery
+- Social dashboard manual refresh and item-level detail inspection
+- Agent-management view remains integrated into the main shell with registry, leaderboard, customization, and evolutionary controls
+- Frontend tests now cover App, MARL viewer, Social dashboard, and Agent Management flows
 
 Key frontend files:
 - frontend/src/App.tsx
+- frontend/src/components/MarlCompetitionViewer.tsx
+- frontend/src/components/SocialDashboard.tsx
 - frontend/src/components/AgentManagementDashboard.tsx
+- frontend/src/__tests__/App.test.tsx
+- frontend/src/__tests__/MarlCompetitionViewer.test.tsx
+- frontend/src/__tests__/SocialDashboard.test.tsx
 - frontend/src/__tests__/AgentManagementDashboard.test.tsx
 
 ---
@@ -158,7 +165,7 @@ REMAINING-WORK CHECKLIST
 
 Priority 1: Correct the docs
 - [x] Replace the stale project summary with a current-state document
-- [ ] Update README.md to reflect the current agent-management and evolutionary surface area clearly
+- [x] Update README.md to reflect the current frontend surface area and Phase 1 parity work clearly
 - [x] Update CLAUDE.md so contributor guidance matches current architecture and frontend capabilities
 - [ ] Add or expand a dedicated evolution-focused doc describing tournament lifecycle, stats tables, and UI/backend responsibilities
 
@@ -191,6 +198,8 @@ VALIDATION STATUS
 Validated during recent repo work:
 - Backend type-check, build, and full Jest suite passing
 - Frontend type-check, build, and Vitest suite passing
+- Docs validator passing (`node scripts/validate-docs.mjs`)
+- New frontend coverage added for App, MARL viewer, and Social dashboard parity flows
 - Regression coverage added for MARL non-zero trade execution
 - Integration-style coverage added for evolutionary tournament persistence into agent statistics and competition history
 

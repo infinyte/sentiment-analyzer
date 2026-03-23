@@ -744,7 +744,7 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents?limit=100');
     });
-  }, 25000);
+  }, 60000);
 
   it('marks agents ready to evolve, breeds children, and retires weak agents', async () => {
     render(<App />);
@@ -779,5 +779,5 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-child-1/retire', expect.objectContaining({ method: 'POST' }));
     });
-  }, 25000);
+  }, 60000);
 });

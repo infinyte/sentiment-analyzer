@@ -13,6 +13,33 @@ import type {
 type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 
+interface MarlInfoResponse {
+  description: string;
+  tournamentModes: Record<string, string>;
+  riskProfiles: Record<string, Record<string, string | number>>;
+  learningAlgorithm: {
+    type: string;
+    stateSpace: string;
+    actionSpace: string[];
+    policyNetwork: string;
+    explorationStrategy: string;
+    replayBuffer: string;
+  };
+  endpoints: Record<string, string>;
+}
+
+interface EquityCurvesResponse {
+  competitionId: string;
+  status: 'RUNNING' | 'COMPLETED';
+  message?: string;
+  progress?: number;
+  snapshotCount?: number;
+  equityCurves?: Array<{
+    timestamp: string;
+    agentEquities: Array<{ agentId: string; equity: number }>;
+  }>;
+}
+
 // ─── Style constants ─────────────────────────────────────────────────────────
 
 const card: CSSProperties = {
@@ -201,7 +228,27 @@ export function MarlCompetitionViewer() {
   const [cmpRounds, setCmpRounds] = useState(3);
   const [cmpDuration, setCmpDuration] = useState(100);
 
+  // ── Info and equity reload state ────────────────────────────────────────
+  const [infoOpen, setInfoOpen] = useState(false);
+  const [infoLoading, setInfoLoading] = useState(false);
+  const [infoError, setInfoError] = useState<string | null>(null);
+  const [infoData, setInfoData] = useState<MarlInfoResponse | null>(null);
+  const [equityReloadId, setEquityReloadId] = useState('');
+  const [equityReloadLoading, setEquityReloadLoading] = useState(false);
+  const [equityReloadError, setEquityReloadError] = useState<string | null>(null);
+  const [equityReloadMessage, setEquityReloadMessage] = useState<string | null>(null);
+  const [reloadedEquityCurves, setReloadedEquityCurves] = useState<EquityCurvesResponse['equityCurves'] | null>(null);
+
   useEffect(() => { loadList(); }, [loadList]);
+
+  useEffect(() => {
+    if (results?.competitionId) {
+      setEquityReloadId(results.competitionId);
+      setReloadedEquityCurves(null);
+      setEquityReloadError(null);
+      setEquityReloadMessage(null);
+    }
+  }, [results?.competitionId]);
 
   useEffect(() => {
     if (!results?.competitionId) {
@@ -330,16 +377,84 @@ export function MarlCompetitionViewer() {
     }
   };
 
+  const loadInfoPanel = useCallback(async () => {
+    if (infoLoading) return;
+    if (infoData) {
+      setInfoOpen(open => !open);
+      return;
+    }
+
+    setInfoOpen(true);
+    setInfoLoading(true);
+    setInfoError(null);
+    try {
+      const res = await fetch('/api/marl/info');
+      const payload = await res.json().catch(() => ({})) as MarlInfoResponse & { error?: string };
+      if (!res.ok) {
+        throw new Error(payload.error ?? `Failed to load MARL info (${res.status})`);
+      }
+      setInfoData(payload);
+    } catch (err) {
+      setInfoError(err instanceof Error ? err.message : 'Failed to load MARL info');
+    } finally {
+      setInfoLoading(false);
+    }
+  }, [infoData, infoLoading]);
+
+  const reloadEquityCurves = useCallback(async () => {
+    const targetId = equityReloadId.trim();
+    if (!targetId) {
+      setEquityReloadError('Enter a competition id to reload equity curves.');
+      return;
+    }
+
+    setEquityReloadLoading(true);
+    setEquityReloadError(null);
+    setEquityReloadMessage(null);
+    try {
+      const res = await fetch(`/api/marl/competition/${encodeURIComponent(targetId)}/equity-curves`);
+      const payload = await res.json().catch(() => ({})) as EquityCurvesResponse & { error?: string };
+
+      if (res.status === 202) {
+        setReloadedEquityCurves(null);
+        setEquityReloadMessage(payload.message ?? `Competition ${targetId} is still running.`);
+        return;
+      }
+
+      if (!res.ok) {
+        throw new Error(payload.error ?? `Unable to reload equity curves (${res.status})`);
+      }
+
+      if (!payload.equityCurves || payload.equityCurves.length === 0) {
+        setReloadedEquityCurves([]);
+        setEquityReloadMessage(`No equity curve data is available for ${targetId}.`);
+        return;
+      }
+
+      setReloadedEquityCurves(payload.equityCurves);
+      setEquityReloadMessage(`Loaded ${payload.snapshotCount ?? payload.equityCurves.length} equity snapshots for ${payload.competitionId}.`);
+    } catch (err) {
+      setReloadedEquityCurves(null);
+      setEquityReloadError(err instanceof Error ? err.message : 'Unable to reload equity curves.');
+    } finally {
+      setEquityReloadLoading(false);
+    }
+  }, [equityReloadId]);
+
   // ── Equity evolution chart ────────────────────────────────────────────────
-  const chartData = results?.equityEvolution.length
+  const equitySeries = reloadedEquityCurves ?? results?.equityEvolution ?? [];
+  const chartData = equitySeries.length
     ? (() => {
-        const agentIds = results.equityEvolution[0].agentEquities.map(ae => ae.agentId);
-        const labels = results.equityEvolution.map((_, i) => `Step ${i + 1}`);
+        const agentIds = equitySeries[0].agentEquities.map(ae => ae.agentId);
+        const labels = equitySeries.map((snap, i) => {
+          const stamp = new Date(snap.timestamp);
+          return Number.isNaN(stamp.getTime()) ? `Step ${i + 1}` : stamp.toLocaleTimeString();
+        });
         return {
           labels,
           datasets: agentIds.map((id, i) => ({
             label: id,
-            data: results.equityEvolution.map(snap =>
+            data: equitySeries.map(snap =>
               snap.agentEquities.find(ae => ae.agentId === id)?.equity ?? 0
             ),
             borderColor: AGENT_CHART_COLORS[i % AGENT_CHART_COLORS.length],
@@ -361,6 +476,70 @@ export function MarlCompetitionViewer() {
         <p style={{ margin: 0, color: '#6b7280', fontSize: '0.875rem' }}>
           Multi-Agent Reinforcement Learning competitive trading tournament
         </p>
+      </div>
+
+      <div style={{ ...card, padding: '1rem' }}>
+        <button
+          type="button"
+          onClick={() => void loadInfoPanel()}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#111827' }}>MARL Info Panel</div>
+            <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>Load endpoint documentation, tournament modes, and learning metadata.</div>
+          </div>
+          <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>{infoOpen ? '▲ hide' : '▼ show'}</span>
+        </button>
+
+        {infoOpen && (
+          <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.9rem' }}>
+            {infoLoading && <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>Loading MARL info…</div>}
+            {infoError && <div style={{ fontSize: '0.82rem', color: '#dc2626' }}>{infoError}</div>}
+            {infoData && (
+              <>
+                <div style={{ padding: '0.75rem', backgroundColor: '#f8fafc', borderRadius: '0.5rem', fontSize: '0.82rem', color: '#475569' }}>
+                  {infoData.description}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                    <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.85rem', fontWeight: '700', color: '#374151' }}>Tournament Modes</h4>
+                    <div style={{ display: 'grid', gap: '0.6rem' }}>
+                      {Object.entries(infoData.tournamentModes).map(([modeName, description]) => (
+                        <div key={modeName}>
+                          <div style={{ fontSize: '0.76rem', fontWeight: '700', color: '#111827' }}>{modeName}</div>
+                          <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>{description}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                    <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.85rem', fontWeight: '700', color: '#374151' }}>Learning Algorithm</h4>
+                    <div style={{ display: 'grid', gap: '0.4rem', fontSize: '0.78rem', color: '#6b7280' }}>
+                      <div><strong style={{ color: '#111827' }}>Type:</strong> {infoData.learningAlgorithm.type}</div>
+                      <div><strong style={{ color: '#111827' }}>State Space:</strong> {infoData.learningAlgorithm.stateSpace}</div>
+                      <div><strong style={{ color: '#111827' }}>Policy:</strong> {infoData.learningAlgorithm.policyNetwork}</div>
+                      <div><strong style={{ color: '#111827' }}>Actions:</strong> {infoData.learningAlgorithm.actionSpace.join(', ')}</div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                  <h4 style={{ margin: '0 0 0.6rem', fontSize: '0.85rem', fontWeight: '700', color: '#374151' }}>API Endpoints</h4>
+                  <div style={{ display: 'grid', gap: '0.35rem' }}>
+                    {Object.entries(infoData.endpoints).map(([endpoint, description]) => (
+                      <div key={endpoint} style={{ display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 2fr', gap: '0.75rem', fontSize: '0.78rem' }}>
+                        <code style={{ color: '#1d4ed8' }}>{endpoint}</code>
+                        <span style={{ color: '#6b7280' }}>{description}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Error banner */}
@@ -877,22 +1056,59 @@ export function MarlCompetitionViewer() {
           )}
 
           {/* Equity evolution chart */}
-          {chartData && (
+          {(chartData || results || equityReloadMessage || equityReloadError) && (
             <div style={card}>
-              <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.875rem', fontWeight: '700', color: '#374151' }}>
-                Equity Evolution
-              </h4>
-              <Line
-                data={chartData}
-                options={{
-                  responsive: true,
-                  plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
-                  scales: {
-                    x: { display: true, grid: { display: false } },
-                    y: { display: true, ticks: { callback: v => `$${Number(v).toLocaleString()}` } },
-                  },
-                }}
-              />
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', alignItems: 'center', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: '700', color: '#374151' }}>
+                  Equity Evolution
+                </h4>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+                  <input
+                    value={equityReloadId}
+                    onChange={e => {
+                      setEquityReloadId(e.target.value);
+                      setEquityReloadError(null);
+                      setEquityReloadMessage(null);
+                    }}
+                    placeholder="Competition ID"
+                    aria-label="Competition ID"
+                    style={{ ...input, width: '15rem' }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void reloadEquityCurves()}
+                    disabled={equityReloadLoading}
+                    style={{ ...btn('#2563eb'), opacity: equityReloadLoading ? 0.6 : 1 }}
+                  >
+                    {equityReloadLoading ? 'Loading…' : 'Reload Curves'}
+                  </button>
+                </div>
+              </div>
+
+              {equityReloadMessage && (
+                <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: '#6b7280' }}>{equityReloadMessage}</div>
+              )}
+              {equityReloadError && (
+                <div style={{ marginBottom: '0.75rem', fontSize: '0.8rem', color: '#dc2626' }}>{equityReloadError}</div>
+              )}
+
+              {chartData ? (
+                <Line
+                  data={chartData}
+                  options={{
+                    responsive: true,
+                    plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } },
+                    scales: {
+                      x: { display: true, grid: { display: false } },
+                      y: { display: true, ticks: { callback: v => `$${Number(v).toLocaleString()}` } },
+                    },
+                  }}
+                />
+              ) : (
+                <div style={{ padding: '1rem', borderRadius: '0.5rem', backgroundColor: '#f9fafb', color: '#6b7280', fontSize: '0.82rem' }}>
+                  No equity data available yet. Reload a completed competition id to populate the chart.
+                </div>
+              )}
             </div>
           )}
 

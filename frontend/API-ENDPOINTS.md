@@ -5,10 +5,10 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 **Generated**: From backend source code across `index.ts`, `routes/marl-competition.ts`, `routes/evolutionary.ts`, `routes/agent-stats.ts`, `routes/social-media.ts`, `routes/marl-real-trading.ts`, and `routes/trading.ts`.
 
 **Total Endpoints**: 64  
-**Phase 1 Coverage**: 6 tasks covering 12 endpoints  
+**Phase 1 Coverage**: 6 tasks covering 14 endpoints  
 **Phase 2 Coverage**: 5 tasks covering 11 endpoints  
 **Phase 3 Coverage**: 3 tasks covering 7 endpoints  
-**Already Covered**: 31 endpoints with existing UI  
+**Already Covered**: 39 endpoints with existing UI  
 **Gaps Remaining**: 3 endpoints (intentionally internal/utility)
 
 ---
@@ -46,9 +46,9 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 
 | Status | Method | Path | Description | Task Coverage | Auth | Rate Limit |
 |--------|--------|------|-------------|---|------|-----------|
-| 🎯 Phase 1 | POST | `/api/sentiment/analyze` | Multi-mode sentiment analysis (BASIC/ADVANCED/TRADING_SIGNALS/SMART) | **P1-T1**: Sentiment Lab | None | None |
-| 🎯 Phase 1 | GET | `/api/sentiment/:symbol` | Get cached sentiment for a coin | **P1-T1**: Sentiment Lab | None | None |
-| 🎯 Phase 1 | POST | `/api/refresh-sentiment` | Trigger sentiment refresh (admin only) | **P1-T2**: Refresh Sentiment | x-api-key | None |
+| ✅ Covered | POST | `/api/sentiment/analyze` | Multi-mode sentiment analysis (BASIC/ADVANCED/TRADING_SIGNALS/SMART) | Dashboard Sentiment Lab | None | None |
+| ✅ Covered | GET | `/api/sentiment/:symbol` | Get cached sentiment for a coin | Dashboard Sentiment Lab | None | None |
+| ✅ Covered | POST | `/api/refresh-sentiment` | Trigger sentiment refresh (admin only) | Dashboard Header Refresh | x-api-key | None |
 
 **Request/Response Examples**:
 - **POST /api/sentiment/analyze**: Body `{symbols: [], mode: "ADVANCED", headlines?: true, marketData?: true, technicalData?: true}` → 200: `{mode, results: {symbol: AnalysisResult}}`
@@ -60,11 +60,11 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 
 | Status | Method | Path | Description | Task Coverage | Rate Limit |
 |--------|--------|------|-------------|---|-----------|
-| 🎯 Phase 1 | GET | `/api/health` | Service health check (coingecko, newsapi, claude_api, sqlite) | **P1-T3**: Health Indicator | None |
-| 🎯 Phase 1 | GET | `/api/info/modes` | Documentation: analysis modes, agent types, risk profiles | **P1-T1**: Sentiment Lab (info drawer) | None |
-| 🎯 Phase 1 | GET | `/api/marl/info` | Full MARL system documentation & parameters | **P1-T5**: MARL Info Enhancement | 120/min |
+| ✅ Covered | GET | `/api/health` | Service health check (coingecko, newsapi, claude_api, sqlite) | Global Health Indicator | None |
+| ✅ Covered | GET | `/api/info/modes` | Documentation: analysis modes, agent types, risk profiles | Dashboard Sentiment Lab | None |
+| ✅ Covered | GET | `/api/marl/info` | Full MARL system documentation & parameters | MARL Info Drawer | 120/min |
 
-**Health Response**: 200/503: `{status: "ok"|"degraded"|"down", services: {coingecko, newsapi, claude_api, sqlite}, uptime_seconds}`
+**Health Response**: 200/503: `{status: "healthy"|"degraded", services: {coingecko, newsapi, claude_api, sqlite}, uptime_seconds}`. The frontend maps fetch failures to a local `down` UI state.
 
 ---
 
@@ -78,7 +78,7 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 | ✅ Covered | GET | `/api/marl/competition/:competitionId/trade-log` | Per-agent trade summary | Existing MARL UI | None | 120/min |
 | ✅ Covered | GET | `/api/marl/competitions` | List all competitions | Existing MARL UI | None | 120/min |
 | ✅ Covered | POST | `/api/marl/agents/compare` | Head-to-head agent comparison (N rounds) | Existing MARL UI | None | 10/min |
-| 🎯 Phase 1 | GET | `/api/marl/competition/:competitionId/equity-curves` | Time-series equity for all agents | **P1-T5**: MARL Equity Curves | None | 120/min |
+| ✅ Covered | GET | `/api/marl/competition/:competitionId/equity-curves` | Time-series equity for all agents | MARL Equity Reload | None | 120/min |
 | 🎯 Phase 1 | GET | `/api/marl/competition/:competitionId/stream` | Server-Sent Events stream for real-time progress | **P3-T2**: SSE Streaming Upgrade | None | None |
 | 🎯 Phase 1 | GET | `/api/marl/coin-universe` | Preview AUTO mode coin selections | Existing MARL UI | None | 120/min |
 | 🎯 Phase 2 | POST | `/api/marl/agents/:agentId/pretrain` | Pre-train on synthetic market data | Existing Agent Mgmt | None | 5/min |
@@ -134,10 +134,10 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 |--------|--------|------|-------------|---|-----------|
 | ✅ Covered | GET | `/api/social-media/trending-topics` | Top trending topics across all sources | Social Dashboard | None |
 | ✅ Covered | GET | `/api/social-media/items` | Paginated scored social items | Social Feed | None |
-| 🎯 Phase 1 | GET | `/api/social-media/item/:id` | Single scored item with breakdown | **P1-T6**: Social Item Detail | None |
+| ✅ Covered | GET | `/api/social-media/item/:id` | Single scored item with breakdown | Social Item Detail Panel | None |
 | ✅ Covered | GET | `/api/social-media/stats` | Source health metrics | Social Dashboard | None |
 | ✅ Covered | GET | `/api/trending-score/:symbol` | Multi-source trend report | Social Dashboard | None |
-| 🎯 Phase 1 | POST | `/api/social-media/refresh` | Trigger immediate social scrape | **P1-T6**: Social Refresh | None |
+| ✅ Covered | POST | `/api/social-media/refresh` | Trigger immediate social scrape | Social Dashboard Refresh | None |
 | 🎯 Phase 3 | GET | `/api/scrape/social` | Scrape one symbol from social platforms | **P3-T3**: Advanced Social Tools | None |
 | 🎯 Phase 3 | POST | `/api/scrape/batch` | Batch scrape up to 20 symbols | **P3-T3**: Advanced Social Tools | None |
 | 🎯 Phase 3 | GET | `/api/trending` | Trending topics from in-memory engine | **P3-T3**: Advanced Social Tools | None |
@@ -196,9 +196,9 @@ SELL orders bypass kill switch. Emergency stop (broker endpoint) cancels all ord
 
 | Status | Method | Path | Description | Task Coverage | Rate Limit |
 |--------|--------|------|-------------|---|-----------|
-| 🎯 Phase 1 | POST | `/api/agents/configure` | Register trading agents for backtesting | **P1-T4**: Backtesting Tab | None |
-| 🎯 Phase 1 | POST | `/api/backtest/run` | Run backtest on historical data | **P1-T4**: Backtesting Tab | None |
-| 🎯 Phase 1 | GET | `/api/backtest/results/:testId` | Retrieve full equity curves & trades | **P1-T4**: Backtesting Tab | None |
+| ✅ Covered | POST | `/api/agents/configure` | Register trading agents for backtesting | Backtesting Tab | None |
+| ✅ Covered | POST | `/api/backtest/run` | Run backtest on historical data | Backtesting Tab | None |
+| ✅ Covered | GET | `/api/backtest/results/:testId` | Retrieve full equity curves & trades | Backtesting Tab | None |
 
 **Backtest Run Response**: 200: `{testId, status: "COMPLETED", results: [{agentId, agentType, riskProfile, totalReturnPct, winRate, profitFactor, maxDrawdown, sharpeRatio, totalTrades, trades[]}], topPerformer, summary}`
 
