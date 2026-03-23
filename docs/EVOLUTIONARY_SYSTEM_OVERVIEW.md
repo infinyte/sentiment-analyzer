@@ -160,7 +160,8 @@ High-value current coverage includes:
 
 ## Operational Notes
 
-- Tournament execution is background and fire-and-forget from the API caller’s perspective.- When `REDIS_URL` is set, SIMULATED tournament jobs are offloaded to the `tournament-worker-process`. The API process tracks job state via `QueueEvents`; poll `GET /api/marl/competition/:id/status` as normal.
+- Tournament execution is background and fire-and-forget from the API caller’s perspective.
+- When `REDIS_URL` is set, SIMULATED tournament jobs are offloaded to the `tournament-worker-process`. The API process tracks job state via `QueueEvents`; poll `GET /api/marl/competition/:id/status` as normal.
 - When `REDIS_URL` is not set, all tournament work runs inside Worker Threads in the API process. Behavior is identical from the caller's perspective.
 - The summary endpoint is intended for dashboards, not detailed forensic analysis.
 - The system currently uses persisted tournament snapshots rather than live-streaming generation events to the client.

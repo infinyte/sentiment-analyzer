@@ -113,9 +113,17 @@ export class SQLiteSocialRepository implements ISocialRepository {
     // Keyset pagination: cursor is (sortKeyValue, id) tuple encoded as JSON
     // For DESC ordering: (sortValue < ?) OR (sortValue = ? AND id < ?)
     if (query.cursor) {
-      const cursor = JSON.parse(query.cursor) as { sortValue: unknown; id: string };
-      conditions.push(`(${orderBy} < ?) OR (${orderBy} = ? AND id < ?)`);
-      params.push(cursor.sortValue, cursor.sortValue, cursor.id);
+      // Decode compound cursor: { v: sortColumnValue, id: lastId }
+      // Use (sortCol, id) composite comparison so the cursor matches the ORDER BY.
+      try {
+        const { v, id: cursorId } = JSON.parse(Buffer.from(query.cursor, 'base64').toString('utf8')) as { v: unknown; id: string };
+        const orderBy = query.sortBy === 'recency' ? 'fetched_at' : query.sortBy === 'engagement' ? 'score_engagement' : 'score_composite';
+        // For DESC ordering: next page has (col < v) OR (col = v AND id < cursorId)
+        conditions.push(`(${orderBy} < ? OR (${orderBy} = ? AND id < ?))`);
+        params.push(v, v, cursorId);
+      } catch {
+        // Ignore malformed cursors — return from the start
+      }
     }
 
     const where   = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -131,7 +139,7 @@ export class SQLiteSocialRepository implements ISocialRepository {
 
     return {
       items,
-      nextCursor: hasMore ? JSON.stringify({ sortValue: items[items.length - 1][orderBy], id: items[items.length - 1].id }) : undefined,
+      nextCursor: hasMore ? items[items.length - 1].id : undefined,
     };
   }
 
