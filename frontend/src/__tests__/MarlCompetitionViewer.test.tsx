@@ -40,12 +40,78 @@ const defaultHook = {
 
 const mockUseMarl = vi.mocked(useMarlCompetition);
 let mockFetch: ReturnType<typeof vi.fn>;
+let emergencyStopCalled = false;
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseMarl.mockReturnValue(defaultHook);
-  mockFetch = vi.fn((input: string | URL | Request) => {
+  emergencyStopCalled = false;
+  mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
+
+    if (url.includes('/api/marl/broker/credentials')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          credentials: [
+            {
+              id: 'cred-paper-1',
+              label: 'Paper Credential',
+              provider: 'ALPACA',
+              mode: 'PAPER',
+              createdAt: '2026-03-23T10:00:00.000Z',
+              connected: true,
+            },
+          ],
+          count: 1,
+        }),
+      });
+    }
+
+    if (url.includes('/api/marl/broker/connected')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          connected: [{ id: 'cred-paper-1', label: 'Paper Credential', provider: 'ALPACA', mode: 'PAPER' }],
+          count: 1,
+        }),
+      });
+    }
+
+    if (url.includes('/api/marl/broker/orders/')) {
+      return Promise.resolve({
+        ok: true,
+        json: async () => ({
+          competitionId: 'comp-123',
+          count: 1,
+          orders: [
+            {
+              clientOrderId: 'client-1',
+              brokerOrderId: 'broker-1',
+              agentId: 'alpha',
+              symbol: 'BTC',
+              side: 'BUY',
+              quantity: 0.25,
+              limitPrice: 61000,
+              status: emergencyStopCalled ? 'CANCELED' : 'OPEN',
+              filledQuantity: 0,
+              avgFillPrice: 0,
+              submittedAt: '2026-03-23T10:00:00.000Z',
+              updatedAt: '2026-03-23T10:05:00.000Z',
+            },
+          ],
+        }),
+      });
+    }
+
+    if (url.includes('/api/marl/broker/emergency-stop') && init?.method === 'POST') {
+      emergencyStopCalled = true;
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ emergencyStop: true, competitionId: 'comp-123', cancelled: 2 }),
+      });
+    }
 
     if (url.includes('/api/marl/info')) {
       return Promise.resolve({
@@ -374,4 +440,48 @@ describe('MarlCompetitionViewer — results', () => {
 
     expect(await screen.findByText('Equity curves are available after the competition completes.')).toBeInTheDocument();
   });
+
+  it('loads broker order audit with optional agent filter and executes emergency stop with confirmation', async () => {
+    render(<MarlCompetitionViewer />);
+
+    fireEvent.click(screen.getByRole('button', { name: /broker admin/i }));
+
+    fireEvent.change(screen.getByPlaceholderText('API_SECRET_KEY value'), {
+      target: { value: 'test-secret-key' },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load Broker Admin Data' }));
+
+    await screen.findByText('Order Audit');
+
+    fireEvent.change(screen.getByLabelText('Broker order audit competition id'), {
+      target: { value: 'comp-123' },
+    });
+    fireEvent.change(screen.getByLabelText('Broker order audit agent filter'), {
+      target: { value: 'alpha' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Load Orders' }));
+
+    await screen.findByText('client-1');
+
+    fireEvent.change(screen.getByLabelText('Emergency stop competition id'), {
+      target: { value: 'comp-123' },
+    });
+    fireEvent.change(screen.getByLabelText('Emergency stop credential'), {
+      target: { value: 'cred-paper-1' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Emergency Stop' }));
+
+    await screen.findByRole('dialog', { name: 'Emergency stop confirmation' });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Emergency Stop' }));
+
+    await screen.findByText('Emergency stop executed for comp-123. Cancelled 2 open order(s).');
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/marl/broker/credentials', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/marl/broker/connected', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/marl/broker/orders/comp-123?agentId=alpha', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/marl/broker/emergency-stop', expect.objectContaining({ method: 'POST' }));
+    });
+  }, 15000);
 });

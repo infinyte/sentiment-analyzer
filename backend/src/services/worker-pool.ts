@@ -29,10 +29,12 @@ import logger                                        from '../logger.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// In development tsx runs the TypeScript source directly. In production the
-// build output sits at the same relative path under dist/.
-const IS_DEV   = process.env['NODE_ENV'] !== 'production';
-const EXT      = IS_DEV ? 'ts' : 'js';
+// Detect if we're running from compiled dist/ output or from source.
+// When running from dist/, always use .js files regardless of NODE_ENV.
+// When running from src/, use .ts with tsx loader in development, .js otherwise.
+const IS_COMPILED = __dirname.includes('dist');
+const IS_DEV      = process.env['NODE_ENV'] !== 'production' && !IS_COMPILED;
+const EXT         = IS_DEV ? 'ts' : 'js';
 // tsx v4: --import tsx (works for both CJS and ESM graphs)
 const EXEC_ARGV: string[] = IS_DEV ? ['--import', 'tsx'] : [];
 

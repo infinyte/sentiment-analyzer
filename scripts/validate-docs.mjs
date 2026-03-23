@@ -6,9 +6,9 @@ const repoRoot = process.cwd();
 const authoritativeDocs = [
   'README.md',
   'CLAUDE.md',
-  'docs/references/DEPLOYMENT_GUIDE.md',
+  'docs/DEPLOYMENT_GUIDE.md',
   'docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md',
-  'docs/references/TESTING_STRATEGY.md',
+  'docs/TESTING_STRATEGY.md',
   'postman/README.md',
   'docs/MARL/MARL_INTEGRATION_GUIDE.md',
 ];
@@ -99,11 +99,11 @@ function validateLiveDocs() {
     'Sets `trending_score` from weighted frequency, recency, and source diversity rather than raw headline count'
   );
 
-  assertIncludes('docs/references/TESTING_STRATEGY.md', 'Frontend Vitest + React Testing Library are configured');
-  assertIncludes('docs/references/TESTING_STRATEGY.md', 'frontend/src/__tests__/App.test.tsx');
+  assertIncludes('docs/TESTING_STRATEGY.md', 'Frontend Vitest + React Testing Library are configured');
+  assertIncludes('docs/TESTING_STRATEGY.md', 'frontend/src/__tests__/App.test.tsx');
 
-  assertNotIncludes('docs/references/DEPLOYMENT_GUIDE.md', '.github/workflows/` is empty');
-  assertNotIncludes('docs/references/DEPLOYMENT_GUIDE.md', 'app currently uses in-memory cache only');
+  assertNotIncludes('docs/DEPLOYMENT_GUIDE.md', '.github/workflows/` is empty');
+  assertNotIncludes('docs/DEPLOYMENT_GUIDE.md', 'app currently uses in-memory cache only');
 
   assertIncludes('docs/MARL/MARL_INTEGRATION_GUIDE.md', 'frontend/src/components/MarlCompetitionViewer.tsx');
   assertIncludes('docs/MARL/MARL_INTEGRATION_GUIDE.md', 'frontend/src/App.tsx');

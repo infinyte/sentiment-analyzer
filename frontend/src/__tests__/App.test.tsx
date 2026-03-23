@@ -20,7 +20,7 @@ describe('App detail modal', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    mockFetch = vi.fn((input: string | URL | Request) => {
+    mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
       if (url.includes('/api/health')) {
@@ -138,6 +138,77 @@ describe('App detail modal', () => {
             },
             startedAt: '2024-01-01T00:00:00.000Z',
             completedAt: '2024-06-30T00:00:00.000Z',
+          }),
+        });
+      }
+
+      if (url.includes('/api/trading/exchange-status')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ connected: true, name: 'Paper Exchange', mode: 'PAPER', provider: 'paper' }),
+        });
+      }
+
+      if (url.includes('/api/trading/price/')) {
+        const symbol = url.split('/api/trading/price/')[1] ?? 'BTC';
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ symbol: decodeURIComponent(symbol), price: 67890.12 }),
+        });
+      }
+
+      if (url.includes('/api/trading/balances')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([
+            { symbol: 'USDT', available: 1200.5, held: 0, total: 1200.5 },
+            { symbol: 'BTC', available: 0.025, held: 0, total: 0.025 },
+          ]),
+        });
+      }
+
+      if (url.includes('/api/trading/stats')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            initialCapital: 10000,
+            currentCapital: 10325.75,
+            pnl: 325.75,
+            pnlPercent: 3.2575,
+            totalTrades: 4,
+            successfulTrades: 3,
+            maxLoss: 500,
+            maxPosition: 1032.575,
+          }),
+        });
+      }
+
+      if (url.includes('/api/trading/order') && init?.method === 'POST') {
+        const body = typeof init.body === 'string' ? JSON.parse(init.body) as { size?: number; symbol?: string; side?: 'BUY' | 'SELL'; price?: number } : {};
+        const size = Number(body.size ?? 0);
+
+        if (!Number.isFinite(size) || size > 1) {
+          return Promise.resolve({
+            ok: false,
+            status: 400,
+            json: async () => ({ success: false, reason: 'POSITION_TOO_LARGE', error: 'Position too large: $5000.00 (max $1000.00)' }),
+          });
+        }
+
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            success: true,
+            reason: 'EXECUTED',
+            order: {
+              id: 'ord_123',
+              symbol: body.symbol ?? 'BTC',
+              type: body.side ?? 'BUY',
+              quantity: size,
+              price: Number(body.price ?? 67890.12),
+              status: 'FILLED',
+            },
           }),
         });
       }
@@ -414,6 +485,51 @@ describe('App detail modal', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents/configure', expect.any(Object));
       expect(mockFetch).toHaveBeenCalledWith('/api/backtest/run', expect.any(Object));
       expect(mockFetch).toHaveBeenCalledWith('/api/backtest/results/backtest_123');
+    });
+  }, 15000);
+
+  it('supports trading status, quote lookup, balances/stats widgets, order validation, and guardrail errors', async () => {
+    render(<App />);
+
+    await screen.findByText('Bitcoin');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Trading' }));
+
+    await screen.findByText('Trading Workspace');
+    await screen.findByText('Paper Exchange');
+    await screen.findByText('Connected');
+    expect(screen.getByText('USDT')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Trading quote symbol'), { target: { value: 'eth' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Get Quote' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/trading/price/ETH');
+    });
+    expect(screen.getByText('ETH')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Order symbol'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+    expect(await screen.findByText('Order symbol is required.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Order symbol'), { target: { value: 'BTC' } });
+    fireEvent.change(screen.getByLabelText('Order side'), { target: { value: 'BUY' } });
+    fireEvent.change(screen.getByLabelText('Order type'), { target: { value: 'LIMIT' } });
+    fireEvent.change(screen.getByLabelText('Order size'), { target: { value: '0.1' } });
+    fireEvent.change(screen.getByLabelText('Order price'), { target: { value: '65000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+
+    await screen.findByText(/Order ord_123 placed:/i);
+
+    fireEvent.change(screen.getByLabelText('Order size'), { target: { value: '5' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Place Order' }));
+
+    await screen.findByText(/Guardrail: Position too large/i);
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith('/api/trading/order', expect.any(Object));
+      expect(mockFetch).toHaveBeenCalledWith('/api/trading/stats');
+      expect(mockFetch).toHaveBeenCalledWith('/api/trading/balances');
     });
   }, 15000);
 });

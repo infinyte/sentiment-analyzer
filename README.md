@@ -457,18 +457,22 @@ sentiment-analyzer/
 │   ├── vite.config.ts        # Proxies /api to localhost:3000
 │   └── package.json
 ├── docs/
+│   ├── MARL/                 # MARL architecture, game theory, integration docs
 │   ├── phase1/               # Phase 1 architecture & integration docs
-│   ├── phase2/               # Phase 2 MARL competition docs
-│   └── references/           # Reference implementations and storage guides
+│   ├── phase2/               # Phase 2 sentiment enhancement planning docs
+│   ├── DEPLOYMENT_GUIDE.md   # Deployment reference
+│   ├── TESTING_STRATEGY.md   # Testing strategy and backlog
+│   ├── API_ENDPOINTS.md      # Complete API endpoint inventory
+│   └── PROJECT_SUMMARY.md    # Current project status summary
 ├── postman/                  # API test collection
 ├── docker-compose.yml        # Backend + Redis + tournament-worker + scraper-worker services
-├── DEPLOYMENT_GUIDE.md       # Azure Free Tier deployment steps
+├── CONTRIBUTING.md           # Contribution guidelines
 └── CLAUDE.md                 # Claude Code guidance
 ```
 
 ## Deployment
 
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for Azure App Service setup. Current deployments use SQLite for persistence and the repo already includes GitHub Actions CI in `.github/workflows/ci.yml`; Azure Table Storage remains a future option rather than the active storage layer.
+See [docs/DEPLOYMENT_GUIDE.md](./docs/DEPLOYMENT_GUIDE.md) for Azure App Service setup. Current deployments use SQLite for persistence and the repo already includes GitHub Actions CI in `.github/workflows/ci.yml`; Azure Table Storage remains a future option rather than the active storage layer.
 
 ## Cost
 
@@ -524,10 +528,10 @@ Still intentionally lightweight:
 
 ### Documentation
 
-See [`docs/phase2/`](./docs/phase2/) for full architecture, game theory analysis, and integration details:
-- [MARL Executive Summary](./docs/phase2/MARL_EXECUTIVE_SUMMARY.md)
-- [Detailed Architecture](./docs/phase2/MARL_ARCHITECTURE_DETAILED.md)
-- [Integration Guide](./docs/phase2/MARL_INTEGRATION_GUIDE.md)
+See [`docs/MARL/`](./docs/MARL/) for full architecture, game theory analysis, and integration details:
+- [MARL Executive Summary](./docs/MARL/MARL_EXECUTIVE_SUMMARY.md)
+- [Detailed Architecture](./docs/MARL/MARL_ARCHITECTURE_DETAILED.md)
+- [Integration Guide](./docs/MARL/MARL_INTEGRATION_GUIDE.md)
 - [Evolutionary System Overview](./docs/EVOLUTIONARY_SYSTEM_OVERVIEW.md)
 
 ---

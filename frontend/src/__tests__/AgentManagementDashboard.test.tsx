@@ -24,10 +24,19 @@ describe('Agent management dashboard', () => {
   let mockFetch: ReturnType<typeof vi.fn>;
   let breedTriggered: boolean;
   let retireTriggered: boolean;
+  let agentOneLearningProfiles: string[];
+  let algorithmByAgent: Record<string, 'Q_TABLE' | 'POLICY_GRADIENT'>;
 
   beforeEach(() => {
     breedTriggered = false;
     retireTriggered = false;
+    agentOneLearningProfiles = ['AGGRESSIVE', 'SCALPING'];
+    algorithmByAgent = {
+      'agent-1': 'Q_TABLE',
+      'agent-2': 'POLICY_GRADIENT',
+      'parent-a': 'Q_TABLE',
+      'agent-child-1': 'Q_TABLE',
+    };
     mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
       const url = String(input);
 
@@ -661,6 +670,106 @@ describe('Agent management dashboard', () => {
         });
       }
 
+      if (url.endsWith('/api/marl/agents/learning')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            count: agentOneLearningProfiles.length + 1,
+            agents: [
+              ...agentOneLearningProfiles.map(riskProfile => ({
+                cacheKey: `agent-1::${riskProfile}`,
+                agentId: 'agent-1',
+                riskProfile,
+              })),
+              {
+                cacheKey: 'agent-2::CONSERVATIVE',
+                agentId: 'agent-2',
+                riskProfile: 'CONSERVATIVE',
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.includes('/api/marl/agents/agent-1/learning') && init?.method === 'DELETE') {
+        const parsedUrl = new URL(url);
+        const riskProfile = parsedUrl.searchParams.get('riskProfile');
+
+        if ((init.headers as Record<string, string> | undefined)?.['x-api-key'] !== 'secret-key') {
+          return Promise.resolve({
+            ok: false,
+            status: 401,
+            json: async () => ({ error: 'Unauthorized — x-api-key header required' }),
+          });
+        }
+
+        if (riskProfile) {
+          agentOneLearningProfiles = agentOneLearningProfiles.filter(profile => profile !== riskProfile);
+        } else {
+          agentOneLearningProfiles = [];
+        }
+
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            agentId: 'agent-1',
+            riskProfile: riskProfile ?? 'all profiles',
+            cleared: riskProfile ? 1 : 2,
+            message: riskProfile
+              ? `Cleared learning state for ${riskProfile}.`
+              : 'Cleared learning state for all profiles.',
+          }),
+        });
+      }
+
+      if (url.includes('/api/marl/agents/') && url.endsWith('/algorithm') && init?.method === 'POST') {
+        const agentId = url.split('/api/marl/agents/')[1]!.replace('/algorithm', '');
+        const parsedBody = typeof init.body === 'string'
+          ? JSON.parse(init.body) as { algorithm?: string }
+          : {};
+        const algorithm = String(parsedBody.algorithm ?? '').toUpperCase();
+
+        if (algorithm === 'DQN') {
+          return Promise.resolve({
+            ok: false,
+            status: 501,
+            json: async () => ({
+              error: 'DQN via TensorFlow is not bundled. Use Q_TABLE or POLICY_GRADIENT.',
+              supported: ['Q_TABLE', 'POLICY_GRADIENT'],
+            }),
+          });
+        }
+
+        if (algorithm !== 'Q_TABLE' && algorithm !== 'POLICY_GRADIENT') {
+          return Promise.resolve({
+            ok: false,
+            status: 400,
+            json: async () => ({
+              error: 'algorithm must be one of: Q_TABLE, POLICY_GRADIENT',
+              supported: ['Q_TABLE', 'POLICY_GRADIENT'],
+            }),
+          });
+        }
+
+        algorithmByAgent[agentId] = algorithm;
+
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            agentId,
+            algorithm,
+            note: 'Agent uses a combined Q-table + policy-gradient network by default. The algorithm selection is informational — all agents in this build use the hybrid.',
+            policyNetwork: {
+              architecture: 'Feedforward 50→128(ReLU)→64(ReLU)→5(Softmax)',
+              updateRule: 'Advantage-weighted gradient-free nudge',
+              replayBuffer: 'Up to 1 000 experiences',
+            },
+          }),
+        });
+      }
+
       return Promise.reject(new Error(`Unhandled fetch request: ${url}`));
     });
 
@@ -779,5 +888,108 @@ describe('Agent management dashboard', () => {
     await waitFor(() => {
       expect(mockFetch).toHaveBeenCalledWith('/api/agents/agent-child-1/retire', expect.objectContaining({ method: 'POST' }));
     });
+  }, 60000);
+
+  it('lists learning states and resets one profile or all profiles for an agent', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+
+    await screen.findByText('Learning States');
+    await screen.findByText('SCALPING');
+    expect(screen.getAllByText('Risk profile learning state')).toHaveLength(2);
+
+    fireEvent.change(screen.getByLabelText('Admin API key for learning state reset'), {
+      target: { value: 'secret-key' },
+    });
+
+    fireEvent.click(screen.getAllByRole('button', { name: 'Reset' })[0]!);
+
+    await screen.findByRole('dialog', { name: 'Reset learning state confirmation' });
+    await screen.findByText(/AGGRESSIVE profile/i);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Reset' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/marl/agents/agent-1/learning?riskProfile=AGGRESSIVE'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({ 'x-api-key': 'secret-key' }),
+        }),
+      );
+    });
+
+    await screen.findByText('Cleared learning state for AGGRESSIVE.');
+    await waitFor(() => {
+      expect(screen.getAllByText('Risk profile learning state')).toHaveLength(1);
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Reset All Profiles' }));
+    await screen.findByRole('dialog', { name: 'Reset learning state confirmation' });
+    await screen.findByText(/ALL risk profiles/i);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm Reset' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/marl/agents/agent-1/learning'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: expect.objectContaining({ 'x-api-key': 'secret-key' }),
+        }),
+      );
+    });
+
+    await screen.findByText('Cleared learning state for all profiles.');
+    await screen.findByText('No learning state stored for this agent.');
+  }, 60000);
+
+  it('shows current algorithm state, updates supported values, and surfaces unsupported API errors', async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+
+    await screen.findByText('Algorithm');
+    await screen.findByText('Current algorithm');
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/marl/agents/agent-1/algorithm',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ algorithm: 'Q_TABLE' }),
+        }),
+      );
+    });
+
+    await screen.findByText('Feedforward 50→128(ReLU)→64(ReLU)→5(Softmax)');
+
+    fireEvent.change(screen.getByLabelText('Select algorithm'), {
+      target: { value: 'POLICY_GRADIENT' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Algorithm' }));
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        '/api/marl/agents/agent-1/algorithm',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ algorithm: 'POLICY_GRADIENT' }),
+        }),
+      );
+    });
+
+    await screen.findByText('Algorithm updated to POLICY_GRADIENT.');
+    await waitFor(() => {
+      expect(screen.getAllByText('POLICY_GRADIENT').length).toBeGreaterThan(1);
+    });
+
+    fireEvent.change(screen.getByLabelText('Select algorithm'), {
+      target: { value: 'DQN' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Apply Algorithm' }));
+
+    await screen.findByRole('alert');
+    expect(screen.getByRole('alert')).toHaveTextContent('DQN via TensorFlow is not bundled. Use Q_TABLE or POLICY_GRADIENT.');
+    expect(screen.getAllByText('POLICY_GRADIENT').length).toBeGreaterThan(0);
   }, 60000);
 });

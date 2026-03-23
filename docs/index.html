@@ -3,454 +3,264 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Sentiment Analyzer — Showcase</title>
-  <meta name="description" content="Sentiment Analyzer — real-time crypto sentiment, MARL tournaments, and social media intelligence." />
-
-  <!-- Inline CSS (no external styles.css needed) -->
+  <title>Sentiment Analyzer Docs Index</title>
+  <meta name="description" content="Central documentation index for the Sentiment Analyzer repository." />
   <style>
-    :root{
-      color-scheme: light dark;
-      --bg: #0b1020;
-      --panel: rgba(255,255,255,.06);
-      --panel-2: rgba(255,255,255,.09);
-      --text: rgba(255,255,255,.92);
-      --muted: rgba(255,255,255,.72);
-      --faint: rgba(255,255,255,.55);
-      --border: rgba(255,255,255,.14);
-      --shadow: 0 10px 40px rgba(0,0,0,.35);
-      --brand: #7c3aed; /* violet */
-      --brand2: #22c55e; /* green */
-      --ring: rgba(124,58,237,.35);
-      --max: 980px;
-      --radius: 18px;
-      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-      --sans: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-    }
-
-    /* Light-mode overrides */
-    @media (prefers-color-scheme: light){
-      :root{
-        --bg: #f7f7fb;
-        --panel: rgba(10,16,32,.05);
-        --panel-2: rgba(10,16,32,.07);
-        --text: rgba(10,16,32,.92);
-        --muted: rgba(10,16,32,.72);
-        --faint: rgba(10,16,32,.60);
-        --border: rgba(10,16,32,.14);
-        --shadow: 0 10px 35px rgba(10,16,32,.12);
-      }
+    :root {
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --text: #122033;
+      --muted: #4a5b70;
+      --border: #d6deea;
+      --accent: #0f766e;
+      --accent-soft: #e6f5f3;
+      --shadow: 0 14px 36px rgba(18, 32, 51, 0.08);
+      --radius: 14px;
+      --max: 1080px;
     }
 
     * { box-sizing: border-box; }
-    html, body { height: 100%; }
-    body{
-      margin:0;
-      font-family: var(--sans);
-      line-height: 1.55;
-      color: var(--text);
-      background:
-        radial-gradient(1200px 500px at 15% 0%, rgba(124,58,237,.25), transparent 55%),
-        radial-gradient(900px 500px at 85% 10%, rgba(34,197,94,.18), transparent 60%),
-        radial-gradient(900px 600px at 45% 110%, rgba(56,189,248,.12), transparent 55%),
-        var(--bg);
-    }
 
-    a{ color: inherit; text-decoration: none; }
-    a:hover{ text-decoration: underline; }
-
-    .skip-link{
-      position:absolute;
-      left:-999px;
-      top:10px;
-      padding:10px 12px;
-      border-radius: 12px;
-      background: var(--panel-2);
-      border: 1px solid var(--border);
-      box-shadow: var(--shadow);
-    }
-    .skip-link:focus{ left: 10px; outline: 3px solid var(--ring); outline-offset: 2px; }
-
-    .hero{
-      padding: 52px 18px 26px;
-      text-align: center;
-    }
-    .hero-inner{
-      max-width: var(--max);
-      margin: 0 auto;
-      padding: 28px 22px;
-      border: 1px solid var(--border);
-      border-radius: calc(var(--radius) + 6px);
-      background: linear-gradient(180deg, var(--panel), transparent);
-      box-shadow: var(--shadow);
-      backdrop-filter: blur(10px);
-    }
-
-    .logo{
-      display:inline-block;
-      width: 76px;
-      height: 76px;
-      margin-bottom: 10px;
-      color: var(--text);
-    }
-
-    h1{
-      margin: 6px 0 6px;
-      font-size: clamp(2rem, 3vw + 1rem, 3rem);
-      letter-spacing: -0.02em;
-      line-height: 1.1;
-    }
-    .tagline{
-      margin: 8px auto 18px;
-      max-width: 62ch;
-      color: var(--muted);
-      font-size: 1.05rem;
-    }
-
-    .ctas{
-      display:flex;
-      gap: 12px;
-      justify-content: center;
-      flex-wrap: wrap;
-      margin-top: 8px;
-    }
-
-    .btn{
-      display:inline-flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 14px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: linear-gradient(180deg, rgba(124,58,237,.22), rgba(124,58,237,.10));
-      box-shadow: 0 8px 20px rgba(124,58,237,.15);
-      transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-      text-decoration:none;
-      font-weight: 650;
-      letter-spacing: .01em;
-      cursor: pointer;
-      user-select: none;
-    }
-    .btn:hover{
-      transform: translateY(-1px);
-      box-shadow: 0 10px 24px rgba(124,58,237,.22);
-      border-color: rgba(124,58,237,.45);
-      text-decoration: none;
-    }
-    .btn:focus{
-      outline: 3px solid var(--ring);
-      outline-offset: 2px;
-      text-decoration: none;
-    }
-    .btn.ghost{
-      background: rgba(255,255,255,.02);
-      box-shadow: none;
-    }
-
-    .container{
-      max-width: var(--max);
-      margin: 0 auto;
-      padding: 10px 18px 44px;
-    }
-
-    section{
-      margin-top: 16px;
-      padding: 18px 18px;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: var(--panel);
-      box-shadow: 0 8px 22px rgba(0,0,0,.12);
-      backdrop-filter: blur(8px);
-    }
-
-    section h2{
-      margin: 2px 0 10px;
-      font-size: 1.25rem;
-      letter-spacing: -0.01em;
-    }
-
-    p{ margin: 10px 0; color: var(--muted); }
-    strong{ color: var(--text); }
-
-    ul{
-      margin: 10px 0 0;
-      padding-left: 18px;
-      color: var(--muted);
-    }
-    li{ margin: 8px 0; }
-
-    .quote{
-      border-left: 3px solid rgba(124,58,237,.55);
-      padding-left: 12px;
-      color: var(--faint);
-      font-style: italic;
-    }
-
-    pre{
-      overflow:auto;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: rgba(0,0,0,.22);
-      padding: 14px;
-      box-shadow: inset 0 0 0 1px rgba(255,255,255,.03);
-    }
-    @media (prefers-color-scheme: light){
-      pre{ background: rgba(10,16,32,.06); }
-    }
-
-    code{
-      font-family: var(--mono);
-      font-size: .92rem;
-    }
-
-    details{
-      margin-top: 10px;
-      border-radius: 14px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,.02);
-      padding: 10px 12px;
-    }
-    summary{
-      cursor: pointer;
-      font-weight: 650;
-      color: var(--text);
-    }
-
-    .diagram{
-      display:block;
-      width: 100%;
-      height: auto;
-      border-radius: var(--radius);
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,.02);
-      margin: 10px 0 12px;
-      color: var(--text);
-    }
-
-    .filetree{
+    body {
       margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background: radial-gradient(1000px 380px at 90% -10%, #d9f5ef, transparent 70%),
+                  radial-gradient(900px 320px at 5% 0%, #e9eef8, transparent 75%),
+                  var(--bg);
+      color: var(--text);
+      line-height: 1.5;
     }
 
-    .site-footer{
+    .wrap {
       max-width: var(--max);
       margin: 0 auto;
-      padding: 0 18px 30px;
-      color: var(--faint);
-    }
-    .site-footer p{
-      margin: 10px 0;
-      color: var(--faint);
-      text-align: center;
+      padding: 26px 18px 34px;
     }
 
-    /* Subtle “card grid” feel on wider screens */
-    @media (min-width: 860px){
-      .grid{
-        display:grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 16px;
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: calc(var(--radius) + 4px);
+      box-shadow: var(--shadow);
+      padding: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.7rem, 2.2vw + 1rem, 2.5rem);
+      line-height: 1.15;
+    }
+
+    .subtitle {
+      margin: 8px 0 0;
+      color: var(--muted);
+      max-width: 70ch;
+    }
+
+    .meta {
+      margin-top: 12px;
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      border: 1px solid #b4e3dd;
+      color: #0b5d57;
+      font-size: 0.88rem;
+      font-weight: 600;
+    }
+
+    .search {
+      margin-top: 16px;
+      width: 100%;
+      max-width: 460px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 0.95rem;
+      color: var(--text);
+      background: #fff;
+    }
+
+    .grid {
+      margin-top: 18px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 14px;
+    }
+
+    .card h2 {
+      margin: 0 0 8px;
+      font-size: 1.05rem;
+      letter-spacing: 0.01em;
+    }
+
+    .card p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+    }
+
+    li {
+      margin: 6px 0;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus {
+      text-decoration: underline;
+    }
+
+    .empty {
+      display: none;
+      margin-top: 14px;
+      color: #7a2637;
+      background: #feeff3;
+      border: 1px solid #ffc8d5;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 0.9rem;
+      max-width: 420px;
+    }
+
+    footer {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    @media (max-width: 640px) {
+      .hero,
+      .card {
+        border-radius: 12px;
       }
-      #about{ grid-column: 1 / -1; }
-      #architecture{ grid-column: 1 / -1; }
-    }
-
-    /* Small helper class for JS-enhanced smooth scroll focus */
-    .flash-focus{
-      animation: flash 900ms ease-out 1;
-    }
-    @keyframes flash{
-      0%{ box-shadow: 0 0 0 0 rgba(124,58,237,.0); }
-      35%{ box-shadow: 0 0 0 6px rgba(124,58,237,.25); }
-      100%{ box-shadow: 0 0 0 0 rgba(124,58,237,.0); }
     }
   </style>
 </head>
-
 <body>
-  <a class="skip-link" href="#main">Skip to content</a>
+  <main class="wrap">
+    <section class="hero">
+      <h1>Sentiment Analyzer Documentation</h1>
+      <p class="subtitle">Single entry point to every markdown document in this repository, grouped by purpose and folder.</p>
+      <div class="meta">Updated: 2026-03-23</div>
+      <div>
+        <input id="doc-search" class="search" type="search" placeholder="Filter docs by name or folder (example: marl, testing, config)" aria-label="Filter documentation links" />
+      </div>
+      <div id="empty" class="empty">No matching docs found for this filter.</div>
+    </section>
 
-  <header class="hero">
-    <div class="hero-inner">
-      <!-- Inline SVG placeholder logo -->
-      <svg class="logo" width="72" height="72" viewBox="0 0 72 72" role="img" aria-label="Sentiment Analyzer logo placeholder" xmlns="http://www.w3.org/2000/svg">
-        <rect x="2" y="2" width="68" height="68" rx="14" fill="currentColor" opacity="0.12" />
-        <path d="M18 44 L30 32 L40 40 L54 26" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
-        <circle cx="18" cy="44" r="3" fill="currentColor" />
-        <circle cx="30" cy="32" r="3" fill="currentColor" />
-        <circle cx="40" cy="40" r="3" fill="currentColor" />
-        <circle cx="54" cy="26" r="3" fill="currentColor" />
-      </svg>
-
-      <h1>Sentiment Analyzer</h1>
-      <p class="tagline">Real-time crypto sentiment, MARL tournaments, and social media intelligence.</p>
-
-      <nav class="ctas" aria-label="Primary">
-        <a class="btn" href="https://github.com/infinyte/sentiment-analyzer" target="_blank" rel="noopener">View Repo</a>
-        <a class="btn ghost" href="#quickstart">Quick Start</a>
-      </nav>
-    </div>
-  </header>
-
-  <main id="main" class="container">
-    <div class="grid">
-      <section id="about">
-        <h2>What it does</h2>
-        <p>Real-time cryptocurrency sentiment analysis platform combining market data, news, and social signals into Bull / Neutral / Bear outputs and trend reports.</p>
-        <p class="quote">“Results are displayed through an interactive React dashboard with MARL tournament tooling and social media intelligence.”</p>
-      </section>
-
-      <section id="features">
-        <h2>Key features</h2>
+    <section class="grid" id="doc-grid">
+      <article class="card" data-search="root repository readme contributing claude postman">
+        <h2>Repository Docs (Root and Postman)</h2>
+        <p>Core project onboarding and contribution docs.</p>
         <ul>
-          <li><strong>Live market data</strong> — CoinGecko OHLCV and price feeds</li>
-          <li><strong>Social intelligence</strong> — 7-source scraper, sarcasm detection, FinBERT optional</li>
-          <li><strong>MARL</strong> — Multi-agent tournaments, evolutionary orchestrator, paper/live broker adapters</li>
-          <li><strong>Backtesting</strong> — Day-by-day simulation and equity curves</li>
+          <li><a href="../README.md">README.md</a></li>
+          <li><a href="../CONTRIBUTING.md">CONTRIBUTING.md</a></li>
+          <li><a href="../CLAUDE.md">CLAUDE.md</a></li>
+          <li><a href="../postman/README.md">postman/README.md</a></li>
         </ul>
-      </section>
+      </article>
 
-      <section id="quickstart">
-        <h2>Quick Start</h2>
-        <pre><code># Backend (localhost:3000)
-cd backend
-npm install
-cp .env.example .env
-npm run dev
+      <article class="card" data-search="docs top level api endpoints coverage tasks roadmap summary env setup deployment labels features todo">
+        <h2>Top-Level docs/</h2>
+        <p>Primary operational, planning, and coverage references.</p>
+        <ul>
+          <li><a href="API_ENDPOINTS.md">docs/API_ENDPOINTS.md</a></li>
+          <li><a href="DEPLOYMENT_GUIDE.md">docs/DEPLOYMENT_GUIDE.md</a></li>
+          <li><a href="ENV_SETUP_GUIDE.md">docs/ENV_SETUP_GUIDE.md</a></li>
+          <li><a href="EVOLUTIONARY_SYSTEM_OVERVIEW.md">docs/EVOLUTIONARY_SYSTEM_OVERVIEW.md</a></li>
+          <li><a href="FEATURES.md">docs/FEATURES.md</a></li>
+          <li><a href="LABELS.md">docs/LABELS.md</a></li>
+          <li><a href="PROJECT_SUMMARY.md">docs/PROJECT_SUMMARY.md</a></li>
+          <li><a href="ROADMAP.md">docs/ROADMAP.md</a></li>
+          <li><a href="TASKS.md">docs/TASKS.md</a></li>
+          <li><a href="TEST_COVERAGE.md">docs/TEST_COVERAGE.md</a></li>
+          <li><a href="TESTING_STRATEGY.md">docs/TESTING_STRATEGY.md</a></li>
+          <li><a href="TODO.md">docs/TODO.md</a></li>
+        </ul>
+      </article>
 
-# Frontend (localhost:5173)
-cd frontend
-npm install
-npm run dev
-</code></pre>
-      </section>
+      <article class="card" data-search="marl competition architecture integration game theory guide">
+        <h2>MARL Docs</h2>
+        <p>Architecture, game-theory, and integration guides for the MARL subsystem.</p>
+        <ul>
+          <li><a href="MARL/MARL_ARCHITECTURE_DETAILED.md">docs/MARL/MARL_ARCHITECTURE_DETAILED.md</a></li>
+          <li><a href="MARL/MARL_COMPETITIVE_GAME_THEORY.md">docs/MARL/MARL_COMPETITIVE_GAME_THEORY.md</a></li>
+          <li><a href="MARL/MARL_COMPLETE_GUIDE.md">docs/MARL/MARL_COMPLETE_GUIDE.md</a></li>
+          <li><a href="MARL/MARL_DOCS_INDEX.md">docs/MARL/MARL_DOCS_INDEX.md</a></li>
+          <li><a href="MARL/MARL_EXECUTIVE_SUMMARY.md">docs/MARL/MARL_EXECUTIVE_SUMMARY.md</a></li>
+          <li><a href="MARL/MARL_INTEGRATION_GUIDE.md">docs/MARL/MARL_INTEGRATION_GUIDE.md</a></li>
+        </ul>
+      </article>
 
-      <section id="api">
-        <h2>API highlights</h2>
-        <p>Core endpoints: <code>/api/coins</code>, <code>/api/coins/:symbol</code>, <code>/api/sentiment/:symbol</code>, <code>/api/marl/competition/start</code>.</p>
-        <details>
-          <summary>Example: start a SINGLE tournament</summary>
-          <pre><code>curl -s -X POST http://localhost:3000/api/marl/competition/start \
-  -H "Content-Type: application/json" \
-  -d '{ "mode":"SINGLE", "agents":[{"id":"alpha","riskProfile":"AGGRESSIVE"}], "symbols":["BTC"], "duration":200 }'
-</code></pre>
-        </details>
-      </section>
+      <article class="card" data-search="phase1 architecture integration sentiment">
+        <h2>Phase 1 Archive</h2>
+        <p>Historical phase-1 architecture and implementation references.</p>
+        <ul>
+          <li><a href="phase1/PHASE1_ARCHITECTURE_OVERVIEW.md">docs/phase1/PHASE1_ARCHITECTURE_OVERVIEW.md</a></li>
+          <li><a href="phase1/PHASE1_EVOLUTIONARY_SYSTEM_CLAUDE_CODE.md">docs/phase1/PHASE1_EVOLUTIONARY_SYSTEM_CLAUDE_CODE.md</a></li>
+          <li><a href="phase1/PHASE1_EXECUTIVE_SUMMARY.md">docs/phase1/PHASE1_EXECUTIVE_SUMMARY.md</a></li>
+          <li><a href="phase1/PHASE1_INDEX.md">docs/phase1/PHASE1_INDEX.md</a></li>
+          <li><a href="phase1/PHASE1_INTEGRATION_GUIDE.md">docs/phase1/PHASE1_INTEGRATION_GUIDE.md</a></li>
+          <li><a href="phase1/PHASE1_SYSTEM_ARCHITECTURE.md">docs/phase1/PHASE1_SYSTEM_ARCHITECTURE.md</a></li>
+          <li><a href="phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md">docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md</a></li>
+        </ul>
+      </article>
 
-      <section id="architecture">
-        <h2>Architecture &amp; Project Structure</h2>
+      <article class="card" data-search="phase2 sentiment enhancement upgrades">
+        <h2>Phase 2 Archive</h2>
+        <p>Historical phase-2 planning and sentiment enhancement research docs.</p>
+        <ul>
+          <li><a href="phase2/AdvancedSentimentAnalysis_Upgrades.md">docs/phase2/AdvancedSentimentAnalysis_Upgrades.md</a></li>
+          <li><a href="phase2/SENTIMENT_ENHANCEMENT_ACTION_PLAN.md">docs/phase2/SENTIMENT_ENHANCEMENT_ACTION_PLAN.md</a></li>
+        </ul>
+      </article>
+    </section>
 
-        <!-- Inline SVG placeholder diagram -->
-        <svg class="diagram" viewBox="0 0 900 260" role="img" aria-label="Architecture diagram placeholder" xmlns="http://www.w3.org/2000/svg">
-          <rect x="1" y="1" width="898" height="258" rx="18" fill="currentColor" opacity="0.06" stroke="currentColor" stroke-opacity="0.25" />
-
-          <g fill="none" stroke="currentColor" stroke-width="2" stroke-opacity="0.35">
-            <line x1="260" y1="130" x2="360" y2="130" />
-            <line x1="540" y1="130" x2="640" y2="130" />
-          </g>
-
-          <g fill="currentColor">
-            <rect x="80" y="80" width="180" height="100" rx="12" opacity="0.12" />
-            <rect x="360" y="80" width="180" height="100" rx="12" opacity="0.12" />
-            <rect x="640" y="80" width="180" height="100" rx="12" opacity="0.12" />
-          </g>
-
-          <g fill="currentColor" opacity="0.85" font-family="ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial" font-size="18">
-            <text x="170" y="125" text-anchor="middle">Sources</text>
-            <text x="170" y="150" text-anchor="middle" font-size="14" opacity="0.75">News / Social / Market</text>
-
-            <text x="450" y="125" text-anchor="middle">Backend API</text>
-            <text x="450" y="150" text-anchor="middle" font-size="14" opacity="0.75">Sentiment + MARL</text>
-
-            <text x="730" y="125" text-anchor="middle">Frontend</text>
-            <text x="730" y="150" text-anchor="middle" font-size="14" opacity="0.75">Dashboard</text>
-          </g>
-        </svg>
-
-        <pre class="filetree"><code>sentiment-analyzer/
-├── backend/
-├── frontend/
-├── docs/
-└── .github/
-</code></pre>
-      </section>
-    </div>
+    <footer>
+      Source folder: <a href="./">docs/</a>. This page is intentionally static so links remain valid in local and repository views.
+    </footer>
   </main>
 
-  <footer class="site-footer">
-    <p>Cost note: daily sentiment batch for 50 coins ~ $6–15/month (Claude API). See DEPLOYMENT_GUIDE.md for Azure steps.</p>
-    <p><a href="https://github.com/infinyte/sentiment-analyzer" target="_blank" rel="noopener">Repository</a> · License: MIT</p>
-  </footer>
-
-<<<<<<< Updated upstream
-  <!-- Inline JS (no external script.js needed) -->
   <script>
-    // Smooth scroll for in-page anchors + brief focus highlight
     (function () {
-      function isSamePageAnchor(a) {
-        if (!a || !a.getAttribute) return false;
-        const href = a.getAttribute('href');
-        return href && href.startsWith('#') && href.length > 1;
+      const input = document.getElementById('doc-search');
+      const cards = Array.from(document.querySelectorAll('.card'));
+      const empty = document.getElementById('empty');
+
+      function applyFilter() {
+        const query = (input.value || '').trim().toLowerCase();
+        let visible = 0;
+
+        cards.forEach(card => {
+          const text = (card.getAttribute('data-search') || '') + ' ' + card.innerText.toLowerCase();
+          const show = query.length === 0 || text.indexOf(query) !== -1;
+          card.style.display = show ? '' : 'none';
+          if (show) visible += 1;
+        });
+
+        empty.style.display = visible === 0 ? 'block' : 'none';
       }
 
-      document.addEventListener('click', function (e) {
-        const a = e.target && e.target.closest ? e.target.closest('a') : null;
-        if (!isSamePageAnchor(a)) return;
-
-        const id = a.getAttribute('href').slice(1);
-        const el = document.getElementById(id);
-        if (!el) return;
-
-        e.preventDefault();
-        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-        // Make keyboard focus land reasonably (without changing layout)
-        const prevTabindex = el.getAttribute('tabindex');
-        if (!prevTabindex) el.setAttribute('tabindex', '-1');
-
-        setTimeout(() => {
-          el.focus({ preventScroll: true });
-          el.classList.add('flash-focus');
-          setTimeout(() => el.classList.remove('flash-focus'), 950);
-          if (!prevTabindex) el.removeAttribute('tabindex');
-        }, 350);
-
-        history.pushState(null, '', '#' + id);
-      }, { passive: false });
+      input.addEventListener('input', applyFilter);
+      applyFilter();
     })();
   </script>
-=======
-  <script>
-  // Smooth scroll for same-page anchors + brief focus highlight
-  (function () {
-    function isAnchor(a) {
-      const href = a && a.getAttribute && a.getAttribute('href');
-      return href && href.startsWith('#') && href.length > 1;
-    }
-
-    document.addEventListener('click', function (e) {
-      const a = e.target && e.target.closest ? e.target.closest('a') : null;
-      if (!isAnchor(a)) return;
-
-      const id = a.getAttribute('href').slice(1);
-      const el = document.getElementById(id);
-      if (!el) return;
-
-      e.preventDefault();
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-      const prev = el.getAttribute('tabindex');
-      if (!prev) el.setAttribute('tabindex', '-1');
-
-      setTimeout(() => {
-        el.focus({ preventScroll: true });
-        el.classList.add('flash-focus');
-        setTimeout(() => el.classList.remove('flash-focus'), 950);
-        if (!prev) el.removeAttribute('tabindex');
-      }, 300);
-
-      history.pushState(null, '', '#' + id);
-    }, { passive: false });
-  })();
-</script>
->>>>>>> Stashed changes
 </body>
 </html>

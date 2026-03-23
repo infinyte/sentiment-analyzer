@@ -245,6 +245,54 @@ interface TournamentDetailResponse {
 const EMOJI_OPTIONS = ['🟢', '🔴', '🟡', '💎', '🔥', '⚡', '🌟', '🎯', '🚀', '🏆'];
 const COLOR_OPTIONS = ['#00FF00', '#FF0000', '#FFFF00', '#00FFFF', '#FF00FF', '#FFA500', '#800080', '#0099FF'];
 
+interface LearningState {
+  cacheKey: string;
+  agentId: string;
+  riskProfile: string;
+}
+
+interface LearningStatesResponse {
+  count: number;
+  agents: LearningState[];
+}
+
+type AgentAlgorithm = 'Q_TABLE' | 'POLICY_GRADIENT' | 'DQN';
+
+interface AgentAlgorithmResponse {
+  agentId: string;
+  algorithm: AgentAlgorithm | string;
+  note: string;
+  policyNetwork: {
+    architecture: string;
+    updateRule: string;
+    replayBuffer: string;
+  };
+}
+
+const ALGORITHM_OPTIONS: Array<{
+  value: AgentAlgorithm;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: 'Q_TABLE',
+    label: 'Q_TABLE',
+    description: 'Hybrid Q-table with policy-network guidance.',
+  },
+  {
+    value: 'POLICY_GRADIENT',
+    label: 'POLICY_GRADIENT',
+    description: 'Network-first policy updates without TensorFlow DQN.',
+  },
+  {
+    value: 'DQN',
+    label: 'DQN',
+    description: 'Experimental option exposed for API compatibility checks.',
+  },
+];
+
+const DEFAULT_AGENT_ALGORITHM: AgentAlgorithm = 'Q_TABLE';
+
 const panelStyle: React.CSSProperties = {
   backgroundColor: 'var(--surface)',
   border: '1px solid var(--border)',
@@ -449,6 +497,92 @@ interface CustomizationModalProps {
   onClose: () => void;
   onChange: (patch: Partial<CustomizationFormState>) => void;
   onSave: () => void;
+}
+
+interface ResetLearningConfirmationModalProps {
+  agent: AgentDetail;
+  riskProfile?: string;
+  loading: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}
+
+function ResetLearningConfirmationModal({ agent, riskProfile, loading, onCancel, onConfirm }: ResetLearningConfirmationModalProps) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Reset learning state confirmation"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        backgroundColor: 'rgba(15, 23, 42, 0.5)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '1.5rem',
+        zIndex: 50,
+      }}
+    >
+      <div style={{ ...panelStyle, width: '100%', maxWidth: '36rem', padding: '1.5rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '1rem' }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '1.25rem', color: '#7c3aed' }}>⚠️ Reset Learning State</h3>
+            <p style={{ margin: '0.5rem 0 0', color: '#475569', fontSize: '0.95rem' }}>{displayName(agent)}</p>
+          </div>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={{ border: 'none', background: 'transparent', color: '#64748b', fontSize: '1.5rem', cursor: loading ? 'not-allowed' : 'pointer' }}
+            aria-label="Close confirmation dialog"
+          >
+            ×
+          </button>
+        </div>
+
+        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: '#fef3c7', borderRadius: '0.75rem', borderLeft: '4px solid #d97706' }}>
+          <p style={{ margin: 0, color: '#92400e', fontSize: '0.9rem', lineHeight: 1.5 }}>
+            This action will <strong>permanently clear</strong> the {riskProfile ? 'learning state for the ' + riskProfile + ' profile' : 'learning state for ALL risk profiles'}. The agent will start fresh without previously learned behavior in the next competition.
+          </p>
+        </div>
+
+        <div style={{ marginTop: '1.25rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+          <button
+            onClick={onCancel}
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.85rem',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            style={{
+              padding: '0.75rem 1rem',
+              borderRadius: '0.85rem',
+              border: 'none',
+              backgroundColor: '#dc2626',
+              color: '#ffffff',
+              fontWeight: 700,
+              cursor: loading ? 'not-allowed' : 'pointer',
+              opacity: loading ? 0.6 : 1,
+            }}
+          >
+            {loading ? 'Resetting...' : 'Confirm Reset'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 interface RetireConfirmationModalProps {
@@ -1460,6 +1594,20 @@ export function AgentManagementDashboard() {
   const [pretrainSteps, setPretrainSteps] = useState(500);
   const [pretrainRegimes, setPretrainRegimes] = useState<MarketRegime[]>([...ALL_REGIMES]);
   const [bestGenome, setBestGenome] = useState<BestGenomeResponse | null>(null);
+  const [allLearningStates, setAllLearningStates] = useState<LearningState[]>([]);
+  const [learningStatesLoading, setLearningStatesLoading] = useState(false);
+  const [learningStatesError, setLearningStatesError] = useState<string | null>(null);
+  const [resetLearningLoading, setResetLearningLoading] = useState(false);
+  const [resetLearningError, setResetLearningError] = useState<string | null>(null);
+  const [resetLearningSuccess, setResetLearningSuccess] = useState<string | null>(null);
+  const [showResetConfirmation, setShowResetConfirmation] = useState(false);
+  const [resetConfirmData, setResetConfirmData] = useState<{ agentId: string; riskProfile?: string } | null>(null);
+  const [learningAdminKey, setLearningAdminKey] = useState('');
+  const [algorithmSelection, setAlgorithmSelection] = useState<AgentAlgorithm>(DEFAULT_AGENT_ALGORITHM);
+  const [algorithmStateByAgent, setAlgorithmStateByAgent] = useState<Record<string, AgentAlgorithmResponse>>({});
+  const [algorithmLoading, setAlgorithmLoading] = useState(false);
+  const [algorithmError, setAlgorithmError] = useState<string | null>(null);
+  const [algorithmSuccess, setAlgorithmSuccess] = useState<string | null>(null);
 
   // Keep dashboard data moving during ongoing competitions without manual refresh.
   useEffect(() => {
@@ -1518,6 +1666,25 @@ export function AgentManagementDashboard() {
     };
 
     void loadOverview();
+  }, [refreshNonce]);
+
+  useEffect(() => {
+    const loadLearningStates = async () => {
+      try {
+        setLearningStatesLoading(true);
+        setLearningStatesError(null);
+        const response = await fetch('/api/marl/agents/learning');
+        if (!response.ok) throw new Error(`Failed to load learning states: HTTP ${response.status}`);
+        const data = await response.json() as LearningStatesResponse;
+        setAllLearningStates(data.agents ?? []);
+      } catch (error) {
+        setLearningStatesError(error instanceof Error ? error.message : 'Failed to load learning states');
+      } finally {
+        setLearningStatesLoading(false);
+      }
+    };
+
+    void loadLearningStates();
   }, [refreshNonce]);
 
   useEffect(() => {
@@ -1615,8 +1782,23 @@ export function AgentManagementDashboard() {
   useEffect(() => {
     if (!selectedAgent || selectedAgent.status !== 'ACTIVE') {
       setRetireConfirmOpen(false);
+      setShowResetConfirmation(false);
     }
   }, [selectedAgent]);
+
+  useEffect(() => {
+    if (!selectedAgentId) {
+      setAlgorithmSelection(DEFAULT_AGENT_ALGORITHM);
+      setAlgorithmError(null);
+      setAlgorithmSuccess(null);
+      return;
+    }
+
+    const storedAlgorithm = algorithmStateByAgent[selectedAgentId]?.algorithm;
+    setAlgorithmSelection(storedAlgorithm === 'POLICY_GRADIENT' || storedAlgorithm === 'DQN' ? storedAlgorithm : DEFAULT_AGENT_ALGORITHM);
+    setAlgorithmError(null);
+    setAlgorithmSuccess(null);
+  }, [selectedAgentId]);
 
   const filteredAgents = [...agents]
     .filter(agent => {
@@ -1689,6 +1871,94 @@ export function AgentManagementDashboard() {
 
   const handleRefresh = () => {
     setRefreshNonce(value => value + 1);
+  };
+
+  const agentLearningStates = allLearningStates.filter(state => state.agentId === selectedAgentId);
+  const currentAlgorithmState = selectedAgentId ? algorithmStateByAgent[selectedAgentId] ?? null : null;
+
+  const updateAlgorithmState = async (
+    agentId: string,
+    algorithm: AgentAlgorithm,
+    successMessage?: string,
+  ) => {
+    try {
+      setAlgorithmLoading(true);
+      setAlgorithmError(null);
+      setAlgorithmSuccess(null);
+
+      const response = await fetch(`/api/marl/agents/${agentId}/algorithm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ algorithm }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json() as { error?: string };
+        throw new Error(errorData.error || `Failed to update algorithm: HTTP ${response.status}`);
+      }
+
+      const result = await response.json() as AgentAlgorithmResponse;
+      setAlgorithmStateByAgent(current => ({ ...current, [agentId]: result }));
+      setAlgorithmSelection(result.algorithm === 'POLICY_GRADIENT' || result.algorithm === 'DQN' ? result.algorithm : DEFAULT_AGENT_ALGORITHM);
+      if (successMessage) {
+        setAlgorithmSuccess(successMessage);
+      }
+    } catch (error) {
+      setAlgorithmError(error instanceof Error ? error.message : 'Failed to update algorithm state');
+    } finally {
+      setAlgorithmLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedAgentId || algorithmStateByAgent[selectedAgentId]) return;
+
+    void updateAlgorithmState(selectedAgentId, DEFAULT_AGENT_ALGORITHM);
+  }, [selectedAgentId, algorithmStateByAgent]);
+
+  const resetLearningState = async (agentId: string, riskProfile?: string) => {
+    try {
+      setResetLearningError(null);
+      setResetLearningSuccess(null);
+
+      if (!learningAdminKey.trim()) {
+        throw new Error('Admin API key is required to reset learning state.');
+      }
+
+      setResetLearningLoading(true);
+
+      const url = new URL(`${window.location.origin}/api/marl/agents/${agentId}/learning`);
+      if (riskProfile) {
+        url.searchParams.set('riskProfile', riskProfile);
+      }
+
+      const response = await fetch(url.toString(), {
+        method: 'DELETE',
+        headers: {
+          'x-api-key': learningAdminKey.trim(),
+        },
+      });
+
+      if (response.status === 401) {
+        throw new Error('Unauthorized — API key required or invalid');
+      }
+      if (!response.ok) {
+        const errorData = await response.json() as { error?: string };
+        throw new Error(errorData.error || `Failed to reset learning: HTTP ${response.status}`);
+      }
+
+      const result = await response.json() as { message: string; cleared: number };
+      setResetLearningSuccess(result.message);
+      setShowResetConfirmation(false);
+      setResetConfirmData(null);
+      setRefreshNonce(value => value + 1);
+    } catch (error) {
+      setResetLearningError(error instanceof Error ? error.message : 'Failed to reset learning state');
+    } finally {
+      setResetLearningLoading(false);
+    }
   };
 
   const openCustomization = () => {
@@ -2329,6 +2599,211 @@ export function AgentManagementDashboard() {
                 </div>
               </div>
 
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <h4 style={{ margin: 0, color: '#0f172a' }}>Learning States</h4>
+                  <span style={{ color: '#64748b', fontSize: '0.85rem' }}>{agentLearningStates.length} profile(s)</span>
+                </div>
+                <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.35rem' }}>
+                  <label style={{ color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+                    Admin API key
+                  </label>
+                  <input
+                    type="password"
+                    value={learningAdminKey}
+                    onChange={event => setLearningAdminKey(event.target.value)}
+                    placeholder="Required for reset operations"
+                    aria-label="Admin API key for learning state reset"
+                    style={{ padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem' }}
+                  />
+                  <div style={{ color: '#64748b', fontSize: '0.82rem' }}>
+                    Listing is read-only. Reset actions require the server API secret key.
+                  </div>
+                </div>
+                {learningStatesError && (
+                  <div role="alert" style={{ marginTop: '0.75rem', color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem', fontSize: '0.9rem' }}>
+                    {learningStatesError}
+                  </div>
+                )}
+                {resetLearningError && (
+                  <div role="alert" style={{ marginTop: '0.75rem', color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem', fontSize: '0.9rem' }}>
+                    {resetLearningError}
+                  </div>
+                )}
+                {resetLearningSuccess && (
+                  <div style={{ marginTop: '0.75rem', color: '#166534', backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '0.75rem', fontSize: '0.9rem' }}>
+                    {resetLearningSuccess}
+                  </div>
+                )}
+                <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.7rem' }}>
+                  {learningStatesLoading ? (
+                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>Loading learning states...</div>
+                  ) : agentLearningStates.length === 0 ? (
+                    <div style={{ color: '#64748b', fontSize: '0.9rem' }}>No learning state stored for this agent.</div>
+                  ) : (
+                    <>
+                      {agentLearningStates.map(state => (
+                        <div key={state.cacheKey} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', border: '1px solid #e2e8f0', borderRadius: '0.8rem', padding: '0.75rem' }}>
+                          <div>
+                            <div style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.9rem' }}>{state.riskProfile}</div>
+                            <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.8rem' }}>Risk profile learning state</div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setResetConfirmData({ agentId: state.agentId, riskProfile: state.riskProfile });
+                              setShowResetConfirmation(true);
+                            }}
+                            disabled={resetLearningLoading}
+                            style={{
+                              padding: '0.5rem 0.85rem',
+                              borderRadius: '0.7rem',
+                              border: '1px solid #dc2626',
+                              backgroundColor: '#fef2f2',
+                              color: '#b91c1c',
+                              fontWeight: 600,
+                              cursor: resetLearningLoading ? 'not-allowed' : 'pointer',
+                              fontSize: '0.85rem',
+                              opacity: resetLearningLoading ? 0.6 : 1,
+                            }}
+                          >
+                            Reset
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => {
+                          setResetConfirmData({ agentId: selectedAgentId || '', riskProfile: undefined });
+                          setShowResetConfirmation(true);
+                        }}
+                        disabled={resetLearningLoading || agentLearningStates.length === 0}
+                        style={{
+                          marginTop: '0.5rem',
+                          padding: '0.6rem 0.85rem',
+                          borderRadius: '0.7rem',
+                          border: '1px solid #dc2626',
+                          backgroundColor: '#dc2626',
+                          color: '#ffffff',
+                          fontWeight: 700,
+                          cursor: resetLearningLoading || agentLearningStates.length === 0 ? 'not-allowed' : 'pointer',
+                          fontSize: '0.85rem',
+                          opacity: resetLearningLoading || agentLearningStates.length === 0 ? 0.6 : 1,
+                        }}
+                      >
+                        {resetLearningLoading ? 'Resetting...' : 'Reset All Profiles'}
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <h4 style={{ margin: 0, color: '#0f172a' }}>Algorithm</h4>
+                  <span style={{ color: '#64748b', fontSize: '0.85rem' }}>No full page reload required</span>
+                </div>
+                <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(15rem, 1fr))', gap: '0.9rem' }}>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem', backgroundColor: '#f8fafc' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Current algorithm</div>
+                    <div style={{ marginTop: '0.45rem', color: '#0f172a', fontSize: '1.15rem', fontWeight: 800 }}>
+                      {currentAlgorithmState?.algorithm ?? DEFAULT_AGENT_ALGORITHM}
+                    </div>
+                    <div style={{ marginTop: '0.35rem', color: '#475569', fontSize: '0.88rem', lineHeight: 1.5 }}>
+                      {currentAlgorithmState?.note ?? 'Loading algorithm metadata for this agent.'}
+                    </div>
+                  </div>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+                    <label htmlFor="agent-algorithm-select" style={{ display: 'block', color: '#334155', fontSize: '0.9rem', fontWeight: 600 }}>
+                      Select algorithm
+                    </label>
+                    <select
+                      id="agent-algorithm-select"
+                      value={algorithmSelection}
+                      onChange={event => setAlgorithmSelection(event.target.value as AgentAlgorithm)}
+                      aria-label="Select algorithm"
+                      disabled={algorithmLoading}
+                      style={{ marginTop: '0.55rem', width: '100%', padding: '0.75rem', borderRadius: '0.75rem', border: '1px solid #cbd5e1', fontSize: '0.95rem', backgroundColor: '#ffffff' }}
+                    >
+                      {ALGORITHM_OPTIONS.map(option => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                    <div style={{ marginTop: '0.45rem', color: '#64748b', fontSize: '0.82rem' }}>
+                      {ALGORITHM_OPTIONS.find(option => option.value === algorithmSelection)?.description}
+                    </div>
+                    <div style={{ marginTop: '0.8rem', display: 'flex', gap: '0.65rem', flexWrap: 'wrap' }}>
+                      <button
+                        onClick={() => {
+                          if (!selectedAgentId) return;
+                          void updateAlgorithmState(selectedAgentId, algorithmSelection, `Algorithm updated to ${algorithmSelection}.`);
+                        }}
+                        disabled={algorithmLoading || !selectedAgentId}
+                        style={{
+                          padding: '0.65rem 0.9rem',
+                          borderRadius: '0.75rem',
+                          border: 'none',
+                          backgroundColor: '#0f766e',
+                          color: '#ffffff',
+                          fontWeight: 700,
+                          cursor: algorithmLoading || !selectedAgentId ? 'not-allowed' : 'pointer',
+                          opacity: algorithmLoading || !selectedAgentId ? 0.6 : 1,
+                        }}
+                      >
+                        {algorithmLoading ? 'Applying...' : 'Apply Algorithm'}
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (!selectedAgentId) return;
+                          void updateAlgorithmState(selectedAgentId, algorithmSelection);
+                        }}
+                        disabled={algorithmLoading || !selectedAgentId}
+                        style={{
+                          padding: '0.65rem 0.9rem',
+                          borderRadius: '0.75rem',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          color: '#0f172a',
+                          fontWeight: 700,
+                          cursor: algorithmLoading || !selectedAgentId ? 'not-allowed' : 'pointer',
+                          opacity: algorithmLoading || !selectedAgentId ? 0.6 : 1,
+                        }}
+                      >
+                        Refresh State
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {algorithmError && (
+                  <div role="alert" style={{ marginTop: '0.75rem', color: '#b91c1c', backgroundColor: '#fee2e2', padding: '0.75rem', borderRadius: '0.75rem', fontSize: '0.9rem' }}>
+                    {algorithmError}
+                  </div>
+                )}
+                {algorithmSuccess && (
+                  <div style={{ marginTop: '0.75rem', color: '#166534', backgroundColor: '#dcfce7', padding: '0.75rem', borderRadius: '0.75rem', fontSize: '0.9rem' }}>
+                    {algorithmSuccess}
+                  </div>
+                )}
+                <div style={{ marginTop: '0.9rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', gap: '0.75rem' }}>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Architecture</div>
+                    <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700, fontSize: '0.9rem' }}>
+                      {currentAlgorithmState?.policyNetwork.architecture ?? 'Loading...'}
+                    </div>
+                  </div>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Update rule</div>
+                    <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700, fontSize: '0.9rem' }}>
+                      {currentAlgorithmState?.policyNetwork.updateRule ?? 'Loading...'}
+                    </div>
+                  </div>
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.85rem' }}>
+                    <div style={{ color: '#64748b', fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Replay buffer</div>
+                    <div style={{ marginTop: '0.35rem', color: '#0f172a', fontWeight: 700, fontSize: '0.9rem' }}>
+                      {currentAlgorithmState?.policyNetwork.replayBuffer ?? 'Loading...'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(18rem, 1fr))', gap: '1rem' }}>
                 <div style={{ border: '1px solid #e2e8f0', borderRadius: '0.95rem', padding: '1rem' }}>
                   <h4 style={{ margin: 0, color: '#0f172a' }}>Recent Competition History</h4>
@@ -2395,6 +2870,16 @@ export function AgentManagementDashboard() {
           retiring={retiring}
           onCancel={() => setRetireConfirmOpen(false)}
           onConfirm={retireSelectedAgent}
+        />
+      )}
+
+      {showResetConfirmation && selectedAgent && resetConfirmData && (
+        <ResetLearningConfirmationModal
+          agent={selectedAgent}
+          riskProfile={resetConfirmData.riskProfile}
+          loading={resetLearningLoading}
+          onCancel={() => setShowResetConfirmation(false)}
+          onConfirm={() => resetLearningState(resetConfirmData.agentId, resetConfirmData.riskProfile)}
         />
       )}
 

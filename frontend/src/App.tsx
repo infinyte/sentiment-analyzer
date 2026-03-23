@@ -219,6 +219,50 @@ interface StoredBacktestResult {
   completedAt: string | Date;
 }
 
+interface TradingExchangeStatus {
+  connected: boolean;
+  name: string;
+  mode: string;
+  provider?: string;
+}
+
+interface TradingPriceResponse {
+  symbol: string;
+  price: number;
+}
+
+interface TradingBalance {
+  symbol: string;
+  available: number;
+  held: number;
+  total: number;
+}
+
+interface TradingStats {
+  initialCapital: number;
+  currentCapital: number;
+  pnl: number;
+  pnlPercent: number;
+  totalTrades: number;
+  successfulTrades: number;
+  maxLoss: number;
+  maxPosition: number;
+}
+
+interface TradingOrderResponse {
+  success: boolean;
+  error?: string;
+  reason?: string;
+  order?: {
+    id: string;
+    symbol: string;
+    type: 'BUY' | 'SELL';
+    quantity: number;
+    price: number;
+    status: 'PENDING' | 'FILLED' | 'PARTIAL' | 'CANCELED';
+  };
+}
+
 const BACKTEST_AGENT_TYPE_OPTIONS: FrontendAgentType[] = ['RULE_BASED', 'ML_BASED', 'HYBRID'];
 const BACKTEST_RISK_PROFILE_OPTIONS: FrontendRiskProfile[] = ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'];
 const BACKTEST_SLIPPAGE_OPTIONS: BacktestSlippageModel[] = ['FIXED', 'VOLUME_BASED', 'MARKET_IMPACT'];
@@ -1683,6 +1727,407 @@ function BacktestingWorkspace() {
   );
 }
 
+function TradingWorkspace() {
+  const [statusData, setStatusData] = useState<TradingExchangeStatus | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
+
+  const [quoteSymbol, setQuoteSymbol] = useState('BTC');
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const [quoteError, setQuoteError] = useState<string | null>(null);
+  const [quoteData, setQuoteData] = useState<TradingPriceResponse | null>(null);
+
+  const [balancesData, setBalancesData] = useState<TradingBalance[]>([]);
+  const [balancesLoading, setBalancesLoading] = useState(false);
+  const [balancesError, setBalancesError] = useState<string | null>(null);
+
+  const [statsData, setStatsData] = useState<TradingStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  const [orderSymbol, setOrderSymbol] = useState('BTC');
+  const [orderSide, setOrderSide] = useState<'BUY' | 'SELL'>('BUY');
+  const [orderSize, setOrderSize] = useState('0.001');
+  const [orderType, setOrderType] = useState<'MARKET' | 'LIMIT'>('LIMIT');
+  const [orderPrice, setOrderPrice] = useState('');
+  const [orderSubmitting, setOrderSubmitting] = useState(false);
+  const [orderValidationError, setOrderValidationError] = useState<string | null>(null);
+  const [orderError, setOrderError] = useState<string | null>(null);
+  const [orderSuccess, setOrderSuccess] = useState<string | null>(null);
+
+  const formatCurrency = (value: number) => value.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  });
+
+  const loadExchangeStatus = async () => {
+    setStatusLoading(true);
+    setStatusError(null);
+    try {
+      const response = await fetch('/api/trading/exchange-status');
+      const payload = await response.json() as TradingExchangeStatus & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? `Failed to load exchange status (${response.status}).`);
+      setStatusData(payload);
+    } catch (err) {
+      setStatusError(err instanceof Error ? err.message : 'Failed to load exchange status.');
+      setStatusData(null);
+    } finally {
+      setStatusLoading(false);
+    }
+  };
+
+  const loadBalances = async () => {
+    setBalancesLoading(true);
+    setBalancesError(null);
+    try {
+      const response = await fetch('/api/trading/balances');
+      const payload = await response.json() as TradingBalance[] & { error?: string };
+      if (!response.ok) throw new Error((payload as { error?: string }).error ?? `Failed to load balances (${response.status}).`);
+      const list = Array.isArray(payload) ? payload : [];
+      setBalancesData(list);
+    } catch (err) {
+      setBalancesError(err instanceof Error ? err.message : 'Failed to load balances.');
+      setBalancesData([]);
+    } finally {
+      setBalancesLoading(false);
+    }
+  };
+
+  const loadStats = async () => {
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const response = await fetch('/api/trading/stats');
+      const payload = await response.json() as TradingStats & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? `Failed to load stats (${response.status}).`);
+      setStatsData(payload);
+    } catch (err) {
+      setStatsError(err instanceof Error ? err.message : 'Failed to load stats.');
+      setStatsData(null);
+    } finally {
+      setStatsLoading(false);
+    }
+  };
+
+  const loadQuote = async () => {
+    const symbol = quoteSymbol.trim().toUpperCase();
+    if (!symbol) {
+      setQuoteError('Enter a symbol to fetch a quote.');
+      return;
+    }
+
+    setQuoteLoading(true);
+    setQuoteError(null);
+    try {
+      const response = await fetch(`/api/trading/price/${encodeURIComponent(symbol)}`);
+      const payload = await response.json() as TradingPriceResponse & { error?: string };
+      if (!response.ok) throw new Error(payload.error ?? `Failed to fetch quote (${response.status}).`);
+      setQuoteData(payload);
+    } catch (err) {
+      setQuoteError(err instanceof Error ? err.message : 'Failed to fetch quote.');
+      setQuoteData(null);
+    } finally {
+      setQuoteLoading(false);
+    }
+  };
+
+  const validateOrder = () => {
+    const symbol = orderSymbol.trim().toUpperCase();
+    const size = Number(orderSize);
+    const price = Number(orderPrice);
+
+    if (!symbol) return 'Order symbol is required.';
+    if (!Number.isFinite(size) || size <= 0) return 'Order size must be a positive number.';
+    if (orderType === 'LIMIT' && (!Number.isFinite(price) || price <= 0)) {
+      return 'Limit order price must be a positive number.';
+    }
+    return null;
+  };
+
+  const submitOrder = async () => {
+    const validationError = validateOrder();
+    if (validationError) {
+      setOrderValidationError(validationError);
+      setOrderError(null);
+      setOrderSuccess(null);
+      return;
+    }
+
+    setOrderSubmitting(true);
+    setOrderValidationError(null);
+    setOrderError(null);
+    setOrderSuccess(null);
+
+    try {
+      const payload = {
+        symbol: orderSymbol.trim().toUpperCase(),
+        side: orderSide,
+        size: Number(orderSize),
+        orderType,
+        ...(orderType === 'LIMIT' ? { price: Number(orderPrice) } : {}),
+      };
+
+      const response = await fetch('/api/trading/order', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const result = await response.json() as TradingOrderResponse & { error?: string };
+
+      if (!response.ok || !result.success) {
+        throw new Error(result.error ?? result.reason ?? `Order failed (${response.status}).`);
+      }
+
+      const orderId = result.order?.id ? `Order ${result.order.id}` : 'Order';
+      const orderPriceText = typeof result.order?.price === 'number' ? ` at ${formatCurrency(result.order.price)}` : '';
+      setOrderSuccess(`${orderId} placed: ${result.order?.type ?? orderSide} ${result.order?.quantity ?? Number(orderSize)} ${result.order?.symbol ?? orderSymbol.trim().toUpperCase()}${orderPriceText}.`);
+      await Promise.all([loadStats(), loadBalances()]);
+    } catch (err) {
+      setOrderError(err instanceof Error ? err.message : 'Failed to submit order.');
+    } finally {
+      setOrderSubmitting(false);
+    }
+  };
+
+  useEffect(() => {
+    void Promise.all([loadExchangeStatus(), loadBalances(), loadStats()]);
+    const interval = window.setInterval(() => {
+      void loadExchangeStatus();
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, []);
+
+  return (
+    <div style={{ padding: '1.5rem', display: 'grid', gap: '1rem' }}>
+      <section style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', padding: '1rem', backgroundColor: 'var(--surface)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <h2 style={{ margin: '0 0 0.25rem 0', fontSize: '1.25rem', fontWeight: 700 }}>Trading Workspace</h2>
+            <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+              Monitor exchange connectivity, fetch quotes, review balances and stats, and execute guarded orders.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void Promise.all([loadExchangeStatus(), loadBalances(), loadStats()]);
+            }}
+            style={{ padding: '0.5rem 0.8rem', borderRadius: '0.375rem', border: '1px solid var(--border)', backgroundColor: 'var(--surface-2)', color: 'var(--text)', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Refresh Trading Data
+          </button>
+        </div>
+      </section>
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.75rem' }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', backgroundColor: 'var(--surface)', padding: '0.85rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Exchange Status</div>
+          {statusLoading ? (
+            <div style={{ marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading exchange status...</div>
+          ) : statusError ? (
+            <div role="alert" style={{ marginTop: '0.5rem', color: '#b91c1c', fontSize: '0.85rem' }}>{statusError}</div>
+          ) : statusData ? (
+            <>
+              <div style={{ marginTop: '0.45rem', fontWeight: 700 }}>{statusData.name}</div>
+              <div style={{ marginTop: '0.25rem', color: statusData.connected ? '#166534' : '#991b1b', fontWeight: 700 }}>
+                {statusData.connected ? 'Connected' : 'Disconnected'}
+              </div>
+              <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                Mode: {statusData.mode} · Provider: {statusData.provider ?? 'default'}
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', backgroundColor: 'var(--surface)', padding: '0.85rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Current Capital</div>
+          <div style={{ marginTop: '0.45rem', fontSize: '1.25rem', fontWeight: 700 }}>{formatCurrency(statsData?.currentCapital ?? 0)}</div>
+          <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>Initial: {formatCurrency(statsData?.initialCapital ?? 0)}</div>
+        </div>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', backgroundColor: 'var(--surface)', padding: '0.85rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>PnL</div>
+          <div style={{ marginTop: '0.45rem', fontSize: '1.25rem', fontWeight: 700, color: (statsData?.pnl ?? 0) >= 0 ? '#166534' : '#991b1b' }}>
+            {formatCurrency(statsData?.pnl ?? 0)}
+          </div>
+          <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>{(statsData?.pnlPercent ?? 0).toFixed(2)}%</div>
+        </div>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', backgroundColor: 'var(--surface)', padding: '0.85rem' }}>
+          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em' }}>Trades</div>
+          <div style={{ marginTop: '0.45rem', fontSize: '1.25rem', fontWeight: 700 }}>{statsData?.totalTrades ?? 0}</div>
+          <div style={{ marginTop: '0.2rem', fontSize: '0.82rem', color: 'var(--text-muted)' }}>Successful: {statsData?.successfulTrades ?? 0}</div>
+        </div>
+      </section>
+
+      {statsError && (
+        <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.625rem', padding: '0.75rem' }}>
+          {statsError}
+        </div>
+      )}
+
+      <section style={{ display: 'grid', gridTemplateColumns: 'minmax(280px, 1fr) minmax(340px, 1.2fr)', gap: '1rem' }}>
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', backgroundColor: 'var(--surface)', padding: '1rem', display: 'grid', gap: '0.75rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Quote Lookup</h3>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <input
+              value={quoteSymbol}
+              onChange={event => {
+                setQuoteSymbol(event.target.value);
+                setQuoteError(null);
+              }}
+              placeholder="BTC"
+              aria-label="Trading quote symbol"
+              style={{ flex: 1, minWidth: '140px', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+            />
+            <button
+              type="button"
+              onClick={() => void loadQuote()}
+              disabled={quoteLoading}
+              style={{ padding: '0.5rem 0.8rem', borderRadius: '0.375rem', border: 'none', backgroundColor: quoteLoading ? '#93c5fd' : '#2563eb', color: '#fff', cursor: quoteLoading ? 'wait' : 'pointer', fontWeight: 600 }}
+            >
+              {quoteLoading ? 'Fetching...' : 'Get Quote'}
+            </button>
+          </div>
+          {quoteError && <div role="alert" style={{ color: '#b91c1c', fontSize: '0.85rem' }}>{quoteError}</div>}
+          {quoteData && (
+            <div style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.75rem', backgroundColor: 'var(--surface-2)' }}>
+              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>Latest quote</div>
+              <div style={{ marginTop: '0.3rem', fontSize: '1.2rem', fontWeight: 700 }}>{quoteData.symbol.toUpperCase()}</div>
+              <div style={{ marginTop: '0.2rem', fontSize: '1rem', color: '#1d4ed8', fontWeight: 700 }}>{formatCurrency(quoteData.price)}</div>
+            </div>
+          )}
+
+          <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.75rem' }}>
+            <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem' }}>Balances</h4>
+            {balancesLoading ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>Loading balances...</div>
+            ) : balancesError ? (
+              <div role="alert" style={{ color: '#b91c1c', fontSize: '0.85rem' }}>{balancesError}</div>
+            ) : balancesData.length === 0 ? (
+              <div style={{ color: 'var(--text-muted)', fontSize: '0.85rem' }}>No balances returned.</div>
+            ) : (
+              <div style={{ display: 'grid', gap: '0.5rem', maxHeight: '220px', overflowY: 'auto' }}>
+                {balancesData.map(balance => (
+                  <div key={balance.symbol} style={{ border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.6rem', backgroundColor: 'var(--surface-2)', display: 'grid', gridTemplateColumns: '1fr auto auto', gap: '0.5rem', alignItems: 'center' }}>
+                    <strong>{balance.symbol}</strong>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Available {balance.available.toFixed(4)}</span>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Total {balance.total.toFixed(4)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div style={{ border: '1px solid var(--border)', borderRadius: '0.75rem', backgroundColor: 'var(--surface)', padding: '1rem', display: 'grid', gap: '0.75rem' }}>
+          <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 700 }}>Order Ticket</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.55rem' }}>
+            <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Symbol
+              <input
+                value={orderSymbol}
+                onChange={event => {
+                  setOrderSymbol(event.target.value);
+                  setOrderValidationError(null);
+                }}
+                aria-label="Order symbol"
+                placeholder="BTC"
+                style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Side
+              <select
+                value={orderSide}
+                onChange={event => setOrderSide(event.target.value as 'BUY' | 'SELL')}
+                aria-label="Order side"
+                style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              >
+                <option value="BUY">BUY</option>
+                <option value="SELL">SELL</option>
+              </select>
+            </label>
+            <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Size
+              <input
+                type="number"
+                min="0"
+                step="0.000001"
+                value={orderSize}
+                onChange={event => {
+                  setOrderSize(event.target.value);
+                  setOrderValidationError(null);
+                }}
+                aria-label="Order size"
+                style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              />
+            </label>
+            <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Type
+              <select
+                value={orderType}
+                onChange={event => {
+                  setOrderType(event.target.value as 'MARKET' | 'LIMIT');
+                  setOrderValidationError(null);
+                }}
+                aria-label="Order type"
+                style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              >
+                <option value="MARKET">MARKET</option>
+                <option value="LIMIT">LIMIT</option>
+              </select>
+            </label>
+          </div>
+          {orderType === 'LIMIT' && (
+            <label style={{ display: 'grid', gap: '0.25rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+              Limit Price
+              <input
+                type="number"
+                min="0"
+                step="0.0001"
+                value={orderPrice}
+                onChange={event => {
+                  setOrderPrice(event.target.value);
+                  setOrderValidationError(null);
+                }}
+                aria-label="Order price"
+                style={{ padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid var(--border-input)', backgroundColor: 'var(--surface)' }}
+              />
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={() => void submitOrder()}
+            disabled={orderSubmitting}
+            style={{ padding: '0.55rem 0.95rem', borderRadius: '0.375rem', border: 'none', backgroundColor: orderSubmitting ? '#93c5fd' : '#2563eb', color: '#fff', cursor: orderSubmitting ? 'wait' : 'pointer', fontWeight: 700 }}
+          >
+            {orderSubmitting ? 'Submitting...' : 'Place Order'}
+          </button>
+
+          {orderValidationError && (
+            <div role="alert" style={{ color: '#b91c1c', backgroundColor: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.6rem', fontSize: '0.85rem' }}>
+              {orderValidationError}
+            </div>
+          )}
+          {orderError && (
+            <div role="alert" style={{ color: '#991b1b', backgroundColor: '#fee2e2', border: '1px solid #fca5a5', borderRadius: '0.5rem', padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              Guardrail: {orderError}
+            </div>
+          )}
+          {orderSuccess && (
+            <div style={{ color: '#166534', backgroundColor: '#f0fdf4', border: '1px solid #86efac', borderRadius: '0.5rem', padding: '0.6rem', fontSize: '0.85rem', fontWeight: 600 }}>
+              {orderSuccess}
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
 // ============================================================================
 // DETAIL MODAL COMPONENT
 // ============================================================================
@@ -2110,7 +2555,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
@@ -2251,6 +2696,9 @@ export default function App() {
           </button>
           <button style={navTabStyle('backtesting')} onClick={() => setActiveView('backtesting')}>
             Backtesting
+          </button>
+          <button style={navTabStyle('trading')} onClick={() => setActiveView('trading')}>
+            Trading
           </button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 0' }}>
@@ -2456,6 +2904,9 @@ export default function App() {
         )}
         {activeView === 'backtesting' && (
           <BacktestingWorkspace />
+        )}
+        {activeView === 'trading' && (
+          <TradingWorkspace />
         )}
       </main>
 

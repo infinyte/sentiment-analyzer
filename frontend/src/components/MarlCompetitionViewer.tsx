@@ -239,11 +239,55 @@ export function MarlCompetitionViewer() {
   const [equityReloadMessage, setEquityReloadMessage] = useState<string | null>(null);
   const [reloadedEquityCurves, setReloadedEquityCurves] = useState<EquityCurvesResponse['equityCurves'] | null>(null);
 
+  // ── Broker Admin state ───────────────────────────────────────────────────────
+  const [brokerAdminOpen, setBrokerAdminOpen] = useState(false);
+  const [brokerAdminLoading, setBrokerAdminLoading] = useState(false);
+  const [brokerAdminError, setBrokerAdminError] = useState<string | null>(null);
+  const [brokerAdminKey, setBrokerAdminKey] = useState('');
+  const [brokerCredentialsList, setBrokerCredentialsList] = useState<Array<{
+    id: string; label: string; provider: string; mode: string; createdAt: string; lastUsed?: string; connected: boolean;
+  }> | null>(null);
+  const [connectedCredentials, setConnectedCredentials] = useState<Array<{
+    id: string; label?: string; provider?: string; mode?: string;
+  }> | null>(null);
+  const [brokerAdminActionLoading, setBrokerAdminActionLoading] = useState<string | null>(null);
+  const [brokerAdminActionError, setBrokerAdminActionError] = useState<string | null>(null);
+  const [showConnectConfirm, setShowConnectConfirm] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
+
+  // ── Broker order audit + emergency stop state ─────────────────────────────
+  const [brokerOrdersCompetitionId, setBrokerOrdersCompetitionId] = useState('');
+  const [brokerOrdersAgentId, setBrokerOrdersAgentId] = useState('');
+  const [brokerOrdersLoading, setBrokerOrdersLoading] = useState(false);
+  const [brokerOrdersError, setBrokerOrdersError] = useState<string | null>(null);
+  const [brokerOrders, setBrokerOrders] = useState<Array<{
+    clientOrderId: string;
+    brokerOrderId?: string;
+    agentId: string;
+    symbol: string;
+    side: string;
+    quantity: number;
+    limitPrice?: number;
+    status: string;
+    filledQuantity?: number;
+    avgFillPrice?: number;
+    submittedAt: string;
+    updatedAt: string;
+  }> | null>(null);
+  const [emergencyCompetitionId, setEmergencyCompetitionId] = useState('');
+  const [emergencyCredentialId, setEmergencyCredentialId] = useState('');
+  const [emergencyStopLoading, setEmergencyStopLoading] = useState(false);
+  const [emergencyStopError, setEmergencyStopError] = useState<string | null>(null);
+  const [emergencyStopSuccess, setEmergencyStopSuccess] = useState<string | null>(null);
+  const [showEmergencyStopConfirm, setShowEmergencyStopConfirm] = useState(false);
+
   useEffect(() => { loadList(); }, [loadList]);
 
   useEffect(() => {
     if (results?.competitionId) {
       setEquityReloadId(results.competitionId);
+      setBrokerOrdersCompetitionId(results.competitionId);
+      setEmergencyCompetitionId(results.competitionId);
       setReloadedEquityCurves(null);
       setEquityReloadError(null);
       setEquityReloadMessage(null);
@@ -401,6 +445,177 @@ export function MarlCompetitionViewer() {
     }
   }, [infoData, infoLoading]);
 
+  const fetchBrokerAdminData = useCallback(async () => {
+    if (!brokerAdminKey.trim()) {
+      setBrokerAdminError('Enter your API secret key (x-api-key) to access broker admin controls.');
+      setBrokerCredentialsList(null);
+      setConnectedCredentials(null);
+      return;
+    }
+
+    setBrokerAdminLoading(true);
+    setBrokerAdminError(null);
+    setBrokerAdminActionError(null);
+    try {
+      // Fetch credentials
+      const credRes = await fetch('/api/marl/broker/credentials', {
+        headers: { 'x-api-key': brokerAdminKey.trim() },
+      });
+      if (!credRes.ok) throw new Error(`HTTP ${credRes.status}: Failed to load credentials`);
+      const credData = await credRes.json() as { credentials: typeof brokerCredentialsList };
+      setBrokerCredentialsList(credData.credentials ?? []);
+
+      // Fetch connected adapters
+      const connRes = await fetch('/api/marl/broker/connected', {
+        headers: { 'x-api-key': brokerAdminKey.trim() },
+      });
+      if (!connRes.ok) throw new Error(`HTTP ${connRes.status}: Failed to load connected adapters`);
+      const connData = await connRes.json() as { connected: Array<{ id: string; label?: string; provider?: string; mode?: string }> };
+      setConnectedCredentials(connData.connected ?? []);
+    } catch (err) {
+      setBrokerAdminError(err instanceof Error ? err.message : 'Failed to load broker admin data');
+      setBrokerCredentialsList(null);
+      setConnectedCredentials(null);
+    } finally {
+      setBrokerAdminLoading(false);
+    }
+  }, [brokerAdminKey]);
+
+  const handleFetchBrokerOrders = useCallback(async () => {
+    if (!brokerAdminKey.trim()) {
+      setBrokerOrdersError('Admin API key is required.');
+      return;
+    }
+
+    const competitionId = brokerOrdersCompetitionId.trim();
+    if (!competitionId) {
+      setBrokerOrdersError('Competition ID is required to audit broker orders.');
+      return;
+    }
+
+    setBrokerOrdersLoading(true);
+    setBrokerOrdersError(null);
+    try {
+      const query = brokerOrdersAgentId.trim() ? `?agentId=${encodeURIComponent(brokerOrdersAgentId.trim())}` : '';
+      const res = await fetch(`/api/marl/broker/orders/${encodeURIComponent(competitionId)}${query}`, {
+        headers: { 'x-api-key': brokerAdminKey.trim() },
+      });
+      const payload = await res.json().catch(() => ({})) as {
+        orders?: Array<{
+          clientOrderId: string;
+          brokerOrderId?: string;
+          agentId: string;
+          symbol: string;
+          side: string;
+          quantity: number;
+          limitPrice?: number;
+          status: string;
+          filledQuantity?: number;
+          avgFillPrice?: number;
+          submittedAt: string;
+          updatedAt: string;
+        }>;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(payload.error ?? `Failed to load broker orders (${res.status})`);
+      setBrokerOrders(payload.orders ?? []);
+    } catch (err) {
+      setBrokerOrdersError(err instanceof Error ? err.message : 'Failed to load broker orders.');
+      setBrokerOrders(null);
+    } finally {
+      setBrokerOrdersLoading(false);
+    }
+  }, [brokerAdminKey, brokerOrdersCompetitionId, brokerOrdersAgentId]);
+
+  const handleEmergencyStop = useCallback(async () => {
+    if (!brokerAdminKey.trim()) {
+      setEmergencyStopError('Admin API key is required.');
+      return;
+    }
+
+    const competitionId = emergencyCompetitionId.trim();
+    const credentialId = emergencyCredentialId.trim();
+    if (!competitionId || !credentialId) {
+      setEmergencyStopError('competitionId and credentialId are required.');
+      return;
+    }
+
+    setEmergencyStopLoading(true);
+    setEmergencyStopError(null);
+    setEmergencyStopSuccess(null);
+    try {
+      const res = await fetch('/api/marl/broker/emergency-stop', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': brokerAdminKey.trim(),
+        },
+        body: JSON.stringify({ competitionId, credentialId }),
+      });
+      const payload = await res.json().catch(() => ({})) as { emergencyStop?: boolean; cancelled?: number; error?: string };
+      if (!res.ok) throw new Error(payload.error ?? `Emergency stop failed (${res.status})`);
+      setEmergencyStopSuccess(`Emergency stop executed for ${competitionId}. Cancelled ${payload.cancelled ?? 0} open order(s).`);
+      setShowEmergencyStopConfirm(false);
+      await handleFetchBrokerOrders();
+    } catch (err) {
+      setEmergencyStopError(err instanceof Error ? err.message : 'Emergency stop failed.');
+    } finally {
+      setEmergencyStopLoading(false);
+    }
+  }, [brokerAdminKey, emergencyCompetitionId, emergencyCredentialId, handleFetchBrokerOrders]);
+
+  useEffect(() => {
+    if (!connectedCredentials || connectedCredentials.length === 0) {
+      setEmergencyCredentialId('');
+      return;
+    }
+    setEmergencyCredentialId(current => current || connectedCredentials[0]!.id);
+  }, [connectedCredentials]);
+
+  const handleConnectCredential = useCallback(async (credentialId: string) => {
+    setBrokerAdminActionLoading(credentialId);
+    setBrokerAdminActionError(null);
+    try {
+      const res = await fetch(`/api/marl/broker/connect/${encodeURIComponent(credentialId)}`, {
+        method: 'POST',
+        headers: { 'x-api-key': brokerAdminKey.trim() },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      // Refresh the panel data
+      await fetchBrokerAdminData();
+      setShowConnectConfirm(null);
+    } catch (err) {
+      setBrokerAdminActionError(err instanceof Error ? err.message : 'Failed to connect credential');
+    } finally {
+      setBrokerAdminActionLoading(null);
+    }
+  }, [brokerAdminKey, fetchBrokerAdminData]);
+
+  const handleDeleteCredential = useCallback(async (credentialId: string) => {
+    setBrokerAdminActionLoading(credentialId);
+    setBrokerAdminActionError(null);
+    try {
+      const res = await fetch(`/api/marl/broker/credentials/${encodeURIComponent(credentialId)}`, {
+        method: 'DELETE',
+        headers: { 'x-api-key': brokerAdminKey.trim() },
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({})) as { error?: string };
+        throw new Error(err.error ?? `HTTP ${res.status}`);
+      }
+      // Refresh the panel data
+      await fetchBrokerAdminData();
+      setShowDeleteConfirm(null);
+    } catch (err) {
+      setBrokerAdminActionError(err instanceof Error ? err.message : 'Failed to delete credential');
+    } finally {
+      setBrokerAdminActionLoading(null);
+    }
+  }, [brokerAdminKey, fetchBrokerAdminData]);
+
   const reloadEquityCurves = useCallback(async () => {
     const targetId = equityReloadId.trim();
     if (!targetId) {
@@ -535,6 +750,313 @@ export function MarlCompetitionViewer() {
                       </div>
                     ))}
                   </div>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ── Broker Admin Panel ───────────────────────────────────────────────── */}
+      <div style={{ ...card, padding: '1rem' }}>
+        <button
+          type="button"
+          onClick={() => setBrokerAdminOpen(open => !open)}
+          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}
+        >
+          <div style={{ textAlign: 'left' }}>
+            <div style={{ fontSize: '0.95rem', fontWeight: '700', color: '#111827' }}>Broker Admin</div>
+            <div style={{ fontSize: '0.78rem', color: '#6b7280' }}>Manage credentials, connections, and orders (admin only).</div>
+          </div>
+          <span style={{ color: '#6b7280', fontSize: '0.8rem' }}>{brokerAdminOpen ? '▲ hide' : '▼ show'}</span>
+        </button>
+
+        {brokerAdminOpen && (
+          <div style={{ marginTop: '0.9rem', display: 'grid', gap: '0.9rem' }}>
+            {/* Admin key input */}
+            <div>
+              <label style={label}>Admin API Key (x-api-key)</label>
+              <input
+                type="password"
+                style={input}
+                value={brokerAdminKey}
+                onChange={e => { setBrokerAdminKey(e.target.value); setBrokerAdminError(null); setBrokerCredentialsList(null); }}
+                placeholder="API_SECRET_KEY value"
+                autoComplete="new-password"
+              />
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.7rem', color: '#9ca3af' }}>
+                Your admin key is never sent to external services and only used for authorization headers.
+              </p>
+              <div style={{ marginTop: '0.5rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => void fetchBrokerAdminData()}
+                  disabled={brokerAdminLoading}
+                  style={{ ...btn('#2563eb'), fontSize: '0.75rem', padding: '0.35rem 0.75rem', opacity: brokerAdminLoading ? 0.7 : 1 }}
+                >
+                  {brokerAdminLoading ? 'Loading…' : 'Load Broker Admin Data'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    void Promise.all([
+                      fetchBrokerAdminData(),
+                      brokerOrdersCompetitionId.trim() ? handleFetchBrokerOrders() : Promise.resolve(),
+                    ]);
+                  }}
+                  disabled={brokerAdminLoading || brokerOrdersLoading}
+                  style={{ ...btn('#6b7280'), fontSize: '0.75rem', padding: '0.35rem 0.75rem', opacity: brokerAdminLoading || brokerOrdersLoading ? 0.7 : 1 }}
+                >
+                  Refresh
+                </button>
+              </div>
+            </div>
+
+            {brokerAdminError && (
+              <div style={{ fontSize: '0.82rem', color: '#dc2626', padding: '0.5rem 0.75rem', backgroundColor: '#fef2f2', borderRadius: '0.375rem', border: '1px solid #fecaca' }}>
+                {brokerAdminError}
+              </div>
+            )}
+
+            {brokerAdminLoading && (
+              <div style={{ fontSize: '0.82rem', color: '#6b7280' }}>Loading broker admin data…</div>
+            )}
+
+            {brokerCredentialsList && connectedCredentials && (
+              <>
+                {/* Connected credentials summary */}
+                {connectedCredentials.length > 0 && (
+                  <div style={{ padding: '0.75rem', backgroundColor: '#f0fdf4', borderRadius: '0.5rem', border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: '600', color: '#166534', marginBottom: '0.4rem' }}>
+                      ✓ {connectedCredentials.length} connected
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {connectedCredentials.map(c => (
+                        <span key={c.id} style={{ fontSize: '0.75rem', padding: '0.15rem 0.5rem', backgroundColor: '#86efac', color: '#15803d', borderRadius: '0.25rem', fontWeight: '500' }}>
+                          {c.label} ({c.mode})
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Credentials list */}
+                {brokerCredentialsList.length > 0 ? (
+                  <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', overflow: 'hidden' }}>
+                    {brokerCredentialsList.map((cred, idx) => {
+                      const isConnected = cred.connected;
+                      const isLoading = brokerAdminActionLoading === cred.id;
+                      return (
+                        <div
+                          key={cred.id}
+                          style={{
+                            padding: '0.75rem',
+                            borderBottom: idx < brokerCredentialsList.length - 1 ? '1px solid #f3f4f6' : 'none',
+                            backgroundColor: isConnected ? '#f0fdf4' : 'transparent',
+                          }}
+                        >
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            <div style={{ flex: 1 }}>
+                              <div style={{ fontSize: '0.85rem', fontWeight: '600', color: '#111827' }}>
+                                {cred.label}
+                                {isConnected && <span style={{ marginLeft: '0.4rem', fontSize: '0.7rem', color: '#16a34a', fontWeight: '700' }}>✓ CONNECTED</span>}
+                              </div>
+                              <div style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.2rem' }}>
+                                {cred.provider} • {cred.mode} • Created {new Date(cred.createdAt).toLocaleDateString()}
+                              </div>
+                              {cred.lastUsed && (
+                                <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '0.2rem' }}>
+                                  Last used: {new Date(cred.lastUsed).toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.35rem' }}>
+                              {!isConnected && (
+                                <button
+                                  type="button"
+                                  onClick={() => setShowConnectConfirm(cred.id)}
+                                  disabled={isLoading}
+                                  style={{ ...btn('#059669'), fontSize: '0.7rem', padding: '0.3rem 0.6rem', opacity: isLoading ? 0.6 : 1 }}
+                                >
+                                  {isLoading ? '…' : 'Connect'}
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => setShowDeleteConfirm(cred.id)}
+                                disabled={isLoading}
+                                style={{ ...btn('#dc2626'), fontSize: '0.7rem', padding: '0.3rem 0.6rem', opacity: isLoading ? 0.6 : 1 }}
+                              >
+                                {isLoading ? '…' : 'Delete'}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div style={{ fontSize: '0.82rem', color: '#6b7280', padding: '0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb', textAlign: 'center' }}>
+                    No broker credentials stored. Add one in the tournament configuration above.
+                  </div>
+                )}
+
+                {brokerAdminActionError && (
+                  <div style={{ fontSize: '0.82rem', color: '#dc2626', padding: '0.5rem 0.75rem', backgroundColor: '#fef2f2', borderRadius: '0.375rem', border: '1px solid #fecaca' }}>
+                    {brokerAdminActionError}
+                  </div>
+                )}
+
+                {/* Order audit */}
+                <div style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '0.75rem' }}>
+                  <div style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#111827' }}>Order Audit</div>
+                    <div style={{ fontSize: '0.76rem', color: '#6b7280' }}>Load per-order broker audit records by competition id.</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto', gap: '0.55rem', alignItems: 'end' }}>
+                    <div>
+                      <label style={label}>Competition ID</label>
+                      <input
+                        style={input}
+                        value={brokerOrdersCompetitionId}
+                        onChange={e => {
+                          setBrokerOrdersCompetitionId(e.target.value);
+                          setBrokerOrdersError(null);
+                        }}
+                        placeholder="competition id"
+                        aria-label="Broker order audit competition id"
+                      />
+                    </div>
+                    <div>
+                      <label style={label}>Agent filter (optional)</label>
+                      <input
+                        style={input}
+                        value={brokerOrdersAgentId}
+                        onChange={e => {
+                          setBrokerOrdersAgentId(e.target.value);
+                          setBrokerOrdersError(null);
+                        }}
+                        placeholder="agent id"
+                        aria-label="Broker order audit agent filter"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleFetchBrokerOrders()}
+                      disabled={brokerOrdersLoading}
+                      style={{ ...btn('#2563eb'), fontSize: '0.75rem', padding: '0.45rem 0.75rem', opacity: brokerOrdersLoading ? 0.7 : 1 }}
+                    >
+                      {brokerOrdersLoading ? 'Loading…' : 'Load Orders'}
+                    </button>
+                  </div>
+
+                  {brokerOrdersError && (
+                    <div role="alert" style={{ marginTop: '0.55rem', fontSize: '0.8rem', color: '#dc2626', padding: '0.45rem 0.6rem', backgroundColor: '#fef2f2', borderRadius: '0.375rem', border: '1px solid #fecaca' }}>
+                      {brokerOrdersError}
+                    </div>
+                  )}
+
+                  {brokerOrders && (
+                    <div style={{ marginTop: '0.65rem' }}>
+                      {brokerOrders.length === 0 ? (
+                        <div style={{ fontSize: '0.8rem', color: '#6b7280' }}>No broker orders found for this query.</div>
+                      ) : (
+                        <div style={{ overflowX: 'auto' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.76rem' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f9fafb' }}>
+                                {['Client Order', 'Broker Order', 'Agent', 'Symbol', 'Side', 'Qty', 'Status', 'Limit', 'Filled', 'Avg Fill', 'Submitted'].map(header => (
+                                  <th key={header} style={{ padding: '0.35rem 0.5rem', textAlign: 'left', color: '#374151', borderBottom: '1px solid #e5e7eb' }}>{header}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {brokerOrders.map(order => (
+                                <tr key={order.clientOrderId} style={{ borderBottom: '1px solid #f3f4f6' }}>
+                                  <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace' }}>{order.clientOrderId}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem', fontFamily: 'monospace' }}>{order.brokerOrderId ?? '—'}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem', fontWeight: 600 }}>{order.agentId}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.symbol}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.side}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.quantity}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.status}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.limitPrice ?? '—'}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.filledQuantity ?? '—'}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem' }}>{order.avgFillPrice ?? '—'}</td>
+                                  <td style={{ padding: '0.35rem 0.5rem', color: '#6b7280' }}>{new Date(order.submittedAt).toLocaleString()}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Emergency stop */}
+                <div style={{ border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '0.75rem', backgroundColor: '#fef2f2' }}>
+                  <div style={{ marginBottom: '0.6rem' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: '#991b1b' }}>Emergency Stop</div>
+                    <div style={{ fontSize: '0.76rem', color: '#b91c1c' }}>Cancel all open broker orders for a competition.</div>
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr auto', gap: '0.55rem', alignItems: 'end' }}>
+                    <div>
+                      <label style={label}>Competition ID</label>
+                      <input
+                        style={input}
+                        value={emergencyCompetitionId}
+                        onChange={e => {
+                          setEmergencyCompetitionId(e.target.value);
+                          setEmergencyStopError(null);
+                        }}
+                        placeholder="competition id"
+                        aria-label="Emergency stop competition id"
+                      />
+                    </div>
+                    <div>
+                      <label style={label}>Connected credential</label>
+                      <select
+                        style={input}
+                        value={emergencyCredentialId}
+                        onChange={e => {
+                          setEmergencyCredentialId(e.target.value);
+                          setEmergencyStopError(null);
+                        }}
+                        aria-label="Emergency stop credential"
+                      >
+                        <option value="">— select credential —</option>
+                        {connectedCredentials.map(c => (
+                          <option key={c.id} value={c.id}>{c.label ?? c.id}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!emergencyCompetitionId.trim() || !emergencyCredentialId.trim()) {
+                          setEmergencyStopError('competitionId and credentialId are required.');
+                          return;
+                        }
+                        setEmergencyStopError(null);
+                        setShowEmergencyStopConfirm(true);
+                      }}
+                      disabled={emergencyStopLoading}
+                      style={{ ...btn('#dc2626'), fontSize: '0.75rem', padding: '0.45rem 0.75rem', opacity: emergencyStopLoading ? 0.7 : 1 }}
+                    >
+                      {emergencyStopLoading ? 'Stopping…' : 'Emergency Stop'}
+                    </button>
+                  </div>
+                  {emergencyStopError && (
+                    <div role="alert" style={{ marginTop: '0.55rem', fontSize: '0.8rem', color: '#b91c1c', padding: '0.45rem 0.6rem', backgroundColor: '#fee2e2', borderRadius: '0.375rem', border: '1px solid #fca5a5' }}>
+                      {emergencyStopError}
+                    </div>
+                  )}
+                  {emergencyStopSuccess && (
+                    <div style={{ marginTop: '0.55rem', fontSize: '0.8rem', color: '#166534', padding: '0.45rem 0.6rem', backgroundColor: '#dcfce7', borderRadius: '0.375rem', border: '1px solid #86efac', fontWeight: 600 }}>
+                      {emergencyStopSuccess}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1314,6 +1836,136 @@ export function MarlCompetitionViewer() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Connect Credential Confirmation ──────────────────────────────────── */}
+      {showConnectConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowConnectConfirm(null); }}
+        >
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '0.75rem', padding: '1.5rem',
+            width: '100%', maxWidth: '400px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', fontWeight: '700', color: '#111827' }}>
+              Connect Credential?
+            </h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+              This broker credential will be activated and available for real trading competitions.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowConnectConfirm(null)}
+                style={{ ...btn('#6b7280'), fontSize: '0.875rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleConnectCredential(showConnectConfirm)}
+                disabled={brokerAdminActionLoading === showConnectConfirm}
+                style={{ ...btn('#059669'), fontSize: '0.875rem', opacity: brokerAdminActionLoading === showConnectConfirm ? 0.7 : 1 }}
+              >
+                {brokerAdminActionLoading === showConnectConfirm ? 'Connecting…' : 'Connect'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Delete Credential Confirmation ──────────────────────────────────── */}
+      {showDeleteConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowDeleteConfirm(null); }}
+        >
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '0.75rem', padding: '1.5rem',
+            width: '100%', maxWidth: '400px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', fontWeight: '700', color: '#dc2626' }}>
+              Delete Credential?
+            </h3>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.875rem', color: '#6b7280' }}>
+              This action is <strong>irreversible</strong>. The credential will be permanently deleted, and any active connection will be closed.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowDeleteConfirm(null)}
+                style={{ ...btn('#6b7280'), fontSize: '0.875rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleDeleteCredential(showDeleteConfirm)}
+                disabled={brokerAdminActionLoading === showDeleteConfirm}
+                style={{ ...btn('#dc2626'), fontSize: '0.875rem', opacity: brokerAdminActionLoading === showDeleteConfirm ? 0.7 : 1 }}
+              >
+                {brokerAdminActionLoading === showDeleteConfirm ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Emergency Stop Confirmation ──────────────────────────────────── */}
+      {showEmergencyStopConfirm && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Emergency stop confirmation"
+          style={{
+            position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1001,
+          }}
+          onClick={e => { if (e.target === e.currentTarget) setShowEmergencyStopConfirm(false); }}
+        >
+          <div style={{
+            backgroundColor: '#fff', borderRadius: '0.75rem', padding: '1.5rem',
+            width: '100%', maxWidth: '430px', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+          }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', fontWeight: '700', color: '#991b1b' }}>
+              Confirm Emergency Stop
+            </h3>
+            <p style={{ margin: '0 0 0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+              This will cancel all open orders for competition <strong>{emergencyCompetitionId}</strong> using credential <strong>{emergencyCredentialId}</strong>.
+            </p>
+            <p style={{ margin: '0 0 1.25rem', fontSize: '0.84rem', color: '#b91c1c', fontWeight: 600 }}>
+              This is a high-impact action intended only for incident response.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
+              <button
+                type="button"
+                onClick={() => setShowEmergencyStopConfirm(false)}
+                style={{ ...btn('#6b7280'), fontSize: '0.875rem' }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleEmergencyStop()}
+                disabled={emergencyStopLoading}
+                style={{ ...btn('#dc2626'), fontSize: '0.875rem', opacity: emergencyStopLoading ? 0.7 : 1 }}
+              >
+                {emergencyStopLoading ? 'Executing…' : 'Confirm Emergency Stop'}
+              </button>
+            </div>
           </div>
         </div>
       )}
