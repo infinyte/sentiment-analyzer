@@ -557,7 +557,7 @@ router.get('/api/marl/competition/:competitionId/status', competitionReadRateLim
   }
 
   if (record.status === 'FAILED') {
-    return res.status(500).json({
+    return res.status(200).json({
       competitionId,
       status: 'FAILED',
       startedAt: record.startedAt,
