@@ -11,6 +11,11 @@ The MARL stack is already integrated across backend and frontend.
 Backend:
 - backend/src/services/marl-competition-engine.ts
 - backend/src/routes/marl-competition.ts
+- backend/src/queues/connection.ts
+- backend/src/queues/tournament.queue.ts
+- backend/src/queues/scraper.queue.ts
+- backend/src/workers/tournament-worker-process.ts
+- backend/src/workers/scraper-worker-process.ts
 - backend/src/index.ts
 
 Frontend:
@@ -53,6 +58,16 @@ Engine capabilities currently implemented:
 - evolutionary learning-state carry-over and mutation
 - preserved competition IDs from route start through result payload
 - CoinGecko-seeded base prices with fallback behavior
+
+BullMQ queue layer (optional — requires REDIS_URL):
+- SIMULATED tournament starts are enqueued to the BullMQ `tournament` queue
+  instead of dispatched directly to a Worker Thread.
+- A `QueueEvents` listener in `marl-competition.ts` bridges job progress/completed/
+  failed events back to the in-process competition record so status polling works
+  identically whether Redis is present or not.
+- When REDIS_URL is not set, the route falls back to Worker Threads, preserving
+  the original in-process behavior.
+- PAPER and LIVE tournaments always run on the main API thread regardless of Redis.
 
 FRONTEND INTEGRATION
 ====================
@@ -103,13 +118,31 @@ Validated during review:
 RUN PATH
 ========
 
-Backend:
+Backend (API only, no Redis):
 
 ```bash
 cd backend
 npm install
 cp .env.example .env
 npm run dev
+```
+
+Backend with BullMQ workers (optional — requires Redis):
+
+```bash
+# Start Redis (or use docker-compose up redis)
+# Set REDIS_URL=redis://localhost:6379 in backend/.env
+
+cd backend
+npm run dev                     # API process
+npm run dev:tournament-worker   # Tournament worker process (separate terminal)
+npm run dev:scraper-worker      # Scraper worker process (separate terminal)
+```
+
+Full stack via Docker Compose (includes Redis + both workers):
+
+```bash
+docker-compose up
 ```
 
 Frontend:
@@ -128,7 +161,12 @@ IMPORTANT NOTES
 - The main app can start without API keys, but /api/health will report `misconfigured` for Claude and NewsAPI until backend/.env is populated.
 - Core live sentiment functionality depends on valid CLAUDE_API_KEY and NEWSAPI_API_KEY.
 - MARL simulations can still run with fallback market seeding if CoinGecko fetches fail.
-- The repo currently does not contain a usable ESLint config for backend or frontend lint scripts, so lint is not a reliable readiness signal right now.
+- REDIS_URL is optional. Without it, SIMULATED tournaments fall back to Worker Threads and social
+  scraping falls back to in-process execution. The API surface and polling behavior are identical.
+- When REDIS_URL is set, start the tournament worker and scraper worker as separate processes
+  (see Run Path above) to handle queued jobs. The API process will not process queued jobs itself.
+- The `docker-compose.yml` includes `redis`, `tournament-worker`, and `scraper-worker` services
+  that wire all of this up automatically for containerised deployments.
 
 TROUBLESHOOTING
 ===============

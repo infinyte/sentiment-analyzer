@@ -15,6 +15,8 @@ import { SocialMediaScraperManager } from '../services/social-media/scraper/scra
 import { TrendingTopicDiscoveryEngine } from '../services/social-media/trending/trending-discovery-engine.js';
 import { MultiSourceTrendingScoreCalculator } from '../services/social-media/trending/multi-source-calculator.js';
 import type { SocialSource, TopicType, TrendingTopicRecord } from '../types/social-media.js';
+import { getScraperQueue } from '../queues/scraper.queue.js';
+import { isQueueAvailable } from '../queues/connection.js';
 import logger from '../logger.js';
 
 const router = Router();
@@ -223,29 +225,40 @@ router.post('/api/social-media/refresh', async (req, res) => {
       symbols: symbols ?? 'top-coins',
     });
 
-    setImmediate(async () => {
-      try {
-        if (rss_only) {
-          const count = await scraperManager.refreshRssAll();
-          logger.info('social refresh: rss complete', { count });
-        } else {
-          const targets = symbols?.map(s => s.toUpperCase()) ?? [];
-          const result = await scraperManager.scrapeAll(targets);
-          logger.info('social refresh: scrape complete', {
-            symbols: targets.length,
-            total_scraped: result.total_items_scraped,
-            total_stored: result.total_items_stored,
-            rss: result.rss_items,
-            discord: result.discord_items,
-            telegram: result.telegram_items,
-          });
-          // After scraping, update trending topics
-          await discoveryEngine.discoverTrends();
+    const targets = symbols?.map(s => s.toUpperCase()) ?? [];
+
+    if (isQueueAvailable()) {
+      // BullMQ path: hand off to scraper-worker-process
+      getScraperQueue()
+        .add('refresh', { targets, rss_only: rss_only ?? false })
+        .catch((err: unknown) => {
+          logger.error('social refresh: failed to enqueue scraper job', { error: String(err) });
+        });
+    } else {
+      // Fallback: run in-process (no Redis configured)
+      setImmediate(async () => {
+        try {
+          if (rss_only) {
+            const count = await scraperManager.refreshRssAll();
+            logger.info('social refresh: rss complete', { count });
+          } else {
+            const result = await scraperManager.scrapeAll(targets);
+            logger.info('social refresh: scrape complete', {
+              symbols: targets.length,
+              total_scraped: result.total_items_scraped,
+              total_stored: result.total_items_stored,
+              rss: result.rss_items,
+              discord: result.discord_items,
+              telegram: result.telegram_items,
+            });
+            // After scraping, update trending topics
+            await discoveryEngine.discoverTrends();
+          }
+        } catch (err) {
+          logger.error('social refresh: background error', { error: String(err) });
         }
-      } catch (err) {
-        logger.error('social refresh: background error', { error: String(err) });
-      }
-    });
+      });
+    }
   } catch (err) {
     logger.error('route error', { endpoint: '/api/social-media/refresh', error: String(err) });
     res.status(500).json({ error: 'Failed to trigger refresh' });

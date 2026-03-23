@@ -40,7 +40,7 @@ Set these in `backend/.env`:
 | `API_SECRET_KEY` | Yes | Any string — used to authenticate `POST /api/refresh-sentiment` |
 | `COINGECKO_API_KEY` | No | Free tier works without it |
 
-Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`, `TRADING_PROVIDER`.
+Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JOB_CRON`, `PORT`, `ALLOWED_ORIGINS`, `MARL_RATE_LIMIT_WINDOW_MS`, `MARL_START_RATE_LIMIT_MAX`, `MARL_COMPARE_RATE_LIMIT_MAX`, `MARL_READ_RATE_LIMIT_MAX`, `TRADING_PROVIDER`, `REDIS_URL`, `TOURNAMENT_WORKER_CONCURRENCY`, `SCRAPER_WORKER_CONCURRENCY`.
 
 ### Social Media, NLP & Telemetry Variables
 
@@ -65,6 +65,9 @@ Optional tuning variables: `CLAUDE_MODEL`, `SENTIMENT_BATCH_SIZE`, `SENTIMENT_JO
 | `TRADING_PROVIDER` | No | `crypto-com` (default) or `binance-us`; selects the real exchange for SANDBOX/LIVE trading mode |
 | `SOCIAL_SCRAPE_CRON` | No | Cron for hourly scrape (default: `0 * * * *`) |
 | `TRENDING_MIN_MENTIONS` | No | Min mentions to appear in trending (default: `3`) |
+| `REDIS_URL` | No | Redis connection URL (e.g. `redis://localhost:6379`). When set, enables BullMQ-backed tournament and scraper worker processes. Omit to keep all work in-process. |
+| `TOURNAMENT_WORKER_CONCURRENCY` | No | Number of parallel tournament jobs the tournament worker processes at a time (default: `2`) |
+| `SCRAPER_WORKER_CONCURRENCY` | No | Number of parallel scraper jobs the scraper worker processes at a time (default: `1`) |
 
 ## Architecture
 
@@ -86,12 +89,23 @@ Express Backend (port 3000)
     ├── BacktestingEngine          → historical simulation + metrics
     ├── SocialMediaScraperManager  → 7-source scraper (Twitter, Reddit, RSS, Discord, Telegram, YouTube, TikTok) + async item scoring
     ├── TrendingDiscoveryEngine    → entity aggregation, velocity scoring, SQLite persistence
-    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison    ├── ExchangeAdapter framework  → CoinbaseAdapter + BinanceAdapter (MARL layer); RiskManager (kill switch, daily-loss, order cap)
+    ├── MultiSourceTrendCalculator → per-symbol trend report with historical comparison
+    ├── ExchangeAdapter framework  → CoinbaseAdapter + BinanceAdapter (MARL layer); RiskManager (kill switch, daily-loss, order cap)
     ├── CryptoComExchange / BinanceUSExchange → ExchangeInterface adapters; CryptoComClient (HMAC-SHA256 REST v2)
     ├── TradingService             → 4 safety guards: kill switch, max positions, position size cap, $1 min notional
     ├── EvolutionaryOrchestrator   → multi-generation loop: MARL → fitness → selection → crossover → mutation
     ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
-    └── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
+    ├── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
+    │
+    │   ── Queue Layer (optional — requires REDIS_URL) ──────────────────────────
+    ├── BullMQ tournament queue    → enqueues SIMULATED competition jobs; falls back to Worker Threads when Redis is absent
+    └── BullMQ scraper queue       → enqueues social scrape jobs; falls back to in-process setImmediate when Redis is absent
+
+Tournament Worker Process (npm run worker:tournament)
+    └── Consumes tournament queue → runs MarlCompetitionEngine → publishes progress/completed/failed via Redis pubsub
+
+Scraper Worker Process (npm run worker:scraper)
+    └── Consumes scraper queue → runs SocialMediaScraperManager → discoverTrends → prune
 ```
 
 **NLP scoring enhancements:**
@@ -105,7 +119,7 @@ Express Backend (port 3000)
 
 - **Daily at 2 AM UTC** (`SENTIMENT_JOB_CRON`): re-analyzes the top `SENTIMENT_BATCH_SIZE` coins (default 50) and refreshes the sentiment cache.
 - **Every 30 minutes** (`TRENDING_JOB_CRON`, default `*/30 * * * *`): scrapes the top-20 coins via the in-memory `TrendingTopicsEngine` and refreshes topic scores.
-- **Hourly** (`SOCIAL_SCRAPE_CRON`, default `0 * * * *`): RSS + Discord + Telegram bulk refresh, Twitter + Reddit for the top 10 coins, `discoverTrends()`, and prune of old items.
+- **Hourly** (`SOCIAL_SCRAPE_CRON`, default `0 * * * *`): RSS + Discord + Telegram bulk refresh, Twitter + Reddit for the top 10 coins, `discoverTrends()`, and prune of old items. When `REDIS_URL` is set, the cron enqueues these jobs to the BullMQ scraper queue (processed by the scraper worker); otherwise they run in-process.
 - **Midnight UTC** (`0 0 * * *`): resets daily fetch and error counters for all social sources.
 
 ## API Endpoints
@@ -320,7 +334,7 @@ curl -s http://localhost:3000/api/info/modes | jq .
 
 ## Tech Stack
 
-**Backend:** Node.js 20, Express, TypeScript (strict), Winston structured logging, node-cron, Helmet, CORS, better-sqlite3
+**Backend:** Node.js 20, Express, TypeScript (strict), Winston structured logging, node-cron, Helmet, CORS, better-sqlite3, BullMQ + ioredis (optional background worker queues)
 
 **Frontend:** React 18, TypeScript, Vite, Chart.js / react-chartjs-2
 
@@ -346,6 +360,13 @@ sentiment-analyzer/
 │   │   │   ├── evolutionary.ts               # Evolutionary tournament routes
 │   │   │   ├── trading.ts                    # TradingService REST wrapper
 │   │   │   └── social-media.ts               # Phase 3 social media API routes
+│   │   ├── queues/
+│   │   │   ├── connection.ts                 # IORedis connection options + isQueueAvailable()
+│   │   │   ├── tournament.queue.ts           # BullMQ Queue<TournamentJobData> singleton
+│   │   │   └── scraper.queue.ts              # BullMQ Queue<ScraperJobData> singleton
+│   │   ├── workers/
+│   │   │   ├── tournament-worker-process.ts  # Stand-alone tournament worker entry point
+│   │   │   └── scraper-worker-process.ts     # Stand-alone scraper worker entry point
 │   │   ├── telemetry/
 │   │   │   └── app-insights-transport.ts     # Azure Application Insights Winston transport
 │   │   └── services/
@@ -409,6 +430,7 @@ sentiment-analyzer/
 │   ├── phase2/               # Phase 2 MARL competition docs
 │   └── references/           # Reference implementations and storage guides
 ├── postman/                  # API test collection
+├── docker-compose.yml        # Backend + Redis + tournament-worker + scraper-worker services
 ├── DEPLOYMENT_GUIDE.md       # Azure Free Tier deployment steps
 └── CLAUDE.md                 # Claude Code guidance
 ```

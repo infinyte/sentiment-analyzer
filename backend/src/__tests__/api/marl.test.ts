@@ -421,7 +421,7 @@ describe('GET /api/marl/competition/:id/status', () => {
     expect(typeof res.body.topReturn).toBe('string');
   });
 
-  it('returns 500 for a FAILED competition', async () => {
+  it('returns 200 for a FAILED competition so the frontend can read the status body', async () => {
     engine.getRecord.mockReturnValue({
       competitionId: 'failed-id',
       status: 'FAILED',
@@ -430,7 +430,7 @@ describe('GET /api/marl/competition/:id/status', () => {
       progress: 0,
     });
     const res = await request(app).get('/api/marl/competition/failed-id/status');
-    expect(res.status).toBe(500);
+    expect(res.status).toBe(200);
     expect(res.body.status).toBe('FAILED');
   });
 });

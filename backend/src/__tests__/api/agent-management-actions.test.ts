@@ -16,6 +16,7 @@ import Database from 'better-sqlite3';
 import { createAgentStatsRouter } from '../../routes/agent-stats.js';
 import { createEvolutionaryRouter } from '../../routes/evolutionary.js';
 import { createDefaultGenome } from '../../services/evolutionary/agent-genome.js';
+import { SQLiteAgentRepository } from '../../repositories/adapters/sqlite/sqlite-agent.repository.js';
 
 function createTestDb(): Database.Database {
   const db = new Database(':memory:');
@@ -35,6 +36,7 @@ function createTestDb(): Database.Database {
       generation_number INTEGER DEFAULT 0,
       parent_id_1 TEXT,
       parent_id_2 TEXT,
+      personality_traits TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
 
@@ -126,8 +128,9 @@ describe('agent lifecycle management routes', () => {
 
     app = express();
     app.use(express.json());
-    app.use(createAgentStatsRouter(db));
-    app.use(createEvolutionaryRouter(db));
+    const agentRepo = new SQLiteAgentRepository(db);
+    app.use(createAgentStatsRouter(agentRepo));
+    app.use(createEvolutionaryRouter(db, agentRepo));
   });
 
   afterEach(() => {

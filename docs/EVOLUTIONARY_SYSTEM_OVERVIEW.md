@@ -21,6 +21,8 @@ The result is a system where tournament outcomes feed future populations instead
 1. A tournament is started with `POST /api/evolutionary/tournament`.
 2. `EvolutionaryOrchestrator` creates an initial population and initializes stats rows.
 3. Each generation runs a MARL competition through `MarlCompetitionEngine`.
+   - When `REDIS_URL` is configured, SIMULATED competitions are enqueued to the BullMQ `tournament` queue and processed by the stand-alone tournament worker process (`workers/tournament-worker-process.ts`). Progress and completion events are published via Redis pubsub and bridged back to the in-process competition record by a `QueueEvents` listener in `routes/marl-competition.ts`.
+   - When `REDIS_URL` is not set, competitions fall back to Worker Threads (in-process), preserving the original behavior.
 4. Competition results are persisted to `agent_statistics` and `agent_competitions`.
 5. `FitnessCalculator` ranks the population.
 6. `SelectionAlgorithm` partitions the population into survivors, middle tier, and retirement candidates.
@@ -159,6 +161,8 @@ High-value current coverage includes:
 ## Operational Notes
 
 - Tournament execution is background and fire-and-forget from the API caller’s perspective.
+- When `REDIS_URL` is set, SIMULATED tournament jobs are offloaded to the `tournament-worker-process`. The API process tracks job state via `QueueEvents`; poll `GET /api/marl/competition/:id/status` as normal.
+- When `REDIS_URL` is not set, all tournament work runs inside Worker Threads in the API process. Behavior is identical from the caller's perspective.
 - The summary endpoint is intended for dashboards, not detailed forensic analysis.
 - The system currently uses persisted tournament snapshots rather than live-streaming generation events to the client.
 
