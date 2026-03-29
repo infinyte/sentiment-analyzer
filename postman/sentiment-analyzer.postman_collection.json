@@ -725,7 +725,7 @@
     },
     {
       "name": "09 - Social Media Intelligence",
-      "description": "Test clustered trending topics and cursor-based item pagination",
+      "description": "Test all social media endpoints: trending topics, scored items, item detail, stats, refresh, trending-score",
       "item": [
         {
           "name": "GET /api/social-media/trending-topics",
@@ -783,7 +783,1708 @@
                   "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
                   "pm.test('Response contains pagination metadata', function () { var data = pm.response.json(); pm.expect(data).to.have.property('limit'); pm.expect(data).to.have.property('offset'); pm.expect(data).to.have.property('items'); pm.expect(Array.isArray(data.items)).to.be.true; });",
                   "pm.test('next_cursor is nullable or string', function () { var nextCursor = pm.response.json().next_cursor; pm.expect(nextCursor === undefined || nextCursor === null || typeof nextCursor === 'string').to.be.true; });",
+                  "if (pm.response.json().items && pm.response.json().items.length > 0) { pm.environment.set('social_item_id', pm.response.json().items[0].id); }",
                   "if (pm.response.json().next_cursor) { pm.environment.set('social_items_cursor', pm.response.json().next_cursor); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/social-media/items - Next page (cursor)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/items?limit=25&cursor={{social_items_cursor}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "items"],
+              "query": [
+                {"key": "limit", "value": "25"},
+                {"key": "cursor", "value": "{{social_items_cursor}}"}
+              ]
+            },
+            "description": "Fetch next page using cursor from previous response. Only meaningful when social_items_cursor is set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Items array present', function () { pm.expect(Array.isArray(pm.response.json().items)).to.be.true; })"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/social-media/item/:id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/item/{{social_item_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "item", "{{social_item_id}}"]
+            },
+            "description": "Fetch a single scored social-media item with full scoring breakdown (FinBERT, sarcasm, coin extraction)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Item has id, platform, content, and scores', function () { var item = pm.response.json(); pm.expect(item).to.have.property('id'); pm.expect(item).to.have.property('platform'); pm.expect(item).to.have.property('content'); pm.expect(item).to.have.property('sentiment_score'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/social-media/stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "stats"]
+            },
+            "description": "Source health and fetch counters for all social media scrapers."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Stats response has sources', function () { var data = pm.response.json(); pm.expect(data).to.have.property('sources'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/social-media/refresh - Single coin",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {"mode": "raw", "raw": "{\"symbol\": \"BTC\"}"},
+            "url": {
+              "raw": "{{base_url}}/api/social-media/refresh",
+              "host": ["{{base_url}}"],
+              "path": ["api", "social-media", "refresh"]
+            },
+            "description": "Trigger an immediate scrape for a single coin symbol."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
+                  "pm.test('Response indicates refresh triggered', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('status', 'message', 'queued'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/trending-score/:symbol",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending-score/BTC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trending-score", "BTC"]
+            },
+            "description": "Comprehensive multi-source trend report for a coin symbol."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has symbol and trending data', function () { var data = pm.response.json(); pm.expect(data).to.have.property('symbol'); pm.expect(data.symbol).to.equal('BTC'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "10 - Tournament Monitor",
+      "description": "Test all /api/tournaments/* endpoints: list, active, single, pause, resume, stop, SSE stream",
+      "item": [
+        {
+          "name": "GET /api/tournaments - List all",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments"]
+            },
+            "description": "List all tournaments regardless of status (RUNNING, PAUSED, COMPLETED, STOPPED, ERROR, QUEUED)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has tournaments array and total', function () { var data = pm.response.json(); pm.expect(data).to.have.property('tournaments'); pm.expect(data).to.have.property('total'); pm.expect(Array.isArray(data.tournaments)).to.be.true; });",
+                  "pm.test('Tournament objects have required fields', function () { var tournaments = pm.response.json().tournaments; if (tournaments.length > 0) { var t = tournaments[0]; pm.expect(t).to.have.property('id'); pm.expect(t).to.have.property('status'); pm.expect(t).to.have.property('mode'); pm.expect(t).to.have.property('agents'); pm.expect(Array.isArray(t.agents)).to.be.true; pm.environment.set('tournament_id', t.id); } });",
+                  "pm.test('Tournament status values are valid', function () { var valid = ['RUNNING','PAUSED','COMPLETED','STOPPED','ERROR','QUEUED']; pm.response.json().tournaments.forEach(function(t) { pm.expect(valid).to.include(t.status); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tournaments/active - Active only",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/active",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "active"]
+            },
+            "description": "List only RUNNING or PAUSED tournaments. Returns count badge value used by the UI tab."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has tournaments array', function () { pm.expect(Array.isArray(pm.response.json().tournaments)).to.be.true; });",
+                  "pm.test('All returned tournaments are RUNNING or PAUSED', function () { pm.response.json().tournaments.forEach(function(t) { pm.expect(['RUNNING', 'PAUSED']).to.include(t.status); }); });",
+                  "pm.test('total matches array length', function () { var data = pm.response.json(); pm.expect(data.total).to.equal(data.tournaments.length); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tournaments/:id - Single tournament",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/{{tournament_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "{{tournament_id}}"]
+            },
+            "description": "Fetch a single tournament by ID including agent snapshots and elapsed time."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Tournament has id, status, agents, mode', function () { var t = pm.response.json(); pm.expect(t).to.have.property('id'); pm.expect(t).to.have.property('status'); pm.expect(t).to.have.property('agents'); pm.expect(t).to.have.property('mode'); }); pm.test('agents is an array of AgentSnapshot objects', function () { var agents = pm.response.json().agents; pm.expect(Array.isArray(agents)).to.be.true; if (agents.length > 0) { pm.expect(agents[0]).to.have.property('id'); pm.expect(agents[0]).to.have.property('equity'); } }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tournaments/:id - Not found (404)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/nonexistent-tournament-id",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "nonexistent-tournament-id"]
+            },
+            "description": "Verify 404 is returned for an unknown tournament ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 404 Not Found', function () { pm.response.to.have.status(404); });",
+                  "pm.test('Error field is present', function () { pm.expect(pm.response.json().error).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/tournaments/:id/pause",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/{{tournament_id}}/pause",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "{{tournament_id}}", "pause"]
+            },
+            "description": "Pause a RUNNING tournament. Returns 409 if already paused or not running."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 404, or 409', function () { pm.expect([200, 404, 409]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Tournament status is now PAUSED', function () { pm.expect(pm.response.json().status).to.equal('PAUSED'); }); }",
+                  "if (pm.response.code === 409) { pm.test('Conflict error has message', function () { pm.expect(pm.response.json().error).to.be.a('string'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/tournaments/:id/resume",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/{{tournament_id}}/resume",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "{{tournament_id}}", "resume"]
+            },
+            "description": "Resume a PAUSED tournament. Returns 409 if not currently paused."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 404, or 409', function () { pm.expect([200, 404, 409]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Tournament status is now RUNNING', function () { pm.expect(pm.response.json().status).to.equal('RUNNING'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/tournaments/:id/stop",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/{{tournament_id}}/stop",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "{{tournament_id}}", "stop"]
+            },
+            "description": "Stop a tournament permanently. Returns 409 if already in a terminal state (STOPPED/COMPLETED/ERROR)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 404, or 409', function () { pm.expect([200, 404, 409]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Tournament status is now STOPPED', function () { pm.expect(pm.response.json().status).to.equal('STOPPED'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/tournaments/:id/stream (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Accept", "value": "text/event-stream"}],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/{{tournament_id}}/stream",
+              "host": ["{{base_url}}"],
+              "path": ["api", "tournaments", "{{tournament_id}}", "stream"]
+            },
+            "description": "Server-Sent Events stream for a tournament. Emits 'stats' (every 5s), 'status' (on change), and 'heartbeat' (every 30s) events. Auto-closes on terminal states. NOTE: SSE cannot be fully tested in Postman — use a browser or EventSource client."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Content-Type is text/event-stream or 404 for missing tournament', function () { if (pm.response.code === 200) { pm.expect(pm.response.headers.get('Content-Type')).to.include('text/event-stream'); } else { pm.expect([404]).to.include(pm.response.code); } });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "11 - MARL Extended",
+      "description": "Additional MARL endpoints: equity curves, trade log, SSE stream, agent learning, coin universe, pretrain, algorithm",
+      "item": [
+        {
+          "name": "GET /api/marl/competition/:id/equity-curves",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{marl_competition_id}}/equity-curves",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "{{marl_competition_id}}", "equity-curves"]
+            },
+            "description": "Live equity curve snapshots per agent for a running or completed competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 202, or 404', function () { pm.expect([200, 202, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Response has snapshots array', function () { var data = pm.response.json(); pm.expect(data).to.have.property('snapshots'); pm.expect(Array.isArray(data.snapshots)).to.be.true; }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:id/trade-log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{marl_competition_id}}/trade-log",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "{{marl_competition_id}}", "trade-log"]
+            },
+            "description": "Per-agent trade summary for a competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Trade log has entries', function () { pm.expect(pm.response.json()).to.have.property('trades'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/competition/:id/stream (SSE)",
+          "request": {
+            "method": "GET",
+            "header": [{"key": "Accept", "value": "text/event-stream"}],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/{{marl_competition_id}}/stream",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "competition", "{{marl_competition_id}}", "stream"]
+            },
+            "description": "SSE stream of competition events (tick updates, final results). NOTE: Use browser EventSource for full testing."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/agents/learning",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/learning",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "agents", "learning"]
+            },
+            "description": "List all agent learning states (Q-tables / policy weights) stored in SQLite."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has agents array', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agents'); pm.expect(Array.isArray(data.agents)).to.be.true; });",
+                  "if (pm.response.json().agents.length > 0) { pm.environment.set('learning_agent_id', pm.response.json().agents[0].agentId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/marl/agents/:agentId/learning",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/{{learning_agent_id}}/learning",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "agents", "{{learning_agent_id}}", "learning"]
+            },
+            "description": "Reset an agent's persisted learning state. Irreversible — the agent starts fresh next competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Confirmation message present', function () { pm.expect(pm.response.json()).to.have.any.keys('message', 'deleted'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/coin-universe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/coin-universe",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "coin-universe"]
+            },
+            "description": "Preview AUTO coin selection — shows which symbols would be picked for the next competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Coin universe has symbols array', function () { var data = pm.response.json(); pm.expect(data).to.have.property('symbols'); pm.expect(Array.isArray(data.symbols)).to.be.true; pm.expect(data.symbols.length).to.be.greaterThan(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/agents/:agentId/pretrain",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"episodes\": 50,\n  \"stepsPerEpisode\": 200,\n  \"riskProfile\": \"AGGRESSIVE\",\n  \"regimes\": [\"BULL_TREND\", \"BEAR_TREND\", \"SIDEWAYS\"]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/alpha/pretrain",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "agents", "alpha", "pretrain"]
+            },
+            "description": "Pre-train an agent on synthetic market data. Additive — safe to call multiple times; learning continues from prior state."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Convergence curve is returned', function () { var data = pm.response.json(); pm.expect(data).to.have.property('convergenceCurve'); pm.expect(Array.isArray(data.convergenceCurve)).to.be.true; });",
+                  "pm.test('Episodes count matches request', function () { pm.expect(pm.response.json().episodesRun).to.equal(50); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/agents/:agentId/algorithm",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"algorithm\": \"Q_LEARNING\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/alpha/algorithm",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "agents", "alpha", "algorithm"]
+            },
+            "description": "Declare the learning algorithm for an agent (Q_LEARNING, POLICY_GRADIENT, etc.)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Algorithm acknowledged', function () { pm.expect(pm.response.json()).to.have.any.keys('algorithm', 'agentId', 'message'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "12 - MARL Broker / Real Trading",
+      "description": "Broker credential management and real-money trading endpoints. Requires BROKER_MASTER_KEY env var.",
+      "item": [
+        {
+          "name": "POST /api/marl/broker/credentials - Store credentials",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"provider\": \"crypto-com\",\n  \"label\": \"Test Account\",\n  \"apiKey\": \"demo-key\",\n  \"apiSecret\": \"demo-secret\",\n  \"mode\": \"SANDBOX\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "credentials"]
+            },
+            "description": "Store broker credentials encrypted with AES-256-GCM. Requires BROKER_MASTER_KEY to be set."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 201 or 500 (500 if BROKER_MASTER_KEY not set)', function () { pm.expect([201, 500]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 201) { pm.test('Credential ID returned', function () { pm.expect(pm.response.json()).to.have.property('id'); pm.environment.set('credential_id', pm.response.json().id); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/broker/credentials - List metadata",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "credentials"]
+            },
+            "description": "List stored credential metadata. Secrets are never returned."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Credentials array present', function () { pm.expect(Array.isArray(pm.response.json().credentials)).to.be.true; });",
+                  "pm.test('No secret fields exposed', function () { pm.response.json().credentials.forEach(function(c) { pm.expect(c).to.not.have.property('apiSecret'); pm.expect(c).to.not.have.property('encryptedSecret'); }); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/broker/credentials/picker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/picker",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "credentials", "picker"]
+            },
+            "description": "Unauthenticated endpoint for the frontend credential dropdown. Returns minimal { id, label, provider, mode } shape."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Picker response is an array', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/broker/connect/:id",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connect/{{credential_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "connect", "{{credential_id}}"]
+            },
+            "description": "Decrypt credentials and connect the exchange adapter. Required before starting a PAPER/LIVE competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 404, or 500', function () { pm.expect([200, 404, 500]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Adapter connected successfully', function () { pm.expect(pm.response.json()).to.have.any.keys('connected', 'provider', 'message'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/broker/connected",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connected",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "connected"]
+            },
+            "description": "List all currently connected exchange adapters."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Connected adapters array present', function () { pm.expect(Array.isArray(pm.response.json().adapters)).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/broker/orders/:competitionId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/orders/{{marl_competition_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "orders", "{{marl_competition_id}}"]
+            },
+            "description": "Retrieve the order audit trail for a real-trading competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Orders array present', function () { pm.expect(Array.isArray(pm.response.json().orders)).to.be.true; }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/marl/broker/credentials/:id",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/{{credential_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "credentials", "{{credential_id}}"]
+            },
+            "description": "Remove stored broker credential by ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/marl/broker/emergency-stop",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"competitionId\": \"{{marl_competition_id}}\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/emergency-stop",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "broker", "emergency-stop"]
+            },
+            "description": "Cancel all open orders for a competition immediately. Use in emergencies."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Cancellation count returned', function () { pm.expect(pm.response.json()).to.have.any.keys('cancelled', 'message'); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "13 - Agent Management",
+      "description": "Test all /api/agents/* endpoints: list, leaderboard, single, customize, retire, history, genome, genealogy",
+      "item": [
+        {
+          "name": "GET /api/agents - List all agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents?limit=20&offset=0",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents"],
+              "query": [{"key": "limit", "value": "20"}, {"key": "offset", "value": "0"}]
+            },
+            "description": "Paginated list of all registered agents."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has agents array and total', function () { var data = pm.response.json(); pm.expect(data).to.have.property('agents'); pm.expect(data).to.have.property('total'); pm.expect(Array.isArray(data.agents)).to.be.true; });",
+                  "if (pm.response.json().agents.length > 0) { pm.environment.set('agent_id', pm.response.json().agents[0].id); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/stats/leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/stats/leaderboard?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "stats", "leaderboard"],
+              "query": [{"key": "limit", "value": "10"}]
+            },
+            "description": "Top agents ranked by win rate. Must be registered before /api/agents/:id to avoid wildcard swallowing."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Leaderboard is an array', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; });",
+                  "pm.test('Leaderboard entries have rank and win_rate', function () { var leaders = pm.response.json(); if (leaders.length > 0) { pm.expect(leaders[0]).to.have.property('win_rate'); } });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/:id - Single agent",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}"]
+            },
+            "description": "Full agent profile including cosmetics, genome summary, and statistics."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Agent has id, name, riskProfile, and statistics', function () { var a = pm.response.json(); pm.expect(a).to.have.property('id'); pm.expect(a).to.have.property('name'); pm.expect(a).to.have.property('riskProfile'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT /api/agents/:id/customize",
+          "request": {
+            "method": "PUT",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Apex Trader\",\n  \"emoji\": \"🦅\",\n  \"color\": \"#FF6B00\",\n  \"bio\": \"High-frequency momentum seeker\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/customize",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}", "customize"]
+            },
+            "description": "Update agent cosmetics (name, emoji, color, bio). Does not affect trading behaviour."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Updated agent returned', function () { var a = pm.response.json(); pm.expect(a.name).to.equal('Apex Trader'); pm.expect(a.emoji).to.equal('🦅'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/agents/:id/retire",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/retire",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}", "retire"]
+            },
+            "description": "Manually retire an underperforming agent. Retired agents are excluded from future competitions."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Agent status is retired', function () { pm.expect(pm.response.json()).to.have.any.keys('retired', 'status', 'message'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/:id/history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}", "history"]
+            },
+            "description": "Competition history for a specific agent."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('History is an array', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/:id/genome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/genome",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}", "genome"]
+            },
+            "description": "Retrieve the full genome (risk tolerance, learning rate, discount factor, etc.) for an agent."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Genome has numeric parameters', function () { var g = pm.response.json(); pm.expect(g).to.have.any.keys('riskTolerance', 'learningRate', 'discountFactor', 'explorationRate'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/agents/:id/genealogy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/{{agent_id}}/genealogy",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "{{agent_id}}", "genealogy"]
+            },
+            "description": "Ancestry tree for an agent — shows parent and grandparent lineage from evolutionary breeding."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Genealogy response has agentId', function () { pm.expect(pm.response.json()).to.have.property('agentId'); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "14 - Evolutionary System",
+      "description": "Test evolutionary tournament endpoints: start, breed, list, detail, summary, and evolution history/genome/population",
+      "item": [
+        {
+          "name": "POST /api/evolutionary/tournament - Start",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"generations\": 5,\n  \"populationSize\": 6,\n  \"symbols\": [\"BTC\", \"ETH\"],\n  \"duration\": 200,\n  \"survivalPercent\": 0.5,\n  \"mutationIntensity\": \"MEDIUM\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evolutionary", "tournament"]
+            },
+            "description": "Start a new multi-generation evolutionary tournament."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 202 Accepted', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Tournament ID and status returned', function () { var data = pm.response.json(); pm.expect(data).to.have.property('tournamentId'); pm.expect(data).to.have.property('status'); pm.environment.set('evolutionary_tournament_id', data.tournamentId); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/evolutionary/tournament - List all",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evolutionary", "tournament"]
+            },
+            "description": "List all evolutionary tournaments with their generation counts."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Tournaments array present', function () { pm.expect(Array.isArray(pm.response.json().tournaments)).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/evolutionary/tournament/:id - Detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament/{{evolutionary_tournament_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evolutionary", "tournament", "{{evolutionary_tournament_id}}"]
+            },
+            "description": "Full status and generation history for one evolutionary tournament."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Response has id, status, and generations', function () { var data = pm.response.json(); pm.expect(data).to.have.property('id'); pm.expect(data).to.have.property('status'); pm.expect(data).to.have.property('generations'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/evolutionary/summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evolutionary", "summary"]
+            },
+            "description": "Aggregate tournament history for dashboards — best fitness, avg generations, population trends."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Summary has tournament stats', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('totalTournaments', 'bestFitness', 'averageGenerations'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/evolutionary/breed",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"parentIds\": [\"{{agent_id}}\"],\n  \"count\": 2,\n  \"mutationIntensity\": \"LIGHT\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/breed",
+              "host": ["{{base_url}}"],
+              "path": ["api", "evolutionary", "breed"]
+            },
+            "description": "Create mutated children from selected parent agents via genetic crossover."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 400', function () { pm.expect([200, 400]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Children array returned', function () { pm.expect(Array.isArray(pm.response.json().children)).to.be.true; }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/history",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "evolution", "history"]
+            },
+            "description": "All evolutionary tournament generations with fitness stats."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('History is an array', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/best-genome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/best-genome",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "evolution", "best-genome"]
+            },
+            "description": "Genome of the highest-fitness agent ever produced across all evolutionary tournaments."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Best genome has fitness score', function () { pm.expect(pm.response.json()).to.have.property('fitnessScore'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/marl/evolution/population",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/population",
+              "host": ["{{base_url}}"],
+              "path": ["api", "marl", "evolution", "population"]
+            },
+            "description": "Current population of the most recent evolutionary tournament."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Population is an array of agent entries', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "15 - Trading",
+      "description": "Live / paper exchange trading endpoints via TradingService safety guards",
+      "item": [
+        {
+          "name": "GET /api/trading/exchange-status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/exchange-status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trading", "exchange-status"]
+            },
+            "description": "Connection state, provider name, and exchange mode (PAPER/SANDBOX/LIVE)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status has provider and mode', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('provider', 'mode', 'connected'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/trading/price/:symbol",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/price/BTC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trading", "price", "BTC"]
+            },
+            "description": "Latest price from the active exchange for a symbol."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Price is a positive number', function () { var data = pm.response.json(); pm.expect(data).to.have.property('price'); pm.expect(data.price).to.be.a('number'); pm.expect(data.price).to.be.greaterThan(0); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/trading/balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/balances",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trading", "balances"]
+            },
+            "description": "All non-zero balances on the active exchange."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Balances is an array', function () { pm.expect(Array.isArray(pm.response.json().balances)).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/trading/order - Place order",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"BTC\",\n  \"side\": \"BUY\",\n  \"quantity\": 0.001,\n  \"type\": \"MARKET\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/trading/order",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trading", "order"]
+            },
+            "description": "Place an order via TradingService safety guards (kill switch, max positions, position size cap, $1 min notional)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200, 400, or 503 (kill switch)', function () { pm.expect([200, 400, 503]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Order ID returned', function () { pm.expect(pm.response.json()).to.have.any.keys('orderId', 'order_id', 'id'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/trading/stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trading", "stats"]
+            },
+            "description": "Capital, PnL, and trade counts for the current session."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Stats has capital and pnl fields', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('capital', 'pnl', 'totalTrades', 'tradeCount'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "16 - Admin Config",
+      "description": "Runtime configuration management. Masked secrets, PATCH to set, DELETE to clear.",
+      "item": [
+        {
+          "name": "GET /api/admin/config - List all config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/config",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "config"]
+            },
+            "description": "Return all config rows. Secret values are masked (shown as *****)."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Config is an array or object', function () { var data = pm.response.json(); pm.expect(data !== null && data !== undefined).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PATCH /api/admin/config/:key - Set config value",
+          "request": {
+            "method": "PATCH",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"value\": \"test-value\"}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/config/test_key",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "config", "test_key"]
+            },
+            "description": "Set a single runtime config value by key."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 400', function () { pm.expect([200, 400]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Updated config entry returned', function () { pm.expect(pm.response.json()).to.have.any.keys('key', 'updated', 'message'); }); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "DELETE /api/admin/config/:key - Clear config value",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/config/test_key",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "config", "test_key"]
+            },
+            "description": "Clear a config value. The key remains but the value is set to null."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "17 - Backtesting",
+      "description": "Run and retrieve backtesting simulations",
+      "item": [
+        {
+          "name": "POST /api/backtest/run",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"symbol\": \"BTC\",\n  \"startDate\": \"2024-01-01\",\n  \"endDate\": \"2024-03-01\",\n  \"initialCapital\": 10000,\n  \"strategy\": \"MOMENTUM\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/backtest/run",
+              "host": ["{{base_url}}"],
+              "path": ["api", "backtest", "run"]
+            },
+            "description": "Run a backtest simulation. Returns a testId for polling results."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
+                  "pm.test('Test ID returned', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('testId', 'id'); pm.environment.set('backtest_id', data.testId || data.id); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/backtest/results/:testId",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/backtest/results/{{backtest_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "backtest", "results", "{{backtest_id}}"]
+            },
+            "description": "Retrieve full backtest simulation details by test ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 404', function () { pm.expect([200, 404]).to.include(pm.response.code); });",
+                  "if (pm.response.code === 200) { pm.test('Backtest results have pnl and trades', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('pnl', 'totalReturn', 'trades', 'equity'); }); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "18 - Miscellaneous Endpoints",
+      "description": "Sentiment analysis, rankings, info, scrape ingestion, trending, and agent configure",
+      "item": [
+        {
+          "name": "POST /api/sentiment/analyze",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Bitcoin breaks $100K as institutional buying surges\",\n  \"mode\": \"TRADING_SIGNALS\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/analyze",
+              "host": ["{{base_url}}"],
+              "path": ["api", "sentiment", "analyze"]
+            },
+            "description": "Run on-demand sentiment analysis in one of 4 modes: BASIC, ADVANCED, TRADING_SIGNALS, SMART."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Analysis result has score and confidence', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('sentiment', 'score', 'confidence', 'sentiment_score'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/rankings/top-coins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rankings/top-coins?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rankings", "top-coins"],
+              "query": [{"key": "limit", "value": "10"}]
+            },
+            "description": "Rank coins by composite smart-sentiment score."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Rankings is an array', function () { pm.expect(Array.isArray(pm.response.json())).to.be.true; });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/info/modes",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/info/modes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "info", "modes"]
+            },
+            "description": "Documentation: available analysis modes, agent types, and risk profiles."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Modes documented', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('analysisModes', 'modes', 'agentTypes', 'riskProfiles'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/trending",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trending"]
+            },
+            "description": "Return currently trending topics across all data sources."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response has trending data', function () { var data = pm.response.json(); pm.expect(data).to.have.any.keys('trending', 'topics', 'data'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/trending/ingest",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"posts\": [\n    {\n      \"platform\": \"twitter\",\n      \"content\": \"BTC to the moon! #Bitcoin\",\n      \"author\": \"test_user\",\n      \"timestamp\": \"2026-03-28T00:00:00Z\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/trending/ingest",
+              "host": ["{{base_url}}"],
+              "path": ["api", "trending", "ingest"]
+            },
+            "description": "Manually push ScrapedPost objects into the trending pipeline."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
+                  "pm.test('Ingested count returned', function () { pm.expect(pm.response.json()).to.have.any.keys('ingested', 'count', 'accepted', 'message'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/scrape/social?symbol=BTC",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/scrape/social?symbol=BTC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "scrape", "social"],
+              "query": [{"key": "symbol", "value": "BTC"}]
+            },
+            "description": "Scrape one symbol from all configured social platforms immediately."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
+                  "pm.test('Scrape result returned', function () { pm.expect(pm.response.json()).to.have.any.keys('results', 'posts', 'scraped', 'message'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/scrape/batch",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"symbols\": [\"BTC\", \"ETH\", \"SOL\"]}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/scrape/batch",
+              "host": ["{{base_url}}"],
+              "path": ["api", "scrape", "batch"]
+            },
+            "description": "Scrape multiple symbols from social platforms in one request."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 or 202', function () { pm.expect([200, 202]).to.include(pm.response.code); });",
+                  "pm.test('Batch results returned', function () { pm.expect(pm.response.json()).to.have.any.keys('results', 'processed', 'message'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST /api/agents/configure",
+          "request": {
+            "method": "POST",
+            "header": [{"key": "Content-Type", "value": "application/json"}],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"agents\": [\n    { \"id\": \"alpha\", \"riskProfile\": \"AGGRESSIVE\" },\n    { \"id\": \"beta\",  \"riskProfile\": \"CONSERVATIVE\" },\n    { \"id\": \"gamma\", \"riskProfile\": \"SCALPING\" }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/agents/configure",
+              "host": ["{{base_url}}"],
+              "path": ["api", "agents", "configure"]
+            },
+            "description": "Register and configure trading agents before starting a competition."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Returns 200 OK', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Agents acknowledged', function () { pm.expect(pm.response.json()).to.have.any.keys('agents', 'configured', 'message'); });"
                 ]
               }
             }
@@ -797,6 +2498,13 @@
     {"key": "api_secret_key", "value": "", "type": "string"},
     {"key": "test_symbol", "value": "", "type": "string"},
     {"key": "marl_competition_id", "value": "", "type": "string"},
-    {"key": "social_items_cursor", "value": "", "type": "string"}
+    {"key": "social_items_cursor", "value": "", "type": "string"},
+    {"key": "tournament_id", "value": "", "type": "string"},
+    {"key": "agent_id", "value": "", "type": "string"},
+    {"key": "credential_id", "value": "", "type": "string"},
+    {"key": "evolutionary_tournament_id", "value": "", "type": "string"},
+    {"key": "backtest_id", "value": "", "type": "string"},
+    {"key": "social_item_id", "value": "", "type": "string"},
+    {"key": "learning_agent_id", "value": "", "type": "string"}
   ]
 }
