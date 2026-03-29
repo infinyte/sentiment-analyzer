@@ -5,5 +5,13 @@
     "moduleResolution": "node",
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true
-  }
+  },
+  "exclude": [
+    "node_modules",
+    "src/**/__mocks__",
+    "src/__tests__",
+    "src/services/worker-pool.ts",
+    "src/workers/tournament-worker-process.ts",
+    "src/workers/scraper-worker-process.ts"
+  ]
 }
