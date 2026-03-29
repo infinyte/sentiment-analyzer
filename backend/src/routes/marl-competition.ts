@@ -28,10 +28,12 @@ import { isQueueAvailable } from '../queues/connection.js';
 import { appConfigService } from '../services/app-config-service.js';
 import { QueueEvents } from 'bullmq';
 import { createConnectionOptions } from '../queues/connection.js';
+import { tournamentService } from '../services/tournament-service.js';
 import logger from '../logger.js';
 
 const router     = Router();
 const engine     = new MarlCompetitionEngine();
+tournamentService.setEngine(engine);
 const preTrainer = new PreTrainer();
 
 // ── BullMQ QueueEvents bridge ─────────────────────────────────────────────────
@@ -496,6 +498,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
             logger.error('failed to enqueue tournament job', { competitionId, error: String(err) });
             engine.updateRecord(competitionId, { status: 'FAILED', progress: 0 });
           });
+        tournamentService.registerBullMqCompetition(competitionId);
       } else {
         // Fallback: Worker Thread (no Redis configured)
         const handle = workerPool.runMarlCompetition(
@@ -503,6 +506,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
           config,
           (progress) => engine.updateRecord(competitionId, { progress }),
         );
+        tournamentService.registerWorkerCompetition(competitionId, handle);
         handle.result.then(onSuccess).catch(onFailure);
       }
     } else {
@@ -512,6 +516,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
         }, competitionId)
         .then(onSuccess)
         .catch(onFailure);
+      tournamentService.registerPaperLiveCompetition(competitionId);
     }
 
     logger.info('competition started', {
@@ -1248,4 +1253,5 @@ router.get('/api/marl/competition/:competitionId/trade-log', competitionReadRate
   });
 });
 
+export { engine };
 export default router;

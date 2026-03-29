@@ -1,11 +1,12 @@
 // FRONTEND - App.tsx
 // Main React component with dashboard, detail modal, and MARL competition view
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentManagementDashboard } from './components/AgentManagementDashboard';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { SocialDashboard } from './components/SocialDashboard';
 import { ConfigEditor } from './components/ConfigEditor';
+import TournamentMonitor from './components/TournamentMonitor';
 import { Line } from 'react-chartjs-2';
 import {
   Chart as ChartJS,
@@ -362,7 +363,10 @@ function useSystemHealth() {
         const response = await fetch('/api/health');
         const payload = await response.json().catch(() => null) as HealthPayload | null;
 
-        if (!response.ok || !payload) {
+        // A 503 with a valid JSON body means the server is up but degraded
+        // (e.g. a required API key is missing). Only treat it as "down" when
+        // the endpoint itself is unreachable or returned no parseable body.
+        if (!payload) {
           throw new Error(`Health check failed (${response.status}).`);
         }
 
@@ -2556,7 +2560,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading' | 'admin';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading' | 'admin' | 'tournaments';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
@@ -2567,11 +2571,36 @@ export default function App() {
   const [searchFeedback, setSearchFeedback] = useState<string | null>(null);
   const [isDark, setIsDark] = useState(() => localStorage.getItem('theme') === 'dark');
   const [healthExpanded, setHealthExpanded] = useState(false);
+  const [activeTournamentCount, setActiveTournamentCount] = useState(0);
+  const tournamentPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
   }, [isDark]);
+
+  // Poll active tournament count for the tab badge (every 5 seconds)
+  const fetchActiveTournamentCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/tournaments/active');
+      if (res.ok) {
+        const body = await res.json() as { success: boolean; data?: unknown[] };
+        if (body.success && Array.isArray(body.data)) {
+          setActiveTournamentCount(body.data.length);
+        }
+      }
+    } catch {
+      // Ignore — count stays at last known value
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchActiveTournamentCount();
+    tournamentPollRef.current = setInterval(fetchActiveTournamentCount, 5_000);
+    return () => {
+      if (tournamentPollRef.current) clearInterval(tournamentPollRef.current);
+    };
+  }, [fetchActiveTournamentCount]);
 
   const handleTickerSearch = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2703,6 +2732,9 @@ export default function App() {
           </button>
           <button style={navTabStyle('admin')} onClick={() => setActiveView('admin')}>
             Admin
+          </button>
+          <button style={navTabStyle('tournaments')} onClick={() => setActiveView('tournaments')}>
+            Tournaments{activeTournamentCount > 0 ? ` (${activeTournamentCount})` : ''}
           </button>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap', padding: '0.75rem 0' }}>
@@ -2914,6 +2946,9 @@ export default function App() {
         )}
         {activeView === 'admin' && (
           <ConfigEditor />
+        )}
+        {activeView === 'tournaments' && (
+          <TournamentMonitor isDark={isDark} />
         )}
       </main>
 

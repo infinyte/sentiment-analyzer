@@ -1030,6 +1030,37 @@ export class MarlCompetitionEngine {
 
   private results: Map<string, CompetitionRecord> = new Map();
   private liveEquitySnapshots: Map<string, EquitySnapshot[]> = new Map();
+
+  /** Stop signals: competitions that should halt immediately. */
+  private readonly stopSignals = new Set<string>();
+  /** Pause signals: competitions that should suspend execution (PAPER/LIVE only). */
+  private readonly pauseSignals = new Set<string>();
+
+  /** Signal a running competition to stop on its next tick. */
+  signalStop(competitionId: string): void {
+    this.stopSignals.add(competitionId);
+    this.pauseSignals.delete(competitionId); // Clear pause if set
+  }
+
+  /** Signal a running PAPER/LIVE competition to pause. No-op for SIMULATED. */
+  signalPause(competitionId: string): void {
+    this.pauseSignals.add(competitionId);
+  }
+
+  /** Clear a pause signal, allowing a paused PAPER/LIVE competition to resume. */
+  signalResume(competitionId: string): void {
+    this.pauseSignals.delete(competitionId);
+  }
+
+  /** Returns true if a stop signal has been set for this competition. */
+  isStopSignalled(competitionId: string): boolean {
+    return this.stopSignals.has(competitionId);
+  }
+
+  /** Returns true if a pause signal has been set for this competition. */
+  isPauseSignalled(competitionId: string): boolean {
+    return this.pauseSignals.has(competitionId);
+  }
   private coinGecko: CoinGeckoService;
   private readonly sentimentEngine: SentimentAnalyzerEngine;
 
@@ -1797,6 +1828,9 @@ export class MarlCompetitionEngine {
     const priceSeries = this.simulatePrices(config.symbols, STEPS, basePrices);
 
     for (let step = 0; step < STEPS; step++) {
+      // Honour external stop signal between steps (main-thread execution only)
+      if (this.isStopSignalled(competitionId)) { break; }
+
       const prevPrices = priceSeries[Math.max(step - 1, 0)];
       const prices = priceSeries[step];
       const nextPrices = priceSeries[Math.min(step + 1, STEPS - 1)];
@@ -1898,6 +1932,22 @@ export class MarlCompetitionEngine {
     await new Promise<void>((resolve) => {
       const tick = setInterval(async () => {
         try {
+          // Check for external stop/pause signals
+          if (this.isStopSignalled(competitionId)) {
+            clearInterval(tick);
+            resolve();
+            return;
+          }
+          // Honour pause signal: spin-wait until resumed or stopped
+          while (this.isPauseSignalled(competitionId) && !this.isStopSignalled(competitionId)) {
+            await new Promise<void>(r => setTimeout(r, 200));
+          }
+          if (this.isStopSignalled(competitionId)) {
+            clearInterval(tick);
+            resolve();
+            return;
+          }
+
           const elapsed  = Date.now() - startTime;
           const progress = Math.min(100, Math.round((elapsed / durationMs) * 100));
           onProgress?.(progress);

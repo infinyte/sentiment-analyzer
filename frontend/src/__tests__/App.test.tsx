@@ -361,6 +361,50 @@ describe('App detail modal', () => {
     });
   });
 
+  it('shows degraded (not down) when health returns 503 with a valid body', async () => {
+    mockFetch.mockImplementation((input: string | URL | Request) => {
+      const url = String(input);
+
+      if (url.includes('/api/health')) {
+        return Promise.resolve({
+          ok: false,
+          status: 503,
+          json: async () => ({
+            status: 'degraded',
+            services: {
+              coingecko: 'ok',
+              newsapi: 'misconfigured',
+              claude_api: 'misconfigured',
+              sqlite: 'ok',
+            },
+            uptime_seconds: 60,
+          }),
+        });
+      }
+
+      if (url.includes('/api/tournaments/active')) {
+        return Promise.resolve({ ok: true, json: async () => ({ success: true, data: [] }) });
+      }
+
+      if (url.includes('/api/coins?limit=50')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ data: [], last_updated: new Date().toISOString(), count: 0 }),
+        });
+      }
+
+      return Promise.reject(new Error(`Unhandled fetch: ${url}`));
+    });
+
+    render(<App />);
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /system degraded/i })).toBeInTheDocument();
+    });
+    // Must NOT show "Down"
+    expect(screen.queryByRole('button', { name: /system down/i })).not.toBeInTheDocument();
+  });
+
   it('keeps navigation usable when the health endpoint is unavailable', async () => {
     mockFetch.mockImplementation((input: string | URL | Request) => {
       const url = String(input);
