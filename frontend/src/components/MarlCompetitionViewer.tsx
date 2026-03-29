@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, type CSSProperties, type FormEvent } from 'react';
 import { Line } from 'react-chartjs-2';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
+import { useTournamentScheduler } from '../hooks/useTournamentScheduler';
 import type {
   CompetitionConfig,
   CompetitionAgent as CompetitionAgentSpec,
@@ -9,6 +10,7 @@ import type {
   CoinUniverseResponse,
   ScoredCoinEntry,
 } from '../types/marl';
+import type { TournamentSchedule, CreateScheduleInput } from '../types/tournament-schedule';
 
 type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
@@ -181,6 +183,391 @@ function RankingsTable({ rankings }: { rankings: import('../types/marl').FinalRa
   );
 }
 
+// ─── Tournament Scheduler Tab ─────────────────────────────────────────────────
+
+type ScheduleType = 'cron' | 'oneshot';
+
+const BLANK_CONFIG: CompetitionConfig = {
+  mode: 'SINGLE',
+  agents: [
+    { id: 'bull', riskProfile: 'AGGRESSIVE', initialCapital: 10000 },
+    { id: 'bear', riskProfile: 'CONSERVATIVE', initialCapital: 10000 },
+  ],
+  symbols: ['BTC', 'ETH'],
+  symbolSelectionMode: 'MANUAL',
+  duration: 200,
+  refreshInterval: 1000,
+  learningEnabled: true,
+};
+
+function ScheduleForm({
+  initial,
+  onSave,
+  onCancel,
+  saving,
+  saveError,
+}: {
+  initial?: TournamentSchedule;
+  onSave: (input: CreateScheduleInput) => void;
+  onCancel: () => void;
+  saving: boolean;
+  saveError: string | null;
+}) {
+  const [name, setName] = useState(initial?.name ?? '');
+  const [scheduleType, setScheduleType] = useState<ScheduleType>(initial?.runAt ? 'oneshot' : 'cron');
+  const [cronExpr, setCronExpr] = useState(initial?.cronExpression ?? '*/5 * * * *');
+  const [runAt, setRunAt] = useState(() => {
+    if (initial?.runAt) return initial.runAt.slice(0, 16); // datetime-local format
+    const d = new Date(Date.now() + 3600_000);
+    return d.toISOString().slice(0, 16);
+  });
+  const [symbolInput, setSymbolInput] = useState((initial?.config.symbols ?? ['BTC', 'ETH']).join(','));
+  const [enabled, setEnabled] = useState(initial?.enabled ?? true);
+
+  const handleSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const symbols = symbolInput.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const config: CompetitionConfig = {
+      ...BLANK_CONFIG,
+      symbols,
+      ...(initial?.config ?? {}),
+    };
+    onSave({
+      name: name.trim(),
+      cronExpression: scheduleType === 'cron' ? cronExpr.trim() : undefined,
+      runAt: scheduleType === 'oneshot' ? new Date(runAt).toISOString() : undefined,
+      config,
+      enabled,
+    });
+  };
+
+  return (
+    <form onSubmit={handleSubmit} aria-label={initial ? 'Edit schedule form' : 'Create schedule form'}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.75rem' }}>
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={label}>Name *</label>
+          <input
+            style={input}
+            value={name}
+            onChange={e => setName(e.target.value)}
+            placeholder="Daily MARL run"
+            required
+            maxLength={100}
+            aria-label="Schedule name"
+          />
+        </div>
+
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={label}>Schedule Type</label>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            {(['cron', 'oneshot'] as ScheduleType[]).map(t => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => setScheduleType(t)}
+                aria-pressed={scheduleType === t}
+                style={{
+                  ...btn(scheduleType === t ? '#2563eb' : '#e5e7eb'),
+                  color: scheduleType === t ? '#fff' : '#374151',
+                  fontSize: '0.8rem',
+                  padding: '0.35rem 1rem',
+                }}
+              >
+                {t === 'cron' ? 'Recurring (cron)' : 'One-shot'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {scheduleType === 'cron' ? (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={label}>Cron Expression *</label>
+            <input
+              style={input}
+              value={cronExpr}
+              onChange={e => setCronExpr(e.target.value)}
+              placeholder="0 9 * * 1"
+              aria-label="Cron expression"
+              required={scheduleType === 'cron'}
+            />
+            <span style={{ fontSize: '0.7rem', color: '#6b7280' }}>e.g. "0 9 * * 1" = every Monday at 09:00</span>
+          </div>
+        ) : (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <label style={label}>Run At (UTC) *</label>
+            <input
+              type="datetime-local"
+              style={input}
+              value={runAt}
+              onChange={e => setRunAt(e.target.value)}
+              aria-label="Run at datetime"
+              required={scheduleType === 'oneshot'}
+            />
+          </div>
+        )}
+
+        <div style={{ gridColumn: '1 / -1' }}>
+          <label style={label}>Symbols (comma-separated)</label>
+          <input
+            style={input}
+            value={symbolInput}
+            onChange={e => setSymbolInput(e.target.value)}
+            placeholder="BTC,ETH,SOL"
+            aria-label="Schedule symbols"
+          />
+        </div>
+
+        <div>
+          <label style={{ ...label, display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={e => setEnabled(e.target.checked)}
+              aria-label="Schedule enabled"
+            />
+            Enabled
+          </label>
+        </div>
+      </div>
+
+      {saveError && (
+        <div style={{ color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.5rem' }} role="alert">
+          {saveError}
+        </div>
+      )}
+
+      <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <button type="submit" disabled={saving} style={btn(saving ? '#93c5fd' : '#2563eb')} aria-label="Save schedule">
+          {saving ? 'Saving…' : (initial ? 'Update' : 'Create Schedule')}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          style={{ ...btn('#6b7280'), padding: '0.5rem 1rem' }}
+          aria-label="Cancel schedule form"
+        >
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+function ScheduleRow({
+  schedule,
+  actionLoading,
+  onToggle,
+  onRunNow,
+  onEdit,
+  onDelete,
+}: {
+  schedule: TournamentSchedule;
+  actionLoading: string | null;
+  onToggle: (s: TournamentSchedule) => void;
+  onRunNow: (id: string) => void;
+  onEdit: (s: TournamentSchedule) => void;
+  onDelete: (id: string) => void;
+}) {
+  const busy = actionLoading === schedule.id;
+
+  return (
+    <tr style={{ borderBottom: '1px solid var(--border)' }}>
+      <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, fontSize: '0.875rem' }}>{schedule.name}</td>
+      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#6b7280', fontFamily: 'monospace' }}>
+        {schedule.cronExpression ?? <span style={{ fontStyle: 'italic' }}>{schedule.runAt ? new Date(schedule.runAt).toLocaleString() : '—'}</span>}
+      </td>
+      <td style={{ padding: '0.6rem 0.75rem', fontSize: '0.8rem', color: '#6b7280' }}>
+        {schedule.lastRunAt ? new Date(schedule.lastRunAt).toLocaleString() : '—'}
+      </td>
+      <td style={{ padding: '0.6rem 0.75rem' }}>
+        <span style={{
+          fontSize: '0.7rem', fontWeight: 700, padding: '0.2rem 0.5rem',
+          borderRadius: '9999px',
+          backgroundColor: schedule.enabled ? '#dcfce7' : '#f3f4f6',
+          color: schedule.enabled ? '#16a34a' : '#6b7280',
+        }}>
+          {schedule.enabled ? 'Enabled' : 'Disabled'}
+        </span>
+      </td>
+      <td style={{ padding: '0.6rem 0.75rem' }}>
+        <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+          <button
+            onClick={() => onToggle(schedule)}
+            disabled={busy}
+            aria-label={schedule.enabled ? `Disable schedule ${schedule.name}` : `Enable schedule ${schedule.name}`}
+            style={{ ...btn(schedule.enabled ? '#d97706' : '#16a34a'), padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+          >
+            {schedule.enabled ? 'Disable' : 'Enable'}
+          </button>
+          <button
+            onClick={() => onRunNow(schedule.id)}
+            disabled={busy}
+            aria-label={`Run now ${schedule.name}`}
+            style={{ ...btn('#7c3aed'), padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+          >
+            Run Now
+          </button>
+          <button
+            onClick={() => onEdit(schedule)}
+            disabled={busy}
+            aria-label={`Edit schedule ${schedule.name}`}
+            style={{ ...btn('#0891b2'), padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+          >
+            Edit
+          </button>
+          <button
+            onClick={() => onDelete(schedule.id)}
+            disabled={busy}
+            aria-label={`Delete schedule ${schedule.name}`}
+            style={{ ...btn('#dc2626'), padding: '0.25rem 0.6rem', fontSize: '0.75rem' }}
+          >
+            Delete
+          </button>
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+function TournamentSchedulerTab() {
+  const {
+    schedules, loading, error, actionLoading,
+    createSchedule, updateSchedule, deleteSchedule, runNow, toggleEnabled,
+  } = useTournamentScheduler();
+
+  const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<TournamentSchedule | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [runMessage, setRunMessage] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+
+  const handleSave = async (input: CreateScheduleInput) => {
+    setSaving(true);
+    setSaveError(null);
+    let ok: boolean | TournamentSchedule | null;
+    if (editTarget) {
+      ok = await updateSchedule(editTarget.id, input);
+    } else {
+      ok = await createSchedule(input);
+    }
+    setSaving(false);
+    if (ok) {
+      setShowForm(false);
+      setEditTarget(null);
+    } else {
+      setSaveError('Save failed — check fields and try again.');
+    }
+  };
+
+  const handleRunNow = async (id: string) => {
+    setRunMessage(null);
+    const competitionId = await runNow(id);
+    if (competitionId) setRunMessage(`Launched: ${competitionId}`);
+  };
+
+  const handleDeleteConfirmed = async () => {
+    if (!confirmDeleteId) return;
+    await deleteSchedule(confirmDeleteId);
+    setConfirmDeleteId(null);
+  };
+
+  const openCreate = () => { setEditTarget(null); setSaveError(null); setShowForm(true); };
+  const openEdit = (s: TournamentSchedule) => { setEditTarget(s); setSaveError(null); setShowForm(true); };
+  const cancelForm = () => { setShowForm(false); setEditTarget(null); setSaveError(null); };
+
+  return (
+    <div>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+        <h3 style={{ margin: 0, fontSize: '1rem' }}>Tournament Schedules</h3>
+        <button onClick={openCreate} style={btn()} aria-label="Create new schedule">
+          + New Schedule
+        </button>
+      </div>
+
+      {/* Status messages */}
+      {error && (
+        <div style={{ color: '#dc2626', fontSize: '0.8rem', marginBottom: '0.75rem' }} role="alert">{error}</div>
+      )}
+      {runMessage && (
+        <div style={{ color: '#16a34a', fontSize: '0.8rem', marginBottom: '0.75rem' }} role="status">{runMessage}</div>
+      )}
+
+      {/* Create / Edit form */}
+      {showForm && (
+        <div style={{ ...card, marginBottom: '1rem' }}>
+          <h4 style={{ margin: '0 0 0.75rem', fontSize: '0.9rem' }}>
+            {editTarget ? `Edit: ${editTarget.name}` : 'New Schedule'}
+          </h4>
+          <ScheduleForm
+            initial={editTarget ?? undefined}
+            onSave={input => void handleSave(input)}
+            onCancel={cancelForm}
+            saving={saving}
+            saveError={saveError}
+          />
+        </div>
+      )}
+
+      {/* Delete confirmation */}
+      {confirmDeleteId && (
+        <div style={{ ...card, border: '2px solid #dc2626', marginBottom: '1rem' }}>
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.875rem' }}>
+            Delete this schedule? This cannot be undone.
+          </p>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={() => void handleDeleteConfirmed()} style={btn('#dc2626')} aria-label="Confirm delete schedule">
+              Confirm Delete
+            </button>
+            <button onClick={() => setConfirmDeleteId(null)} style={btn('#6b7280')} aria-label="Cancel delete">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Schedule list */}
+      {loading && (
+        <div style={{ padding: '2rem', textAlign: 'center', color: '#6b7280' }}>Loading schedules…</div>
+      )}
+      {!loading && schedules.length === 0 && (
+        <div style={{ ...card, textAlign: 'center', color: '#6b7280', padding: '2rem' }}>
+          No schedules yet. Click &quot;+ New Schedule&quot; to create one.
+        </div>
+      )}
+      {!loading && schedules.length > 0 && (
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.875rem' }}>
+            <thead>
+              <tr style={{ backgroundColor: 'var(--surface)', borderBottom: '2px solid var(--border)' }}>
+                <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase' }}>Name</th>
+                <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase' }}>Schedule</th>
+                <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase' }}>Last Run</th>
+                <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase' }}>Status</th>
+                <th style={{ padding: '0.6rem 0.75rem', textAlign: 'left', fontWeight: 600, fontSize: '0.75rem', color: '#6b7280', textTransform: 'uppercase' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {schedules.map(s => (
+                <ScheduleRow
+                  key={s.id}
+                  schedule={s}
+                  actionLoading={actionLoading}
+                  onToggle={s => void toggleEnabled(s)}
+                  onRunNow={id => void handleRunNow(id)}
+                  onEdit={openEdit}
+                  onDelete={id => setConfirmDeleteId(id)}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function MarlCompetitionViewer() {
@@ -223,7 +610,8 @@ export function MarlCompetitionViewer() {
   const [tradeLogOpen, setTradeLogOpen] = useState(false);
 
   // ── Compare form state ────────────────────────────────────────────────────
-  const [showCompare, setShowCompare] = useState(false);
+  const [activeTab, setActiveTab] = useState<'tournament' | 'h2h' | 'scheduled'>('tournament');
+  const showCompare = activeTab === 'h2h';
   const [cmpA, setCmpA] = useState<CompetitionAgentSpec>({ id: 'aggressive', riskProfile: 'AGGRESSIVE', initialCapital: 10000 });
   const [cmpB, setCmpB] = useState<CompetitionAgentSpec>({ id: 'conservative', riskProfile: 'CONSERVATIVE', initialCapital: 10000 });
   const [cmpRounds, setCmpRounds] = useState(3);
@@ -1198,29 +1586,36 @@ export function MarlCompetitionViewer() {
 
       {/* Tab strip */}
       <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', borderBottom: '2px solid #e5e7eb', paddingBottom: '0' }}>
-        {[['Tournament', false], ['Head-to-Head', true]].map(([label, isCompare]) => (
+        {([['Tournament', 'tournament'], ['Head-to-Head', 'h2h'], ['Scheduled', 'scheduled']] as [string, typeof activeTab][]).map(([tabLabel, tabKey]) => (
           <button
-            key={String(label)}
-            onClick={() => setShowCompare(isCompare as boolean)}
+            key={tabKey}
+            onClick={() => setActiveTab(tabKey)}
             style={{
               padding: '0.5rem 1rem',
               background: 'none',
               border: 'none',
-              borderBottom: showCompare === isCompare ? '2px solid #2563eb' : '2px solid transparent',
+              borderBottom: activeTab === tabKey ? '2px solid #2563eb' : '2px solid transparent',
               marginBottom: '-2px',
-              color: showCompare === isCompare ? '#2563eb' : '#6b7280',
-              fontWeight: showCompare === isCompare ? '700' : '400',
+              color: activeTab === tabKey ? '#2563eb' : '#6b7280',
+              fontWeight: activeTab === tabKey ? '700' : '400',
               cursor: 'pointer',
               fontSize: '0.875rem',
             }}
           >
-            {label}
+            {tabLabel}
           </button>
         ))}
       </div>
 
+      {/* ── Scheduled tab ──────────────────────────────────────────────────── */}
+      {activeTab === 'scheduled' && (
+        <div style={card}>
+          <TournamentSchedulerTab />
+        </div>
+      )}
+
       {/* ── Tournament form ────────────────────────────────────────────────── */}
-      {!showCompare && !loading && !results && (
+      {activeTab === 'tournament' && !loading && !results && (
         <form onSubmit={handleSubmit}>
           <div style={card}>
             <h3 style={{ margin: '0 0 1rem', fontSize: '1rem' }}>Configure Tournament</h3>

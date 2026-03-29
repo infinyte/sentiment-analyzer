@@ -16,6 +16,7 @@ import { storage } from './storage.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import { closeQueueEventsListener } from './routes/marl-competition.js';
 import { brokerRegistry } from './services/brokers/broker-registry.js';
+import { tournamentScheduler } from './services/tournament-scheduler.js';
 import logger from './logger.js';
 
 function getSentimentCronSchedule(): string {
@@ -122,6 +123,11 @@ export function startRuntime(): void {
   scheduleRecurringJobs();
   registerCronConfigWatchers();
   registerSignalHandlers();
+
+  if (storage.isHealthy()) {
+    tournamentScheduler.start(storage.getDb());
+  }
+
   runtimeStarted = true;
 }
 
@@ -141,6 +147,7 @@ export async function shutdownRuntime(options: { exitProcess?: boolean } = {}): 
 
   shutdownInFlight = (async () => {
     stopRecurringJobs();
+    tournamentScheduler.stop();
 
     if (server) {
       await new Promise<void>(resolve => {

@@ -5,6 +5,11 @@ import type {
   SocialStats,
   MultiSourceTrendReport,
   SocialSource,
+  ScrapeResult,
+  BatchScrapeResult,
+  IngestPost,
+  IngestResult,
+  TrendingRecomputeResult,
 } from '../types/social-media';
 
 // ── Trending topics ───────────────────────────────────────────────────────────
@@ -124,4 +129,114 @@ export function useTrendScore(symbol: string | null) {
   }, [symbol]);
 
   return { data, loading, error };
+}
+
+// ── Advanced utilities ─────────────────────────────────────────────────────────
+
+export function useSymbolScrape() {
+  const [data, setData] = useState<ScrapeResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const scrape = useCallback(async (symbol: string, query?: string, platforms?: string[]) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const params = new URLSearchParams({ symbol });
+      if (query) params.set('query', query);
+      if (platforms && platforms.length > 0) params.set('platforms', platforms.join(','));
+      const res = await fetch(`/api/scrape/social?${params}`);
+      const payload = await res.json() as ScrapeResult & { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? `HTTP ${res.status}`);
+      setData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scrape failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { data, loading, error, scrape };
+}
+
+export function useBatchScrape() {
+  const [data, setData] = useState<BatchScrapeResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const scrape = useCallback(async (symbols: string[], query?: string, platforms?: string[]) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const res = await fetch('/api/scrape/batch', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ symbols, query: query || undefined, platforms: platforms && platforms.length > 0 ? platforms : undefined }),
+      });
+      const payload = await res.json() as BatchScrapeResult & { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? `HTTP ${res.status}`);
+      setData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Batch scrape failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { data, loading, error, scrape };
+}
+
+export function useTrendingRecompute() {
+  const [data, setData] = useState<TrendingRecomputeResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const recompute = useCallback(async (windowHours = 4, limit = 20) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const params = new URLSearchParams({ window: String(windowHours), limit: String(limit) });
+      const res = await fetch(`/api/trending?${params}`);
+      const payload = await res.json() as TrendingRecomputeResult & { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? `HTTP ${res.status}`);
+      setData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Recompute failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { data, loading, error, recompute };
+}
+
+export function useTrendingIngest() {
+  const [data, setData] = useState<IngestResult | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const ingest = useCallback(async (posts: IngestPost[]) => {
+    setLoading(true);
+    setError(null);
+    setData(null);
+    try {
+      const res = await fetch('/api/trending/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ posts }),
+      });
+      const payload = await res.json() as IngestResult & { error?: string };
+      if (!res.ok) throw new Error(payload.error ?? `HTTP ${res.status}`);
+      setData(payload);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ingest failed');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { data, loading, error, ingest };
 }

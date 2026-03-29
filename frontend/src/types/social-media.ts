@@ -81,6 +81,62 @@ export interface SourceBreakdownEntry {
   avg_composite: number;
 }
 
+// ── Scrape / ingest utility types ─────────────────────────────────────────────
+
+export interface ScrapePost {
+  platform: string;
+  id?: string;
+  text: string;
+  author?: string;
+  url?: string;
+  created_at?: string;
+  likes?: number;
+  shares?: number;
+  comments?: number;
+}
+
+export interface ScrapeplatformResult {
+  platform: string;
+  posts: ScrapePost[];
+  post_count: number;
+  error?: string;
+}
+
+export interface ScrapeResult {
+  symbol: string;
+  query?: string;
+  total_posts: number;
+  platforms: ScrapeplatformResult[];
+  scraped_at: string;
+}
+
+export interface BatchScrapeResult {
+  results: ScrapeResult[];
+  total_symbols: number;
+  total_posts: number;
+  scraped_at: string;
+}
+
+export interface IngestPost {
+  platform: string;
+  text: string;
+  id?: string;
+  author?: string;
+  url?: string;
+  created_at?: string;
+}
+
+export interface IngestResult {
+  ingested: number;
+  stored_total: number;
+}
+
+export interface TrendingRecomputeResult {
+  topics: ClusteredTrendingTopic[];
+  count: number;
+  timeWindow: string;
+}
+
 export interface MultiSourceTrendReport {
   symbol: string;
   signal_sentiment: number;

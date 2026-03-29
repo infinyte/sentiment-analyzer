@@ -9,8 +9,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, cleanup, waitFor } from '@testing-library/react';
 import { MarlCompetitionViewer } from '../components/MarlCompetitionViewer';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
+import { useTournamentScheduler } from '../hooks/useTournamentScheduler';
 
 vi.mock('../hooks/useMarlCompetition');
+vi.mock('../hooks/useTournamentScheduler');
 vi.mock('react-chartjs-2', () => ({ Line: () => null }));
 vi.mock('chart.js', () => ({
   Chart: { register: vi.fn() },
@@ -43,12 +45,29 @@ const defaultHook = {
 };
 
 const mockUseMarl = vi.mocked(useMarlCompetition);
+const mockUseScheduler = vi.mocked(useTournamentScheduler);
 let mockFetch: ReturnType<typeof vi.fn>;
 let emergencyStopCalled = false;
+
+// ── Default scheduler hook return (no schedules) ──────────────────────────────
+
+const defaultSchedulerHook = {
+  schedules: [],
+  loading: false,
+  error: null,
+  actionLoading: null,
+  loadSchedules: vi.fn(),
+  createSchedule: vi.fn(),
+  updateSchedule: vi.fn(),
+  deleteSchedule: vi.fn(),
+  runNow: vi.fn(),
+  toggleEnabled: vi.fn(),
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
   mockUseMarl.mockReturnValue(defaultHook);
+  mockUseScheduler.mockReturnValue(defaultSchedulerHook);
   emergencyStopCalled = false;
   mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
     const url = String(input);
@@ -574,4 +593,195 @@ describe('MarlCompetitionViewer — results', () => {
       expect(mockFetch).toHaveBeenCalledWith('/api/marl/broker/emergency-stop', expect.objectContaining({ method: 'POST' }));
     });
   }, 15000);
+});
+
+// ── Tournament Scheduler Tab ──────────────────────────────────────────────────
+
+const SAMPLE_SCHEDULE = {
+  id: 'sched-1',
+  name: 'Daily MARL',
+  cronExpression: '0 9 * * 1',
+  runAt: null,
+  config: {
+    mode: 'SINGLE' as const,
+    agents: [
+      { id: 'bull', riskProfile: 'AGGRESSIVE' as const, initialCapital: 10000 },
+      { id: 'bear', riskProfile: 'CONSERVATIVE' as const, initialCapital: 10000 },
+    ],
+    symbols: ['BTC', 'ETH'],
+    symbolSelectionMode: 'MANUAL' as const,
+    duration: 200,
+    refreshInterval: 1000,
+    learningEnabled: true,
+  },
+  enabled: true,
+  lastRunAt: null,
+  nextRunAt: null,
+  createdAt: '2026-03-28T00:00:00.000Z',
+  updatedAt: '2026-03-28T00:00:00.000Z',
+};
+
+describe('MarlCompetitionViewer — Scheduled tab', () => {
+  it('renders the Scheduled tab button', () => {
+    render(<MarlCompetitionViewer />);
+    expect(screen.getByRole('button', { name: 'Scheduled' })).toBeInTheDocument();
+  });
+
+  it('shows scheduler panel when Scheduled tab is clicked', () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText('Tournament Schedules')).toBeInTheDocument();
+  });
+
+  it('shows empty state message when no schedules exist', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText(/No schedules yet/i)).toBeInTheDocument();
+  });
+
+  it('shows loading state while fetching schedules', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, loading: true });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText(/Loading schedules/i)).toBeInTheDocument();
+  });
+
+  it('renders schedule list with name and schedule expression', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText('Daily MARL')).toBeInTheDocument();
+    expect(screen.getByText('0 9 * * 1')).toBeInTheDocument();
+  });
+
+  it('shows Enabled badge for an enabled schedule', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText('Enabled')).toBeInTheDocument();
+  });
+
+  it('shows Disabled badge for a disabled schedule', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [{ ...SAMPLE_SCHEDULE, enabled: false }] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByText('Disabled')).toBeInTheDocument();
+  });
+
+  it('shows create form when + New Schedule is clicked', () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create new schedule' }));
+    expect(screen.getByRole('form', { name: 'Create schedule form' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Schedule name')).toBeInTheDocument();
+    expect(screen.getByLabelText('Cron expression')).toBeInTheDocument();
+  });
+
+  it('calls createSchedule on form submit with correct fields', async () => {
+    const createSchedule = vi.fn().mockResolvedValue(SAMPLE_SCHEDULE);
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, createSchedule });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create new schedule' }));
+
+    fireEvent.change(screen.getByLabelText('Schedule name'), { target: { value: 'My Weekly Run' } });
+    fireEvent.change(screen.getByLabelText('Cron expression'), { target: { value: '0 9 * * 1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+
+    await waitFor(() => {
+      expect(createSchedule).toHaveBeenCalledOnce();
+      const [arg] = createSchedule.mock.calls[0];
+      expect(arg.name).toBe('My Weekly Run');
+      expect(arg.cronExpression).toBe('0 9 * * 1');
+    });
+  });
+
+  it('hides form and shows list after successful create', async () => {
+    const createSchedule = vi.fn().mockResolvedValue(SAMPLE_SCHEDULE);
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, createSchedule, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create new schedule' }));
+    fireEvent.change(screen.getByLabelText('Schedule name'), { target: { value: 'Test' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save schedule' }));
+
+    await waitFor(() => expect(createSchedule).toHaveBeenCalled());
+    expect(screen.queryByRole('form', { name: 'Create schedule form' })).not.toBeInTheDocument();
+    expect(screen.getByText('Daily MARL')).toBeInTheDocument();
+  });
+
+  it('calls cancel and hides form when Cancel is clicked', () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create new schedule' }));
+    expect(screen.getByRole('form', { name: 'Create schedule form' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel schedule form' }));
+    expect(screen.queryByRole('form', { name: 'Create schedule form' })).not.toBeInTheDocument();
+  });
+
+  it('calls toggleEnabled when Disable/Enable is clicked', () => {
+    const toggleEnabled = vi.fn();
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE], toggleEnabled });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Disable schedule ${SAMPLE_SCHEDULE.name}` }));
+    expect(toggleEnabled).toHaveBeenCalledWith(SAMPLE_SCHEDULE);
+  });
+
+  it('shows delete confirmation when Delete is clicked', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Delete schedule ${SAMPLE_SCHEDULE.name}` }));
+    expect(screen.getByRole('button', { name: 'Confirm delete schedule' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel delete' })).toBeInTheDocument();
+  });
+
+  it('calls deleteSchedule when delete is confirmed', async () => {
+    const deleteSchedule = vi.fn().mockResolvedValue(true);
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE], deleteSchedule });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Delete schedule ${SAMPLE_SCHEDULE.name}` }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm delete schedule' }));
+
+    await waitFor(() => expect(deleteSchedule).toHaveBeenCalledWith(SAMPLE_SCHEDULE.id));
+  });
+
+  it('dismisses delete confirmation when Cancel delete is clicked', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Delete schedule ${SAMPLE_SCHEDULE.name}` }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel delete' }));
+    expect(screen.queryByRole('button', { name: 'Confirm delete schedule' })).not.toBeInTheDocument();
+  });
+
+  it('calls runNow and displays launched competition id', async () => {
+    const runNow = vi.fn().mockResolvedValue('comp_sched_123');
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE], runNow });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Run now ${SAMPLE_SCHEDULE.name}` }));
+
+    await waitFor(() => expect(runNow).toHaveBeenCalledWith(SAMPLE_SCHEDULE.id));
+    expect(await screen.findByText(/Launched: comp_sched_123/)).toBeInTheDocument();
+  });
+
+  it('shows error from hook', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, error: 'Network error' });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Network error');
+  });
+
+  it('opens edit form pre-filled with schedule values', () => {
+    mockUseScheduler.mockReturnValue({ ...defaultSchedulerHook, schedules: [SAMPLE_SCHEDULE] });
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Scheduled' }));
+    fireEvent.click(screen.getByRole('button', { name: `Edit schedule ${SAMPLE_SCHEDULE.name}` }));
+    expect(screen.getByRole('form', { name: 'Edit schedule form' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Schedule name')).toHaveValue('Daily MARL');
+  });
 });

@@ -99,7 +99,11 @@ async function loadLifecycleWithMocks(): Promise<{ lifecycle: LifecycleModule; m
 	}));
 
 	jest.doMock('../../storage.js', () => ({
-		storage: { close: storageCloseMock },
+		storage: { close: storageCloseMock, isHealthy: jest.fn().mockReturnValue(false), getDb: jest.fn() },
+	}));
+
+	jest.doMock('../../services/tournament-scheduler.js', () => ({
+		tournamentScheduler: { start: jest.fn(), stop: jest.fn() },
 	}));
 
 	jest.doMock('../../database/sqlite-social-store.js', () => ({

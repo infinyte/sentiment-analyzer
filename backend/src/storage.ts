@@ -595,6 +595,22 @@ export class StorageService {
             updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
           );
 
+      CREATE TABLE IF NOT EXISTS tournament_schedules (
+        id               TEXT PRIMARY KEY,
+        name             TEXT NOT NULL,
+        cron_expression  TEXT,
+        run_at           TEXT,
+        config           TEXT NOT NULL,
+        enabled          INTEGER NOT NULL DEFAULT 1,
+        last_run_at      TEXT,
+        next_run_at      TEXT,
+        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_schedules_enabled  ON tournament_schedules (enabled);
+      CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON tournament_schedules (next_run_at);
+
     `);
   }
 

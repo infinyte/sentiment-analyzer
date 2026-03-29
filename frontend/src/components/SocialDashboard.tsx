@@ -4,7 +4,12 @@ import {
   useSocialItems,
   useSocialStats,
   useTrendScore,
+  useSymbolScrape,
+  useBatchScrape,
+  useTrendingRecompute,
+  useTrendingIngest,
 } from '../hooks/useSocialMedia';
+import type { IngestPost } from '../types/social-media';
 import type { ClusteredTrendingTopic, ScoredSocialItem, SocialSource, SourceStat } from '../types/social-media';
 
 interface SocialItemDetail extends ScoredSocialItem {
@@ -511,6 +516,259 @@ function ScraperStatusPanel({
   );
 }
 
+// ── Advanced Utilities Panel ───────────────────────────────────────────────────
+
+function AdvancedUtilitiesPanel() {
+  const [expanded, setExpanded] = useState(false);
+
+  // Per-symbol scrape
+  const { data: scrapeData, loading: scrapeLoading, error: scrapeError, scrape } = useSymbolScrape();
+  const [scrapeSymbol, setScrapeSymbol] = useState('');
+  const [scrapeQuery, setScrapeQuery] = useState('');
+  const [scrapePlatforms, setScrapePlatforms] = useState('');
+
+  // Batch scrape
+  const { data: batchData, loading: batchLoading, error: batchError, scrape: scrapeBatch } = useBatchScrape();
+  const [batchSymbols, setBatchSymbols] = useState('');
+  const [batchQuery, setBatchQuery] = useState('');
+  const [batchPlatforms, setBatchPlatforms] = useState('');
+
+  // Trending recompute
+  const { data: recomputeData, loading: recomputeLoading, error: recomputeError, recompute } = useTrendingRecompute();
+  const [recomputeWindow, setRecomputeWindow] = useState('4');
+
+  // Trending ingest
+  const { data: ingestData, loading: ingestLoading, error: ingestError, ingest } = useTrendingIngest();
+  const [ingestJson, setIngestJson] = useState('');
+  const [ingestJsonError, setIngestJsonError] = useState<string | null>(null);
+
+  const handleSymbolScrape = useCallback(() => {
+    if (!scrapeSymbol.trim()) return;
+    const platforms = scrapePlatforms.split(',').map(p => p.trim()).filter(Boolean);
+    void scrape(scrapeSymbol.trim().toUpperCase(), scrapeQuery.trim() || undefined, platforms.length > 0 ? platforms : undefined);
+  }, [scrape, scrapeSymbol, scrapeQuery, scrapePlatforms]);
+
+  const handleBatchScrape = useCallback(() => {
+    const symbols = batchSymbols.split(',').map(s => s.trim().toUpperCase()).filter(Boolean);
+    if (symbols.length === 0) return;
+    const platforms = batchPlatforms.split(',').map(p => p.trim()).filter(Boolean);
+    void scrapeBatch(symbols, batchQuery.trim() || undefined, platforms.length > 0 ? platforms : undefined);
+  }, [scrapeBatch, batchSymbols, batchQuery, batchPlatforms]);
+
+  const handleRecompute = useCallback(() => {
+    void recompute(Number(recomputeWindow) || 4);
+  }, [recompute, recomputeWindow]);
+
+  const handleIngest = useCallback(() => {
+    setIngestJsonError(null);
+    let posts: IngestPost[];
+    try {
+      posts = JSON.parse(ingestJson) as IngestPost[];
+      if (!Array.isArray(posts)) throw new Error('Must be a JSON array');
+    } catch (e) {
+      setIngestJsonError(e instanceof Error ? e.message : 'Invalid JSON');
+      return;
+    }
+    void ingest(posts);
+  }, [ingest, ingestJson]);
+
+  const inputStyle: React.CSSProperties = {
+    padding: '0.35rem 0.5rem', borderRadius: '0.25rem',
+    border: `1px solid ${C.border}`, fontSize: '0.8125rem',
+    backgroundColor: C.card, color: C.text, width: '100%',
+  };
+  const btnStyle = (disabled: boolean): React.CSSProperties => ({
+    padding: '0.35rem 0.75rem', borderRadius: '0.25rem', border: 'none',
+    background: disabled ? '#93c5fd' : C.blue, color: '#fff',
+    fontWeight: 600, fontSize: '0.75rem', cursor: disabled ? 'wait' : 'pointer',
+    whiteSpace: 'nowrap' as const,
+  });
+  const sectionStyle: React.CSSProperties = {
+    border: `1px solid ${C.border}`, borderRadius: '0.5rem',
+    backgroundColor: C.card, padding: '1rem',
+  };
+  const labelStyle: React.CSSProperties = { fontSize: '0.75rem', color: C.gray, marginBottom: '0.25rem', display: 'block' };
+  const resultStyle = (ok: boolean): React.CSSProperties => ({
+    marginTop: '0.5rem', fontSize: '0.75rem', color: ok ? C.bull : C.bear,
+  });
+
+  return (
+    <div style={{ marginTop: '1.5rem', border: `1px solid ${C.border}`, borderRadius: '0.5rem' }}>
+      <button
+        onClick={() => setExpanded(e => !e)}
+        aria-expanded={expanded}
+        style={{
+          width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          padding: '0.75rem 1rem', background: 'none', border: 'none', cursor: 'pointer',
+          color: C.text, fontWeight: 600, fontSize: '0.875rem',
+        }}
+      >
+        <span>Advanced Utilities</span>
+        <span style={{ fontSize: '0.75rem', color: C.gray }}>{expanded ? '▲ Collapse' : '▼ Expand'}</span>
+      </button>
+
+      {expanded && (
+        <div style={{ padding: '0 1rem 1rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+
+          {/* Per-symbol scrape */}
+          <div style={sectionStyle}>
+            <div style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '0.75rem' }}>Per-Symbol Scrape</div>
+            <label style={labelStyle}>Symbol *
+              <input
+                value={scrapeSymbol}
+                onChange={e => setScrapeSymbol(e.target.value)}
+                placeholder="BTC"
+                aria-label="Scrape symbol"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>Query (optional)
+              <input
+                value={scrapeQuery}
+                onChange={e => setScrapeQuery(e.target.value)}
+                placeholder="defi"
+                aria-label="Scrape query"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>Platforms (optional, comma-separated)
+              <input
+                value={scrapePlatforms}
+                onChange={e => setScrapePlatforms(e.target.value)}
+                placeholder="reddit,twitter"
+                aria-label="Scrape platforms"
+                style={inputStyle}
+              />
+            </label>
+            <button
+              onClick={handleSymbolScrape}
+              disabled={scrapeLoading || !scrapeSymbol.trim()}
+              aria-label="Run symbol scrape"
+              style={{ ...btnStyle(scrapeLoading), marginTop: '0.5rem' }}
+            >
+              {scrapeLoading ? 'Scraping…' : 'Scrape'}
+            </button>
+            {scrapeError && <div style={resultStyle(false)}>{scrapeError}</div>}
+            {scrapeData && (
+              <div style={resultStyle(true)}>
+                Scraped {scrapeData.total_posts} posts for {scrapeData.symbol} across {scrapeData.platforms.length} platform(s).
+              </div>
+            )}
+          </div>
+
+          {/* Batch scrape */}
+          <div style={sectionStyle}>
+            <div style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '0.75rem' }}>Batch Scrape</div>
+            <label style={labelStyle}>Symbols * (comma-separated, max 20)
+              <input
+                value={batchSymbols}
+                onChange={e => setBatchSymbols(e.target.value)}
+                placeholder="BTC,ETH,SOL"
+                aria-label="Batch scrape symbols"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>Query (optional)
+              <input
+                value={batchQuery}
+                onChange={e => setBatchQuery(e.target.value)}
+                placeholder="defi"
+                aria-label="Batch scrape query"
+                style={inputStyle}
+              />
+            </label>
+            <label style={labelStyle}>Platforms (optional, comma-separated)
+              <input
+                value={batchPlatforms}
+                onChange={e => setBatchPlatforms(e.target.value)}
+                placeholder="reddit,twitter"
+                aria-label="Batch scrape platforms"
+                style={inputStyle}
+              />
+            </label>
+            <button
+              onClick={handleBatchScrape}
+              disabled={batchLoading || !batchSymbols.trim()}
+              aria-label="Run batch scrape"
+              style={{ ...btnStyle(batchLoading), marginTop: '0.5rem' }}
+            >
+              {batchLoading ? 'Scraping…' : 'Batch Scrape'}
+            </button>
+            {batchError && <div style={resultStyle(false)}>{batchError}</div>}
+            {batchData && (
+              <div style={resultStyle(true)}>
+                Scraped {batchData.total_posts} posts across {batchData.total_symbols} symbol(s).
+              </div>
+            )}
+          </div>
+
+          {/* Trending recompute */}
+          <div style={sectionStyle}>
+            <div style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '0.75rem' }}>Recompute Trending</div>
+            <label style={labelStyle}>Window (hours)
+              <input
+                type="number"
+                min={1}
+                max={48}
+                value={recomputeWindow}
+                onChange={e => setRecomputeWindow(e.target.value)}
+                aria-label="Recompute window hours"
+                style={inputStyle}
+              />
+            </label>
+            <button
+              onClick={handleRecompute}
+              disabled={recomputeLoading}
+              aria-label="Trigger trending recompute"
+              style={{ ...btnStyle(recomputeLoading), marginTop: '0.5rem' }}
+            >
+              {recomputeLoading ? 'Computing…' : 'Recompute'}
+            </button>
+            {recomputeError && <div style={resultStyle(false)}>{recomputeError}</div>}
+            {recomputeData && (
+              <div style={resultStyle(true)}>
+                Recomputed: {recomputeData.count} topics in {recomputeData.timeWindow} window.
+              </div>
+            )}
+          </div>
+
+          {/* Trending ingest */}
+          <div style={sectionStyle}>
+            <div style={{ fontWeight: 600, fontSize: '0.8125rem', marginBottom: '0.75rem' }}>Manual Trending Ingest</div>
+            <label style={labelStyle}>Posts JSON array *
+              <textarea
+                value={ingestJson}
+                onChange={e => setIngestJson(e.target.value)}
+                placeholder={'[{"platform":"reddit","text":"BTC is pumping!"}]'}
+                aria-label="Ingest posts JSON"
+                rows={4}
+                style={{ ...inputStyle, resize: 'vertical', fontFamily: 'monospace', fontSize: '0.75rem' }}
+              />
+            </label>
+            <button
+              onClick={handleIngest}
+              disabled={ingestLoading || !ingestJson.trim()}
+              aria-label="Submit trending ingest"
+              style={{ ...btnStyle(ingestLoading), marginTop: '0.5rem' }}
+            >
+              {ingestLoading ? 'Ingesting…' : 'Ingest Posts'}
+            </button>
+            {(ingestJsonError || ingestError) && (
+              <div style={resultStyle(false)}>{ingestJsonError ?? ingestError}</div>
+            )}
+            {ingestData && (
+              <div style={resultStyle(true)}>
+                Ingested {ingestData.ingested} posts. Store total: {ingestData.stored_total}.
+              </div>
+            )}
+          </div>
+
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Main component ─────────────────────────────────────────────────────────────
 
 export function SocialDashboard() {
@@ -780,6 +1038,8 @@ export function SocialDashboard() {
           )}
         </div>
       </div>
+
+      <AdvancedUtilitiesPanel />
     </div>
   );
 }

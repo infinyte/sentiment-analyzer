@@ -27,7 +27,8 @@
       "Bash(node)",
       "Bash(node:*)",
       "Bash(powershell -NonInteractive -Command \"\n\\\\$err = \\\\$null\n\\\\$null = [System.Management.Automation.Language.Parser]::ParseFile\\(\n    'D:\\\\\\\\work\\\\\\\\sentiment-analyzer\\\\\\\\start.ps1',\n    [ref]\\\\$null,\n    [ref]\\\\$err\n\\)\nif \\(\\\\$err.Count -eq 0\\) { Write-Host 'Parse OK - no syntax errors' }\nelse { \\\\$err | ForEach-Object { Write-Host \\\\$_.Message } }\n\" 2>&1)",
-      "Bash(powershell -NonInteractive -Command \"\n\\\\$errors = \\\\$null\n\\\\$null = [System.Management.Automation.Language.Parser]::ParseFile\\(\n    'D:\\\\\\\\work\\\\\\\\sentiment-analyzer\\\\\\\\start.ps1',\n    [ref]\\\\$null,\n    [ref]\\\\$errors\n\\)\nif \\(\\\\$errors.Count -eq 0\\) {\n    Write-Host 'Parse OK - 0 syntax errors'\n} else {\n    \\\\$errors | ForEach-Object { Write-Host \\\\$_.Message }\n}\n\" 2>&1)"
+      "Bash(powershell -NonInteractive -Command \"\n\\\\$errors = \\\\$null\n\\\\$null = [System.Management.Automation.Language.Parser]::ParseFile\\(\n    'D:\\\\\\\\work\\\\\\\\sentiment-analyzer\\\\\\\\start.ps1',\n    [ref]\\\\$null,\n    [ref]\\\\$errors\n\\)\nif \\(\\\\$errors.Count -eq 0\\) {\n    Write-Host 'Parse OK - 0 syntax errors'\n} else {\n    \\\\$errors | ForEach-Object { Write-Host \\\\$_.Message }\n}\n\" 2>&1)",
+      "Bash(find D:/work/sentiment-analyzer/frontend/src -name *useMarlCompetition* -o -name *marl*hook*)"
     ]
   }
 }

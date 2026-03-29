@@ -27,6 +27,7 @@ import { createRepositories } from './repositories/factory.js';
 import { socialStore } from './database/sqlite-social-store.js';
 import marlRoutes from './routes/marl-competition.js';
 import tournamentRoutes from './routes/tournaments.js';
+import tournamentSchedulesRoutes from './routes/tournament-schedules.js';
 import { createMarlRealTradingRouter } from './routes/marl-real-trading.js';
 import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
@@ -962,6 +963,7 @@ app.post('/api/trending/ingest', (req, res) => {
 
 app.use(marlRoutes);
 app.use(tournamentRoutes);
+app.use(tournamentSchedulesRoutes);
 app.use(socialMediaRoutes);
 
 // DB-dependent routes — require an active DB connection
