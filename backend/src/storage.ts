@@ -578,10 +578,11 @@ export class StorageService {
       -- ── Phase 2: Evolutionary Tournaments ────────────────────────────────────
 
       CREATE TABLE IF NOT EXISTS evolutionary_tournaments (
-        id         TEXT PRIMARY KEY,
-        name       TEXT NOT NULL,
-        started_at TEXT NOT NULL,
-        payload    TEXT NOT NULL    -- full TournamentRecord JSON (incl. generations)
+        id               TEXT PRIMARY KEY,
+        name             TEXT NOT NULL,
+        started_at       TEXT NOT NULL,
+        payload          TEXT NOT NULL,    -- full TournamentRecord JSON (incl. generations)
+        claude_directive TEXT             -- JSON array of GenerationDirective (one per generation)
       );
 
       CREATE INDEX IF NOT EXISTS idx_evo_tournaments_started ON evolutionary_tournaments (started_at DESC);
@@ -611,7 +612,44 @@ export class StorageService {
       CREATE INDEX IF NOT EXISTS idx_schedules_enabled  ON tournament_schedules (enabled);
       CREATE INDEX IF NOT EXISTS idx_schedules_next_run ON tournament_schedules (next_run_at);
 
+      -- ── Issue 2: Generation checkpoints & extended lineage ────────────────────
+
+      CREATE TABLE IF NOT EXISTS generation_checkpoints (
+        id              TEXT PRIMARY KEY,
+        tournament_id   TEXT NOT NULL,
+        generation      INTEGER NOT NULL,
+        population_json TEXT NOT NULL,   -- JSON array of agent IDs
+        directive_json  TEXT,            -- JSON GenerationDirective (if claudeOrchestrated)
+        created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (tournament_id, generation)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_checkpoints_tournament ON generation_checkpoints (tournament_id, generation);
+
+      CREATE TABLE IF NOT EXISTS agent_lineage_extended (
+        id               TEXT PRIMARY KEY,
+        agent_id         TEXT NOT NULL,
+        parent_ids       TEXT NOT NULL,  -- JSON array of parent agent IDs
+        generation       INTEGER NOT NULL,
+        architecture     TEXT NOT NULL,  -- JSON AgentGenome snapshot at birth
+        fitness_at_birth REAL NOT NULL DEFAULT 0,
+        tournament_id    TEXT NOT NULL,
+        created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE (agent_id)
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_lineage_ext_agent      ON agent_lineage_extended (agent_id);
+      CREATE INDEX IF NOT EXISTS idx_lineage_ext_tournament ON agent_lineage_extended (tournament_id, generation);
+
     `);
+
+    // ── Schema migrations (additive only — safe to run on existing databases) ──
+    const migrations: string[] = [
+      'ALTER TABLE evolutionary_tournaments ADD COLUMN claude_directive TEXT',
+    ];
+    for (const sql of migrations) {
+      try { db.exec(sql); } catch { /* column already exists — ignore */ }
+    }
   }
 
   /** Expose the raw database handle for use in manager classes that share this connection. */

@@ -239,6 +239,11 @@ interface TournamentDetailResponse {
     topFitness: number;
     avgFitness: number;
     completedAt: string;
+    adversarialSummary?: {
+      adversaryAgentsCount: number;
+      sentimentWinRate: number;
+      beatingAgentIds: string[];
+    };
   }>;
 }
 
@@ -1364,6 +1369,20 @@ function TournamentDetailPanel({
                     </div>
                   ))}
                 </div>
+                {generation.adversarialSummary && (
+                  <div style={{ marginTop: '0.65rem', padding: '0.65rem 0.9rem', borderRadius: '0.8rem', background: '#fef3c7', border: '1px solid #fbbf24', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <span style={{ color: '#92400e', fontSize: '0.78rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.07em' }}>Adversarial Round</span>
+                    <span style={{ color: '#78350f', fontSize: '0.82rem' }}>
+                      {generation.adversarialSummary.adversaryAgentsCount} adversar{generation.adversarialSummary.adversaryAgentsCount === 1 ? 'y' : 'ies'}
+                    </span>
+                    <span style={{ color: '#78350f', fontSize: '0.82rem' }}>
+                      Sentiment win rate: <strong>{generation.adversarialSummary.sentimentWinRate.toFixed(1)}%</strong>
+                    </span>
+                    <span style={{ color: '#78350f', fontSize: '0.82rem' }}>
+                      Bonus agents: <strong>{generation.adversarialSummary.beatingAgentIds.length}</strong>
+                    </span>
+                  </div>
+                )}
                 <div style={{ marginTop: '0.6rem', color: '#64748b', fontSize: '0.81rem' }}>{formatDate(generation.completedAt)}</div>
               </div>
             ))}

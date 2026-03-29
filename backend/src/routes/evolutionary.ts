@@ -20,6 +20,7 @@ import type { CrossoverStrategy } from '../services/evolutionary/genetic-crossov
 import { MutationEngine } from '../services/evolutionary/mutation-engine.js';
 import type { MutationSeverity } from '../services/evolutionary/mutation-engine.js';
 import type { TournamentRecord } from '../services/evolutionary/evolutionary-orchestrator.js';
+import { GenerationResultStore } from '../services/evolutionary/generation-result-store.js';
 import type { IAgentRepository } from '../repositories/interfaces/agent.repository.js';
 
 interface TournamentTimelineEntry {
@@ -186,6 +187,7 @@ export function createEvolutionaryRouter(db: Database.Database, agentRepo: IAgen
   const genomes      = new GenomeManager(db);
   const crossover    = new GeneticCrossover(db);
   const mutation     = new MutationEngine(db);
+  const resultStore  = new GenerationResultStore(db);
 
   // ── POST /api/evolutionary/tournament — start a new tournament ────────────
 
@@ -505,6 +507,68 @@ export function createEvolutionaryRouter(db: Database.Database, agentRepo: IAgen
       });
     } catch (err) {
       res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── GET /api/evolutionary/tournament/:id/checkpoint/:generation ─────────
+  /**
+   * Return the population snapshot saved at the end of the given generation.
+   * The response includes the agent IDs and any Claude directive that was in
+   * effect, enabling clients to inspect or restore prior population states.
+   *
+   * Example:
+   *   curl http://localhost:3000/api/evolutionary/tournament/evo_abc/checkpoint/3
+   */
+  router.get('/api/evolutionary/tournament/:id/checkpoint/:generation', (req, res) => {
+    try {
+      const generation = parseInt(req.params.generation!, 10);
+      if (isNaN(generation) || generation < 1) {
+        res.status(400).json({ error: 'generation must be a positive integer' });
+        return;
+      }
+
+      const checkpoint = resultStore.loadCheckpoint(req.params.id!, generation);
+      if (!checkpoint) {
+        res.status(404).json({ error: `No checkpoint found for generation ${generation}` });
+        return;
+      }
+
+      res.json(checkpoint);
+    } catch (err) {
+      res.status(500).json({ error: String(err) });
+    }
+  });
+
+  // ── POST /api/evolutionary/tournament/:id/rollback ─────────────────────
+  /**
+   * Restore the tournament to the population state captured at a given
+   * generation checkpoint.  The tournament status is set to 'PAUSED';
+   * callers can inspect the restored state or start a new tournament
+   * seeded from the checkpoint population.
+   *
+   * Body: { generation: number }
+   *
+   * Example:
+   *   curl -X POST .../tournament/evo_abc/rollback -d '{"generation":2}'
+   */
+  router.post('/api/evolutionary/tournament/:id/rollback', (req, res) => {
+    try {
+      const { generation } = req.body as { generation?: unknown };
+      const gen = typeof generation === 'number' ? generation : parseInt(String(generation ?? ''), 10);
+      if (isNaN(gen) || gen < 1) {
+        res.status(400).json({ error: 'generation must be a positive integer' });
+        return;
+      }
+
+      const restored = orchestrator.rollbackToGeneration(req.params.id!, gen);
+      res.json({ success: true, tournament: restored });
+    } catch (err) {
+      const msg = String(err);
+      if (msg.includes('No checkpoint found') || msg.includes('Tournament not found')) {
+        res.status(404).json({ error: msg });
+      } else {
+        res.status(500).json({ error: msg });
+      }
     }
   });
 

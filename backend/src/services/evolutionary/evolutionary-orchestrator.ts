@@ -2,13 +2,16 @@
  * EvolutionaryOrchestrator — Phase 2 of the Evolutionary Agent System
  *
  * Wires together:
- *   GenomeManager         — agent registration + genome CRUD
- *   GeneticCrossover      — offspring creation via uniform / blended crossover
- *   MutationEngine        — post-crossover gene mutation
- *   FitnessCalculator     — 0–100 composite fitness scoring
- *   SelectionAlgorithm    — survivor / retirement partitioning
- *   AgentStatisticsManager — cumulative stats + competition history
- *   MarlCompetitionEngine  — runs the actual trading competition each generation
+ *   GenomeManager           — agent registration + genome CRUD
+ *   GeneticCrossover        — offspring creation via uniform / blended crossover
+ *   MutationEngine          — post-crossover gene mutation
+ *   FitnessCalculator       — 0–100 composite fitness scoring
+ *   SelectionAlgorithm      — survivor / retirement partitioning
+ *   AgentStatisticsManager  — cumulative stats + competition history
+ *   MarlCompetitionEngine   — runs the actual trading competition each generation
+ *   ClaudeGAOrchestrator    — optional AI-driven parameter adaptation between generations
+ *   GAEventBus              — typed lifecycle events for observability
+ *   GenerationResultStore   — checkpoint + extended lineage persistence
  *
  * Each tournament runs N generations in a background async loop.  Status is
  * persisted to the `evolutionary_tournaments` SQLite table so it survives
@@ -28,6 +31,12 @@ import { SelectionAlgorithm } from './selection-algorithm.js';
 import { AgentStatisticsManager } from './agent-statistics-manager.js';
 import { MarlCompetitionEngine } from '../marl-competition-engine.js';
 import type { CompetitionConfig } from '../marl-competition-engine.js';
+import { claudeGAOrchestrator } from './claude-ga-orchestrator.js';
+import type { GenerationDirective, PopulationReport, AgentMetric, FitnessStats } from './ga-directive-types.js';
+import { gaEventBus } from './ga-event-bus.js';
+import { GenerationResultStore } from './generation-result-store.js';
+import { AdversarialTrainer } from './adversarial-trainer.js';
+import type { AdversarialRoundSummary } from './adversarial-trainer.js';
 import logger from '../../logger.js';
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -81,6 +90,33 @@ export interface EvolutionaryTournamentConfig {
    * Default: ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'].
    */
   riskProfiles?: RiskProfile[];
+
+  /**
+   * When true, Claude is called after each generation to produce a
+   * GenerationDirective that adaptively controls mutation severity,
+   * survival rate, crossover strategy, and early-stopping decisions
+   * for the next generation.  Default: false.
+   */
+  claudeOrchestrated?: boolean;
+
+  /**
+   * When true, adversarial rounds are run every `adversarialRoundInterval`
+   * generations.  Adversary agents with inverted strategies stress-test the
+   * population; sentiment agents that beat them receive a +10 % fitness bonus.
+   * Default: false.
+   */
+  adversarialTraining?: boolean;
+
+  /**
+   * Number of adversary agents created per round.
+   * Default: Math.ceil(populationSize * 0.2).
+   */
+  adversaryPopulationSize?: number;
+
+  /**
+   * How many generations pass between adversarial rounds.  Default: 3.
+   */
+  adversarialRoundInterval?: number;
 }
 
 export interface GenerationSummary {
@@ -94,6 +130,10 @@ export interface GenerationSummary {
   topFitness: number;
   avgFitness: number;
   completedAt: string;  // ISO string
+  /** Claude directive applied before breeding this generation (if claudeOrchestrated). */
+  claudeDirective?: GenerationDirective;
+  /** Adversarial round summary for this generation (if adversarialTraining is enabled). */
+  adversarialSummary?: AdversarialRoundSummary;
 }
 
 export interface TournamentRecord {
@@ -107,6 +147,16 @@ export interface TournamentRecord {
   startedAt: string;   // ISO string
   completedAt?: string;
   error?: string;
+  /**
+   * All Claude directives produced during this tournament, indexed by
+   * generation number.  Only populated when claudeOrchestrated is true.
+   */
+  directives?: GenerationDirective[];
+  /**
+   * Adversarial round summaries for this tournament.
+   * Only populated when adversarialTraining is true.
+   */
+  adversarialSummaries?: AdversarialRoundSummary[];
 }
 
 // ── EvolutionaryOrchestrator ──────────────────────────────────────────────────
@@ -119,7 +169,9 @@ export class EvolutionaryOrchestrator {
   private readonly fitnessCalc: FitnessCalculator;
   private readonly selection: SelectionAlgorithm;
   private readonly statsManager: AgentStatisticsManager;
-  private readonly marlEngine: MarlCompetitionEngine;
+  private readonly marlEngine:         MarlCompetitionEngine;
+  private readonly resultStore:        GenerationResultStore;
+  private readonly adversarialTrainer: AdversarialTrainer;
 
   // In-process cache so GET /status is fast without hitting SQLite
   private readonly cache = new Map<string, TournamentRecord>();
@@ -132,7 +184,9 @@ export class EvolutionaryOrchestrator {
     this.fitnessCalc    = new FitnessCalculator();
     this.selection      = new SelectionAlgorithm(this.fitnessCalc);
     this.statsManager   = new AgentStatisticsManager(database);
-    this.marlEngine     = new MarlCompetitionEngine();
+    this.marlEngine          = new MarlCompetitionEngine();
+    this.resultStore         = new GenerationResultStore(database);
+    this.adversarialTrainer  = new AdversarialTrainer(database);
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -168,6 +222,19 @@ export class EvolutionaryOrchestrator {
       });
       this.statsManager.initializeStats(agentId);
       population.push(agentId);
+
+      // Extended lineage: genesis agents have no parents
+      const genome = this.genomeManager.loadGenome(agentId);
+      if (genome) {
+        this.resultStore.saveLineageEntry({
+          agentId,
+          parentIds: [],
+          generation: 0,
+          architecture: genome,
+          fitnessAtBirth: 0,
+          tournamentId,
+        });
+      }
     }
 
     // ── Persist initial record ───────────────────────────────────────────────
@@ -180,8 +247,17 @@ export class EvolutionaryOrchestrator {
       generations: [],
       currentPopulation: population,
       startedAt: new Date().toISOString(),
+      directives:           config.claudeOrchestrated   ? [] : undefined,
+      adversarialSummaries: config.adversarialTraining  ? [] : undefined,
     };
     this.upsertRecord(record);
+
+    gaEventBus.emit('task:queued', {
+      tournamentId,
+      name,
+      populationSize: config.populationSize,
+      maxGenerations: config.maxGenerations,
+    });
 
     // ── Start generational loop (non-blocking) ────────────────────────────────
     void this.runGenerations(tournamentId, record, config).catch(err => {
@@ -207,6 +283,53 @@ export class EvolutionaryOrchestrator {
     return rows.map(r => JSON.parse(r.payload) as TournamentRecord);
   }
 
+  /**
+   * Restore a tournament to the state captured at a given generation checkpoint.
+   *
+   * - Loads the checkpoint population from `generation_checkpoints`.
+   * - Trims the tournament's generation history to [1 .. generation].
+   * - Sets status to 'PAUSED' so callers know the loop is no longer active.
+   * - Returns the restored TournamentRecord, or throws if the checkpoint
+   *   does not exist.
+   */
+  rollbackToGeneration(
+    tournamentId: string,
+    generation: number,
+  ): TournamentRecord {
+    const checkpoint = this.resultStore.loadCheckpoint(tournamentId, generation);
+    if (!checkpoint) {
+      throw new Error(
+        `No checkpoint found for tournament ${tournamentId} at generation ${generation}`,
+      );
+    }
+
+    const current = this.cache.get(tournamentId) ?? this.loadFromDb(tournamentId);
+    if (!current) {
+      throw new Error(`Tournament not found: ${tournamentId}`);
+    }
+
+    const trimmedGenerations          = current.generations.filter(g => g.generation <= generation);
+    const trimmedDirectives           = current.directives?.filter(d => d.generation <= generation);
+    const trimmedAdversarialSummaries = current.adversarialSummaries?.filter(s => s.generation <= generation);
+
+    const restored: TournamentRecord = {
+      ...current,
+      status:               'PAUSED',
+      currentGeneration:    generation,
+      currentPopulation:    checkpoint.population,
+      generations:          trimmedGenerations,
+      directives:           trimmedDirectives,
+      adversarialSummaries: trimmedAdversarialSummaries,
+      completedAt:          undefined,
+      error:                undefined,
+    };
+
+    this.upsertRecord(restored);
+    logger.info('evolutionary tournament rolled back', { tournamentId, generation });
+
+    return restored;
+  }
+
   // ── Core generational loop ─────────────────────────────────────────────────
 
   private async runGenerations(
@@ -214,13 +337,18 @@ export class EvolutionaryOrchestrator {
     record: TournamentRecord,
     cfg: EvolutionaryTournamentConfig,
   ): Promise<void> {
-    const survivalPercent  = cfg.survivalPercent  ?? 30;
-    const mutationRate     = cfg.mutationRate     ?? 0.5;
-    const mutationSeverity = cfg.mutationSeverity ?? 'MEDIUM';
-    const crossoverStrat   = cfg.crossoverStrategy ?? 'UNIFORM';
-    const retirementEnabled = cfg.retirementEnabled ?? true;
-    const initialCapital   = cfg.initialCapital   ?? 10_000;
-    const duration         = cfg.competitionDuration ?? 200;
+    // Base parameters — may be overridden per-generation by Claude directives
+    const baseSurvivalPercent     = cfg.survivalPercent         ?? 30;
+    const mutationRate             = cfg.mutationRate            ?? 0.5;
+    const baseMutationSeverity     = cfg.mutationSeverity        ?? 'MEDIUM';
+    const baseCrossoverStrat       = cfg.crossoverStrategy       ?? 'UNIFORM';
+    const retirementEnabled        = cfg.retirementEnabled       ?? true;
+    const initialCapital           = cfg.initialCapital          ?? 10_000;
+    const duration                 = cfg.competitionDuration     ?? 200;
+    const profiles                 = cfg.riskProfiles            ?? ['CONSERVATIVE', 'AGGRESSIVE', 'SCALPING'];
+    const adversarialRoundInterval = cfg.adversarialRoundInterval ?? 3;
+    const adversaryPopulationSize  = cfg.adversaryPopulationSize
+      ?? Math.ceil(cfg.populationSize * 0.2);
 
     let population = [...record.currentPopulation];
 
@@ -231,7 +359,7 @@ export class EvolutionaryOrchestrator {
       const competitionId = `evo_comp_${tournamentId}_g${gen}`;
       const competitionCfg: CompetitionConfig = {
         mode: 'SINGLE',
-        agents: population.map((id, i) => ({
+        agents: population.map((id) => ({
           id,
           riskProfile: this.getAgentRiskProfile(id),
           initialCapital,
@@ -242,9 +370,18 @@ export class EvolutionaryOrchestrator {
         learningEnabled: true,
       };
 
+      gaEventBus.emit('task:started', {
+        tournamentId,
+        generation: gen,
+        populationSize: population.length,
+        competitionId,
+      });
+
       const result = await this.marlEngine.runCompetition(
         competitionCfg,
-        undefined,
+        (progress) => {
+          gaEventBus.emit('task:progress', { tournamentId, generation: gen, competitionId, progress });
+        },
         competitionId,
       );
 
@@ -259,17 +396,83 @@ export class EvolutionaryOrchestrator {
           tradesExecuted: ranking.tradesExecuted,
           winTrades: Math.round(ranking.winRate * ranking.tradesExecuted),
           lossTrades: Math.round((1 - ranking.winRate) * ranking.tradesExecuted),
-          largestWin: 0,   // not available in FinalRanking
+          largestWin: 0,
           largestLoss: 0,
           sharpeRatio: ranking.sharpeRatio,
           maxDrawdownPercent: ranking.maxDrawdown * 100,
         });
       }
 
-      // ── 3. Fitness scoring + selection ───────────────────────────────────
-      const allStats = this.buildFitnessStats(population);
+      // ── 3. Fitness scoring ───────────────────────────────────────────────
+      let allStats = this.buildFitnessStats(population);
+
+      // ── 3a. Adversarial round (optional, every N generations) ────────────
+      let adversarialSummary: AdversarialRoundSummary | undefined;
+      if (cfg.adversarialTraining && gen % adversarialRoundInterval === 0) {
+        adversarialSummary = await this.adversarialTrainer.runAdversarialRound(
+          tournamentId,
+          gen,
+          population,
+          allStats,
+          { symbols: cfg.symbols, initialCapital, duration, adversaryPopulationSize },
+        );
+
+        // Mark sentiment agents that beat an adversary so FitnessCalculator
+        // can apply the +10 % bonus
+        const beatingSet = new Set(adversarialSummary.beatingAgentIds);
+        allStats = allStats.map(s =>
+          beatingSet.has(s.agentId) ? { ...s, beatsAdversary: true } : s,
+        );
+
+        logger.info('adversarial training round applied', {
+          tournamentId,
+          gen,
+          beatingAgentCount: adversarialSummary.beatingAgentIds.length,
+          sentimentWinRate: adversarialSummary.sentimentWinRate.toFixed(1),
+        });
+      }
+
+      // ── 3b. Claude directive (between selection and breeding) ─────────────
+      let effectiveSurvivalPercent = baseSurvivalPercent;
+      let effectiveMutationSeverity: MutationSeverity = baseMutationSeverity;
+      let effectiveCrossoverStrat: CrossoverStrategy = baseCrossoverStrat;
+      let effectivePopulationSize = cfg.populationSize;
+      let directive: GenerationDirective | undefined;
+
+      if (cfg.claudeOrchestrated) {
+        const previousAvgFitness = gen > 1
+          ? (this.cache.get(tournamentId)?.generations[gen - 2]?.avgFitness ?? 0)
+          : 0;
+
+        const report = this.buildPopulationReport(
+          allStats,
+          gen,
+          cfg.maxGenerations,
+          previousAvgFitness,
+        );
+
+        directive = await claudeGAOrchestrator.decideNextGeneration(report, gen);
+
+        effectiveSurvivalPercent  = directive.survivalPercent;
+        effectiveMutationSeverity = directive.mutationSeverity;
+        effectiveCrossoverStrat   = directive.crossoverStrategy;
+        if (directive.targetPopulationSize) {
+          effectivePopulationSize = directive.targetPopulationSize;
+        }
+
+        logger.info('evolutionary claude directive applied', {
+          tournamentId, gen,
+          mutationSeverity:       directive.mutationSeverity,
+          survivalPercent:        directive.survivalPercent,
+          crossoverStrategy:      directive.crossoverStrategy,
+          diversityBoost:         directive.diversityBoost,
+          earlyStopIfFitnessAbove: directive.earlyStopIfFitnessAbove,
+        });
+      }
+
+      // ── 3b. Selection ─────────────────────────────────────────────────────
       const { survivors, retirementCandidates, middleTier } =
-        this.selection.selectTopPercent(allStats, survivalPercent);
+        this.selection.selectTopPercent(allStats, effectiveSurvivalPercent);
 
       const survivorIds   = survivors.map(s => s.agentId);
       const retiredIds    = retirementEnabled ? retirementCandidates.map(s => s.agentId) : [];
@@ -283,16 +486,15 @@ export class EvolutionaryOrchestrator {
       }
 
       // ── 5. Breed offspring from survivors ────────────────────────────────
-      // Fill back up to populationSize: survivors + middle stay, breed the rest
       const keepIds = [...survivorIds, ...(retirementEnabled ? [] : retiredIds), ...middleIds];
-      const offspringCount = Math.max(0, cfg.populationSize - keepIds.length);
+      const offspringCount = Math.max(0, effectivePopulationSize - keepIds.length);
       const newOffspringIds: string[] = [];
 
       if (offspringCount > 0 && survivorIds.length >= 2) {
         const crossoverResults = this.crossover.breedPopulation(
           survivorIds,
           offspringCount,
-          crossoverStrat,
+          effectiveCrossoverStrat,
         );
         for (const cr of crossoverResults) {
           this.statsManager.initializeStats(cr.offspringId);
@@ -300,7 +502,20 @@ export class EvolutionaryOrchestrator {
 
           // ── 6. Mutate offspring stochastically ────────────────────────────
           if (Math.random() < mutationRate) {
-            this.mutationEngine.mutateAndSave(cr.offspringId, mutationSeverity);
+            this.mutationEngine.mutateAndSave(cr.offspringId, effectiveMutationSeverity);
+          }
+
+          // Extended lineage record for new offspring
+          const offspringGenome = this.genomeManager.loadGenome(cr.offspringId);
+          if (offspringGenome) {
+            this.resultStore.saveLineageEntry({
+              agentId:        cr.offspringId,
+              parentIds:      this.getParentIds(cr.offspringId),
+              generation:     gen,
+              architecture:   offspringGenome,
+              fitnessAtBirth: 0,
+              tournamentId,
+            });
           }
         }
       } else if (offspringCount > 0 && survivorIds.length === 1) {
@@ -314,9 +529,49 @@ export class EvolutionaryOrchestrator {
             generationNumber: gen,
           });
           this.statsManager.initializeStats(newId);
-          this.mutationEngine.mutateAndSave(newId, mutationSeverity);
+          this.mutationEngine.mutateAndSave(newId, effectiveMutationSeverity);
           newOffspringIds.push(newId);
+
+          const cloneGenome = this.genomeManager.loadGenome(newId);
+          if (cloneGenome) {
+            this.resultStore.saveLineageEntry({
+              agentId:        newId,
+              parentIds:      this.getParentIds(newId),
+              generation:     gen,
+              architecture:   cloneGenome,
+              fitnessAtBirth: 0,
+              tournamentId,
+            });
+          }
         }
+      }
+
+      // ── 6b. Diversity boost — inject fresh random agents ─────────────────
+      if (directive?.diversityBoost) {
+        const boostCount = Math.max(1, Math.ceil(effectivePopulationSize * 0.2));
+        for (let i = 0; i < boostCount; i++) {
+          const riskProfile = profiles[i % profiles.length]!;
+          const freshId = this.genomeManager.registerNewAgent({
+            riskProfile,
+            genome: createRandomGenome(),
+            generationNumber: gen,
+          });
+          this.statsManager.initializeStats(freshId);
+          newOffspringIds.push(freshId);
+
+          const freshGenome = this.genomeManager.loadGenome(freshId);
+          if (freshGenome) {
+            this.resultStore.saveLineageEntry({
+              agentId:        freshId,
+              parentIds:      [],
+              generation:     gen,
+              architecture:   freshGenome,
+              fitnessAtBirth: 0,
+              tournamentId,
+            });
+          }
+        }
+        logger.info('evolutionary diversity boost applied', { tournamentId, gen, boostCount });
       }
 
       // ── 7. Compute generation summary ────────────────────────────────────
@@ -337,28 +592,70 @@ export class EvolutionaryOrchestrator {
         topFitness: topAgent?.fitness ?? 0,
         avgFitness,
         completedAt: new Date().toISOString(),
+        claudeDirective:    directive,
+        adversarialSummary: adversarialSummary,
       };
 
       // ── 8. Assemble next population ──────────────────────────────────────
       population = [...keepIds, ...newOffspringIds];
 
-      // Trim to populationSize in case rounding added extra
-      if (population.length > cfg.populationSize) {
-        population = population.slice(0, cfg.populationSize);
+      // Trim to effectivePopulationSize in case rounding added extra
+      if (population.length > effectivePopulationSize) {
+        population = population.slice(0, effectivePopulationSize);
       }
 
-      // ── 9. Persist progress ───────────────────────────────────────────────
+      // ── 9. Persist progress + checkpoint ─────────────────────────────────
+      const currentRecord = this.cache.get(tournamentId);
+      const updatedDirectives = cfg.claudeOrchestrated && directive
+        ? [...(currentRecord?.directives ?? []), directive]
+        : currentRecord?.directives;
+      const updatedAdversarialSummaries = cfg.adversarialTraining && adversarialSummary
+        ? [...(currentRecord?.adversarialSummaries ?? []), adversarialSummary]
+        : currentRecord?.adversarialSummaries;
+
       this.patchRecord(tournamentId, {
         currentGeneration: gen,
         currentPopulation: population,
-        generations: [...(this.cache.get(tournamentId)?.generations ?? []), summary],
+        generations: [...(currentRecord?.generations ?? []), summary],
+        directives:           updatedDirectives,
+        adversarialSummaries: updatedAdversarialSummaries,
       });
+
+      // Save generation checkpoint for rollback capability
+      this.resultStore.saveCheckpoint(tournamentId, gen, population, directive);
+
+      gaEventBus.emit('task:completed', {
+        tournamentId,
+        generation: gen,
+        competitionId,
+        topFitness: topAgent?.fitness ?? 0,
+        avgFitness,
+      });
+
+      gaEventBus.emit('generation:complete', { tournamentId, generation: gen, summary });
 
       logger.info('evolutionary generation complete', {
         tournamentId, gen, topFitness: topAgent?.fitness?.toFixed(1),
         avgFitness: avgFitness.toFixed(1), retired: retiredIds.length,
         offspring: newOffspringIds.length,
       });
+
+      // ── 10. Early stop check ─────────────────────────────────────────────
+      if (directive?.earlyStopIfFitnessAbove !== undefined) {
+        const topFitness = topAgent?.fitness ?? 0;
+        if (topFitness >= directive.earlyStopIfFitnessAbove) {
+          gaEventBus.emit('convergence:detected', {
+            tournamentId,
+            generation: gen,
+            topFitness,
+            threshold: directive.earlyStopIfFitnessAbove,
+          });
+          logger.info('evolutionary early stop triggered', {
+            tournamentId, gen, topFitness, threshold: directive.earlyStopIfFitnessAbove,
+          });
+          break;
+        }
+      }
     }
 
     // ── Tournament complete ───────────────────────────────────────────────────
@@ -392,6 +689,52 @@ export class EvolutionaryOrchestrator {
     return result;
   }
 
+  /** Build a PopulationReport for the Claude directive request. */
+  private buildPopulationReport(
+    allStats: FitnessAgentStats[],
+    generation: number,
+    totalGenerations: number,
+    previousAvgFitness: number,
+  ): PopulationReport {
+    const ranked = this.fitnessCalc.rankAgents(allStats);
+
+    const agents: AgentMetric[] = ranked.map(a => ({
+      agentId: a.agentId,
+      fitness: a.fitness,
+      winRate: a.winRatePct,
+      sharpe:  a.sharpeRatio,
+      pnl:     a.totalPnl,
+    }));
+
+    const fitnesses = ranked.map(a => a.fitness);
+    const mean = fitnesses.length > 0
+      ? fitnesses.reduce((s, f) => s + f, 0) / fitnesses.length
+      : 0;
+    const max = fitnesses.length > 0 ? Math.max(...fitnesses) : 0;
+    const min = fitnesses.length > 0 ? Math.min(...fitnesses) : 0;
+    const variance = fitnesses.length > 0
+      ? fitnesses.reduce((s, f) => s + Math.pow(f - mean, 2), 0) / fitnesses.length
+      : 0;
+    const stdDev = Math.sqrt(variance);
+
+    const fitnessStats: FitnessStats = {
+      mean,
+      stdDev,
+      max,
+      min,
+      trend: generation > 1 ? mean - previousAvgFitness : 0,
+    };
+
+    return { generation, totalGenerations, agents, fitnessStats };
+  }
+
+  private getParentIds(agentId: string): string[] {
+    const row = this.db
+      .prepare('SELECT parent_id_1, parent_id_2 FROM agent_registry WHERE id = ?')
+      .get(agentId) as { parent_id_1: string | null; parent_id_2: string | null } | undefined;
+    return [row?.parent_id_1, row?.parent_id_2].filter((id): id is string => !!id);
+  }
+
   private getAgentRiskProfile(agentId: string): RiskProfile {
     const row = this.db
       .prepare('SELECT risk_profile FROM agent_registry WHERE id = ?')
@@ -404,15 +747,22 @@ export class EvolutionaryOrchestrator {
 
   private upsertRecord(record: TournamentRecord): void {
     this.cache.set(record.tournamentId, record);
+    const directivesJson =
+      record.directives && record.directives.length > 0
+        ? JSON.stringify(record.directives)
+        : null;
     this.db.prepare(`
-      INSERT INTO evolutionary_tournaments (id, name, started_at, payload)
-      VALUES (?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET payload = excluded.payload
+      INSERT INTO evolutionary_tournaments (id, name, started_at, payload, claude_directive)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(id) DO UPDATE SET
+        payload          = excluded.payload,
+        claude_directive = excluded.claude_directive
     `).run(
       record.tournamentId,
       record.name,
       record.startedAt,
       JSON.stringify(record),
+      directivesJson,
     );
   }
 

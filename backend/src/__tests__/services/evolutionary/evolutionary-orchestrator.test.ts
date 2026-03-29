@@ -50,10 +50,33 @@ function makeDb(): Database.Database {
     );
 
     CREATE TABLE IF NOT EXISTS evolutionary_tournaments (
-      id         TEXT PRIMARY KEY,
-      name       TEXT NOT NULL,
-      started_at TEXT NOT NULL,
-      payload    TEXT NOT NULL
+      id               TEXT PRIMARY KEY,
+      name             TEXT NOT NULL,
+      started_at       TEXT NOT NULL,
+      payload          TEXT NOT NULL,
+      claude_directive TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS generation_checkpoints (
+      id              TEXT PRIMARY KEY,
+      tournament_id   TEXT NOT NULL,
+      generation      INTEGER NOT NULL,
+      population_json TEXT NOT NULL,
+      directive_json  TEXT,
+      created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (tournament_id, generation)
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_lineage_extended (
+      id               TEXT PRIMARY KEY,
+      agent_id         TEXT NOT NULL,
+      parent_ids       TEXT NOT NULL,
+      generation       INTEGER NOT NULL,
+      architecture     TEXT NOT NULL,
+      fitness_at_birth REAL NOT NULL DEFAULT 0,
+      tournament_id    TEXT NOT NULL,
+      created_at       TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE (agent_id)
     );
   `);
 

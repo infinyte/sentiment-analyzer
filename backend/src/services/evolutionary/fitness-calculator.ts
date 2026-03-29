@@ -16,6 +16,19 @@ export interface AgentStats {
   sharpeRatio:       number;  // can be negative, typically -2 to +5
   totalPnl:          number;  // absolute dollar amount
   totalCompetitions: number;
+  /**
+   * Role of this agent in adversarial training.
+   * Absent / 'SENTIMENT' → normal 0–100 score.
+   * 'ADVERSARY' → score is inverted (100 − raw) so adversary reward is
+   * opposite to sentiment reward.
+   */
+  agentType?:        'SENTIMENT' | 'ADVERSARY';
+  /**
+   * Set to `true` for sentiment agents that outperformed at least one
+   * adversary in the most recent adversarial round.  Triggers a +10 %
+   * fitness multiplier (capped at 100).
+   */
+  beatsAdversary?:   boolean;
 }
 
 // ── FitnessCalculator ─────────────────────────────────────────────────────────
@@ -24,6 +37,12 @@ export class FitnessCalculator {
 
   /**
    * Compute a 0–100 fitness score for a single agent given all agents' stats.
+   *
+   * Special cases:
+   *   - Adversary agents (`agentType === 'ADVERSARY'`): fitness is inverted
+   *     (100 − raw) so that their reward is the opposite of sentiment agents.
+   *   - Sentiment agents with `beatsAdversary === true` receive a +10 %
+   *     multiplier on top of their raw score (capped at 100).
    */
   calculateFitness(stats: AgentStats, allStats: AgentStats[]): number {
     const winRateComponent  = 0.40 * stats.winRatePct;
@@ -31,7 +50,19 @@ export class FitnessCalculator {
     const pnlComponent      = 0.25 * this.getPnlPercentile(stats, allStats);
 
     const raw = winRateComponent + sharpeComponent + pnlComponent;
-    return Math.max(0, Math.min(100, raw));
+    const clamped = Math.max(0, Math.min(100, raw));
+
+    // Adversary agents: invert the reward
+    if (stats.agentType === 'ADVERSARY') {
+      return Math.max(0, Math.min(100, 100 - clamped));
+    }
+
+    // Sentiment agents that beat an adversary: +10 % bonus
+    if (stats.beatsAdversary) {
+      return Math.max(0, Math.min(100, clamped * 1.1));
+    }
+
+    return clamped;
   }
 
   /**

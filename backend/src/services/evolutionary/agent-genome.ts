@@ -61,6 +61,12 @@ export interface AgentGenome {
   /** Maximum steps to hold a position before forced close.  Range: [1, 20] (integer) */
   holdDurationMax: number;
 
+  // ── Adversarial training fields ───────────────────────────────────────────
+  /** Role of this agent in adversarial training. Absent ≡ 'SENTIMENT'. */
+  agentType?: 'SENTIMENT' | 'ADVERSARY';
+  /** ID of the sentiment agent this adversary was built to stress-test (adversary agents only). */
+  targetAgentId?: string;
+
   // ── Optional embedded policy weights (for network crossover) ─────────────
   policyWeights?: PolicyWeights;
 }
@@ -73,7 +79,7 @@ export interface GeneBounds {
 }
 
 /** Canonical valid ranges — used by crossover and mutation to clamp values. */
-export const GENE_BOUNDS: Record<keyof Omit<AgentGenome, 'policyWeights'>, GeneBounds> = {
+export const GENE_BOUNDS: Record<keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId'>, GeneBounds> = {
   epsilon:              { min: 0.01,   max: 0.50 },
   learningRate:         { min: 0.001,  max: 0.10 },
   gamma:                { min: 0.90,   max: 0.999 },
@@ -88,6 +94,36 @@ export const GENE_BOUNDS: Record<keyof Omit<AgentGenome, 'policyWeights'>, GeneB
 };
 
 export const NUMERIC_GENES = Object.keys(GENE_BOUNDS) as Array<keyof typeof GENE_BOUNDS>;
+
+/**
+ * Adversary-specific gene bounds.  Behavioural genes are inverted relative to
+ * normal sentiment agents so that adversaries stress-test the population by
+ * trading with counter-strategies.
+ *
+ *   entryThreshold : [20, 50]  — lower than normal [30, 80] → more aggressive entry
+ *   exitThreshold  : [60, 90]  — higher than normal [20, 70] → adversary holds longer
+ *   stopLossPct    : [1, 5]    — tighter stops than normal [1, 15]
+ *   takeProfitPct  : [1, 8]    — smaller take-profit than normal [3, 30]
+ *   positionSizePct: [20, 30]  — oversized positions to amplify pressure
+ *   riskPercent    : [3, 5]    — elevated risk per trade
+ *   holdDurationMax: [1, 5]    — very short hold windows
+ */
+export const ADVERSARY_GENE_BOUNDS: Record<
+  keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId'>,
+  GeneBounds
+> = {
+  epsilon:              { min: 0.01,  max: 0.50 },
+  learningRate:         { min: 0.001, max: 0.10 },
+  gamma:                { min: 0.90,  max: 0.999 },
+  explorationDecayRate: { min: 0.990, max: 0.9999 },
+  entryThreshold:       { min: 20,    max: 50 },
+  exitThreshold:        { min: 60,    max: 90 },
+  stopLossPct:          { min: 1,     max: 5 },
+  takeProfitPct:        { min: 1,     max: 8 },
+  positionSizePct:      { min: 20,    max: 30 },
+  riskPercent:          { min: 3,     max: 5 },
+  holdDurationMax:      { min: 1,     max: 5, integer: true },
+};
 
 // ── Default genome (sensible mid-range starting values) ───────────────────────
 
