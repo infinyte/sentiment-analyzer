@@ -24,6 +24,8 @@ import logger from '../logger.js';
 import type { IAgentRepository } from '../repositories/interfaces/agent.repository.js';
 import type { IBrokerRepository, BrokerOrder } from '../repositories/interfaces/broker.repository.js';
 import { getPubSub, competitionChannel } from './pubsub.js';
+import type { ModelArchitecture, ArchitectureParams } from './evolutionary/architecture-params.js';
+import { isLSTMParams, isGANParams, isTransformerParams } from './evolutionary/architecture-params.js';
 
 // ─── Order Book Types ────────────────────────────────────────────────────────
 
@@ -92,6 +94,11 @@ export interface CompetitionAgentSpec {
   id: string;
   riskProfile: 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
   initialCapital?: number;
+  /** Optional architecture for signal-processing dispatch in feature extraction. */
+  architectureConfig?: {
+    modelArchitecture: ModelArchitecture;
+    architectureParams: ArchitectureParams;
+  };
 }
 
 export type SymbolSelectionMode = 'MANUAL' | 'AUTO';
@@ -132,7 +139,7 @@ export interface CompetitionConfig {
    */
   autoCoinsPerAgent?: number;
   /** If set to 'PAPER' or 'LIVE', real orders are placed via the broker adapter. Defaults to 'SIMULATED'. */
-  exchangeMode?: 'SIMULATED' | 'PAPER' | 'LIVE';
+  exchangeMode?: import('../types/broker.js').ExchangeMode;
   /** Credential ID (from broker_credentials table) required when exchangeMode is PAPER or LIVE. */
   brokerCredentialId?: string;
   /** Risk limits applied when exchangeMode is PAPER or LIVE. Safe defaults used if omitted. */
@@ -403,6 +410,8 @@ export class MarlTradingAgent extends TradingAgent {
   private readonly inputSize: number;
   /** Whether 4 extra sentiment features are appended to the state vector. */
   private readonly useSentimentFeatures: boolean;
+  /** Optional architecture configuration for signal-processing dispatch. */
+  private architectureConfig?: CompetitionAgentSpec['architectureConfig'];
   private replayBuffer: Experience[] = [];
   private currentObservation: AgentObservation | null = null;
   private currentStateKey: string = '';
@@ -413,9 +422,10 @@ export class MarlTradingAgent extends TradingAgent {
   private marlWinningTrades: number = 0;
   private learningIterations: number = 0;
 
-  constructor(config: AgentConfig, useSentimentFeatures = false) {
+  constructor(config: AgentConfig, useSentimentFeatures = false, architectureConfig?: CompetitionAgentSpec['architectureConfig']) {
     super(config);
     this.useSentimentFeatures = useSentimentFeatures;
+    this.architectureConfig = architectureConfig;
     this.inputSize = useSentimentFeatures ? EXTENDED_STATE_DIM : BASE_STATE_DIM;
     this.policyNetwork = new PolicyNetwork(this.inputSize);
     this.epsilon = 0.1;
@@ -699,7 +709,89 @@ export class MarlTradingAgent extends TradingAgent {
     // Pad to exactly this.inputSize (50 base or 54 extended)
     while (features.length < this.inputSize) features.push(0);
 
-    return features.slice(0, this.inputSize);
+    const raw = features.slice(0, this.inputSize);
+
+    // ── Architecture-specific signal processing ───────────────────────────
+    if (this.architectureConfig) {
+      return this.applyArchitectureProcessing(raw, obs, this.architectureConfig);
+    }
+
+    return raw;
+  }
+
+  /**
+   * Post-process raw features using the agent's model architecture.
+   *
+   *   LSTM/HYBRID   : EMA smoothing over equity-history features (indices 31–40)
+   *                   using sequenceLength as the EMA window.
+   *   GAN           : Gaussian noise on all features (adversarialPressure × generatorLR),
+   *                   sentiment features upweighted by discriminatorWeight.
+   *   TRANSFORMER   : Soft attention weighting across feature groups using
+   *                   attentionHeads and embeddingDim scaling factor.
+   *   HYBRID        : LSTM smoothing applied first (shared params).
+   */
+  private applyArchitectureProcessing(
+    features: number[],
+    obs: AgentObservation,
+    archCfg: NonNullable<CompetitionAgentSpec['architectureConfig']>,
+  ): number[] {
+    const { modelArchitecture, architectureParams } = archCfg;
+    const out = [...features];
+
+    if ((modelArchitecture === 'LSTM' || modelArchitecture === 'HYBRID') && isLSTMParams(architectureParams)) {
+      // EMA smoothing of equity-history features (indices 31–40)
+      const alpha = 2 / (architectureParams.sequenceLength + 1);
+      const histStart = 31;
+      const histEnd   = Math.min(41, out.length);
+      let ema = out[histStart] ?? 0;
+      for (let i = histStart; i < histEnd; i++) {
+        ema = alpha * (out[i] ?? 0) + (1 - alpha) * ema;
+        out[i] = ema;
+      }
+      // Dropout: zero out features with probability `dropout`
+      if (architectureParams.dropout > 0) {
+        for (let i = 0; i < out.length; i++) {
+          if (Math.random() < architectureParams.dropout) out[i] = 0;
+        }
+      }
+    }
+
+    if (modelArchitecture === 'GAN' && isGANParams(architectureParams)) {
+      const noiseScale = architectureParams.adversarialPressure * architectureParams.generatorLR;
+      for (let i = 0; i < out.length; i++) {
+        out[i] = (out[i] ?? 0) + (Math.random() * 2 - 1) * noiseScale;
+      }
+      // Upweight sentiment features (indices 41–46)
+      const dw = 1 + architectureParams.discriminatorWeight;
+      for (let i = 41; i <= 46 && i < out.length; i++) {
+        out[i] = (out[i] ?? 0) * dw;
+      }
+    }
+
+    if (modelArchitecture === 'TRANSFORMER' && isTransformerParams(architectureParams)) {
+      const numHeads    = architectureParams.attentionHeads;
+      const scale       = architectureParams.embeddingDim / 32; // normalized around default of 32
+      const groupSize   = Math.floor(out.length / numHeads);
+
+      for (let h = 0; h < numHeads; h++) {
+        const start = h * groupSize;
+        const end   = h === numHeads - 1 ? out.length : start + groupSize;
+        const group = out.slice(start, end);
+
+        // Softmax attention weights within group
+        const scaled  = group.map(v => v * scale);
+        const maxVal  = Math.max(...scaled);
+        const exp     = scaled.map(v => Math.exp(v - maxVal));
+        const expSum  = exp.reduce((s, v) => s + v, 0) || 1;
+        const attn    = exp.map(v => v / expSum);
+
+        for (let i = start; i < end; i++) {
+          out[i] = (out[i] ?? 0) * (attn[i - start] ?? 1);
+        }
+      }
+    }
+
+    return out;
   }
 
   // ── State Discretization ──────────────────────────────────────────────────
@@ -1401,7 +1493,7 @@ export class MarlCompetitionEngine {
       riskProfile: spec.riskProfile,
       initialCapital: capital,
     };
-    const agent = new MarlTradingAgent(config, useSentimentFeatures);
+    const agent = new MarlTradingAgent(config, useSentimentFeatures, spec.architectureConfig);
     const seedSnapshot = learningSnapshot ?? MarlCompetitionEngine.learningStateCache.get(this.getLearningCacheKey(spec));
     if (seedSnapshot) {
       agent.importLearningState(seedSnapshot);
@@ -1781,6 +1873,7 @@ export class MarlCompetitionEngine {
     }
 
     // Route to real-trading path when exchangeMode is PAPER or LIVE (broker adapter)
+    // REALISTIC_PAPER runs the same simulated tournament path as SIMULATED
     if (resolvedConfig.exchangeMode === 'PAPER' || resolvedConfig.exchangeMode === 'LIVE') {
       return this.runSingleTournamentReal(resolvedConfig, onProgress, competitionId);
     }

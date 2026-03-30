@@ -5,6 +5,18 @@
 import Database from 'better-sqlite3';
 import { MutationEngine, type MutationSeverity } from '../../../services/evolutionary/mutation-engine.js';
 import { GenomeManager, createDefaultGenome, GENE_BOUNDS, NUMERIC_GENES } from '../../../services/evolutionary/agent-genome.js';
+import {
+  createDefaultLSTMParams,
+  createDefaultGANParams,
+  createDefaultTransformerParams,
+  isLSTMParams,
+  isGANParams,
+  isTransformerParams,
+  LSTM_PARAM_BOUNDS,
+  GAN_PARAM_BOUNDS,
+  TRANSFORMER_PARAM_BOUNDS,
+  VALID_ATTENTION_HEADS,
+} from '../../../services/evolutionary/architecture-params.js';
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -147,6 +159,96 @@ describe('MutationEngine — mutate()', () => {
 
     const avg = (arr: number[]) => arr.reduce((s, v) => s + v, 0) / arr.length;
     expect(avg(heavyCounts)).toBeGreaterThan(avg(lightCounts));
+  });
+});
+
+// ── Architecture-param mutation tests ─────────────────────────────────────────
+
+describe('MutationEngine — architecture parameter mutation', () => {
+  const engine = new MutationEngine();
+
+  it('LSTM: mutated sequenceLength stays within bounds (100 runs)', () => {
+    const base = { ...createDefaultGenome(), modelArchitecture: 'LSTM' as const, architectureParams: createDefaultLSTMParams() };
+    for (let i = 0; i < 100; i++) {
+      const { genome: m } = engine.mutate(base, 'HEAVY');
+      expect(isLSTMParams(m.architectureParams!)).toBe(true);
+      if (isLSTMParams(m.architectureParams!)) {
+        expect(m.architectureParams.sequenceLength).toBeGreaterThanOrEqual(LSTM_PARAM_BOUNDS.sequenceLength.min);
+        expect(m.architectureParams.sequenceLength).toBeLessThanOrEqual(LSTM_PARAM_BOUNDS.sequenceLength.max);
+        expect(Number.isInteger(m.architectureParams.sequenceLength)).toBe(true);
+        expect(m.architectureParams.hiddenUnits).toBeGreaterThanOrEqual(LSTM_PARAM_BOUNDS.hiddenUnits.min);
+        expect(m.architectureParams.hiddenUnits).toBeLessThanOrEqual(LSTM_PARAM_BOUNDS.hiddenUnits.max);
+        expect(m.architectureParams.dropout).toBeGreaterThanOrEqual(LSTM_PARAM_BOUNDS.dropout.min);
+        expect(m.architectureParams.dropout).toBeLessThanOrEqual(LSTM_PARAM_BOUNDS.dropout.max);
+      }
+    }
+  });
+
+  it('GAN: mutated params stay within bounds (100 runs)', () => {
+    const base = { ...createDefaultGenome(), modelArchitecture: 'GAN' as const, architectureParams: createDefaultGANParams() };
+    for (let i = 0; i < 100; i++) {
+      const { genome: m } = engine.mutate(base, 'HEAVY');
+      expect(isGANParams(m.architectureParams!)).toBe(true);
+      if (isGANParams(m.architectureParams!)) {
+        expect(m.architectureParams.adversarialPressure).toBeGreaterThanOrEqual(GAN_PARAM_BOUNDS.adversarialPressure.min);
+        expect(m.architectureParams.adversarialPressure).toBeLessThanOrEqual(GAN_PARAM_BOUNDS.adversarialPressure.max);
+        expect(m.architectureParams.discriminatorWeight).toBeGreaterThanOrEqual(GAN_PARAM_BOUNDS.discriminatorWeight.min);
+        expect(m.architectureParams.discriminatorWeight).toBeLessThanOrEqual(GAN_PARAM_BOUNDS.discriminatorWeight.max);
+        expect(m.architectureParams.generatorLR).toBeGreaterThanOrEqual(GAN_PARAM_BOUNDS.generatorLR.min);
+        expect(m.architectureParams.generatorLR).toBeLessThanOrEqual(GAN_PARAM_BOUNDS.generatorLR.max);
+      }
+    }
+  });
+
+  it('TRANSFORMER: attentionHeads stays in valid set (100 runs)', () => {
+    const base = { ...createDefaultGenome(), modelArchitecture: 'TRANSFORMER' as const, architectureParams: createDefaultTransformerParams() };
+    for (let i = 0; i < 100; i++) {
+      const { genome: m } = engine.mutate(base, 'HEAVY');
+      expect(isTransformerParams(m.architectureParams!)).toBe(true);
+      if (isTransformerParams(m.architectureParams!)) {
+        expect(VALID_ATTENTION_HEADS).toContain(m.architectureParams.attentionHeads as typeof VALID_ATTENTION_HEADS[number]);
+        expect(m.architectureParams.embeddingDim).toBeGreaterThanOrEqual(TRANSFORMER_PARAM_BOUNDS.embeddingDim.min);
+        expect(m.architectureParams.embeddingDim).toBeLessThanOrEqual(TRANSFORMER_PARAM_BOUNDS.embeddingDim.max);
+        expect(m.architectureParams.feedforwardDim).toBeGreaterThanOrEqual(TRANSFORMER_PARAM_BOUNDS.feedforwardDim.min);
+        expect(m.architectureParams.feedforwardDim).toBeLessThanOrEqual(TRANSFORMER_PARAM_BOUNDS.feedforwardDim.max);
+      }
+    }
+  });
+
+  it('HYBRID uses LSTM param mutation', () => {
+    const base = { ...createDefaultGenome(), modelArchitecture: 'HYBRID' as const, architectureParams: createDefaultLSTMParams() };
+    const { genome: m } = engine.mutate(base, 'MEDIUM');
+    expect(m.modelArchitecture).toBe('HYBRID');
+    expect(isLSTMParams(m.architectureParams!)).toBe(true);
+  });
+
+  it('genome without architecture is unaffected (no architectureParams set)', () => {
+    const base = createDefaultGenome();
+    const { genome: m } = engine.mutate(base, 'HEAVY');
+    expect(m.modelArchitecture).toBeUndefined();
+    expect(m.architectureParams).toBeUndefined();
+  });
+
+  it('does not mutate the original architecture params', () => {
+    const origParams = createDefaultLSTMParams();
+    const base = { ...createDefaultGenome(), modelArchitecture: 'LSTM' as const, architectureParams: origParams };
+    const origCopy = { ...origParams };
+    engine.mutate(base, 'HEAVY');
+    expect(origParams).toEqual(origCopy);
+  });
+
+  it('TRANSFORMER: attentionHeads only mutates for MEDIUM severity or higher', () => {
+    const base = { ...createDefaultGenome(), modelArchitecture: 'TRANSFORMER' as const, architectureParams: { ...createDefaultTransformerParams(), attentionHeads: 4 } };
+    let anyChange = false;
+    for (let i = 0; i < 100; i++) {
+      const { genome: m } = engine.mutate(base, 'LIGHT');
+      if (isTransformerParams(m.architectureParams!) && m.architectureParams.attentionHeads !== 4) {
+        anyChange = true;
+        break;
+      }
+    }
+    // LIGHT has numGenes=2 so headDelta is always 0 — attentionHeads should never change
+    expect(anyChange).toBe(false);
   });
 });
 

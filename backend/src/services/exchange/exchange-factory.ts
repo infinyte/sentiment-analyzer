@@ -30,6 +30,8 @@ import { CoinbaseClient }    from './coinbase-client.js';
 import { CoinbaseExchange }  from './coinbase-exchange.js';
 import { AlpacaClient }      from './alpaca-client.js';
 import { AlpacaExchange }    from './alpaca-exchange.js';
+import { RealisticPaperExchange } from './realistic-paper-exchange.js';
+import type { FeePreset } from './realistic-paper-exchange.js';
 import type { ExchangeInterface } from './exchange-interface.js';
 import { appConfigService } from '../app-config-service.js';
 
@@ -75,9 +77,10 @@ export function createExchangeAdapter(config: ExchangeAdapterConfig): ExchangeAd
 // ── Higher-level factory (MARL agent loop) ────────────────────────────────────
 
 export enum TradingMode {
-  PAPER   = 'paper',
-  SANDBOX = 'sandbox',
-  LIVE    = 'live',
+  PAPER            = 'paper',
+  REALISTIC_PAPER  = 'realistic_paper',
+  SANDBOX          = 'sandbox',
+  LIVE             = 'live',
 }
 
 export interface TradingConfig {
@@ -127,6 +130,22 @@ export class ExchangeFactory {
     // PAPER: always simulate locally regardless of provider
     if (config.mode === TradingMode.PAPER) {
       return new PaperExchange(config.initialCapital);
+    }
+
+    // REALISTIC_PAPER: paper trading with live quote source, fees, and slippage
+    if (config.mode === TradingMode.REALISTIC_PAPER) {
+      const rawPreset = cfg('REALISTIC_PAPER_FEE_PRESET') ?? 'binance-us';
+      const feePreset = rawPreset as FeePreset;
+
+      const rawSlippageBuy  = cfg('REALISTIC_PAPER_SLIPPAGE_BUY_PCT');
+      const rawSlippageSell = cfg('REALISTIC_PAPER_SLIPPAGE_SELL_PCT');
+
+      return new RealisticPaperExchange({
+        initialCapital:   config.initialCapital,
+        feePreset,
+        slippageBuyPct:   rawSlippageBuy  ? parseFloat(rawSlippageBuy)  : undefined,
+        slippageSellPct:  rawSlippageSell ? parseFloat(rawSlippageSell) : undefined,
+      });
     }
 
     const provider = config.provider ?? 'crypto-com';

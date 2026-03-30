@@ -993,3 +993,553 @@ describe('Agent management dashboard', () => {
     expect(screen.getAllByText('POLICY_GRADIENT').length).toBeGreaterThan(0);
   }, 60000);
 });
+
+describe('AgentManagementDashboard — Issue 6 tournament detail enhancements', () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let rollbackFails: boolean;
+
+  beforeEach(() => {
+    rollbackFails = false;
+
+    mockFetch = vi.fn((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url.includes('/api/coins?limit=50')) {
+        return Promise.resolve({ ok: true, json: async () => ({ data: [] }) });
+      }
+
+      if (url.includes('/api/agents?limit=100')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            agents: [
+              {
+                id: 'adversary-1',
+                agent_type: 'ADVERSARY',
+                risk_profile: 'AGGRESSIVE',
+                status: 'ACTIVE',
+                custom_name: 'Counter Strike',
+                emoji: '⚔️',
+                color: '#dc2626',
+                biography: 'Adversary agent designed to stress-test sentiment agents.',
+                nickname: 'Counter',
+                age_iterations: 5,
+                generation_number: 2,
+                created_at: '2026-03-18T09:00:00.000Z',
+                total_competitions: 3,
+                total_wins: 1,
+                total_losses: 2,
+                win_rate_percent: 33.3,
+                total_pnl: -120.0,
+                sharpe_ratio: -0.5,
+                roi_percent: -1.2,
+              },
+              {
+                id: 'agent-1',
+                agent_type: 'MOMENTUM',
+                risk_profile: 'AGGRESSIVE',
+                status: 'ACTIVE',
+                custom_name: 'Signal Hunter',
+                emoji: '🚀',
+                color: '#00FF00',
+                biography: 'Tracks breakout regimes.',
+                nickname: 'Hunter',
+                age_iterations: 14,
+                generation_number: 3,
+                created_at: '2026-03-17T09:00:00.000Z',
+                total_competitions: 12,
+                total_wins: 8,
+                total_losses: 4,
+                win_rate_percent: 66.7,
+                total_pnl: 1234.56,
+                sharpe_ratio: 1.42,
+                roi_percent: 18.4,
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/stats/leaderboard?limit=10')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ([
+            {
+              id: 'agent-1',
+              agent_type: 'MOMENTUM',
+              risk_profile: 'AGGRESSIVE',
+              status: 'ACTIVE',
+              custom_name: 'Signal Hunter',
+              emoji: '🚀',
+              color: '#00FF00',
+              biography: 'Tracks breakout regimes.',
+              nickname: 'Hunter',
+              age_iterations: 14,
+              generation_number: 3,
+              created_at: '2026-03-17T09:00:00.000Z',
+              total_competitions: 12,
+              total_wins: 8,
+              total_losses: 4,
+              win_rate_percent: 66.7,
+              total_pnl: 1234.56,
+              sharpe_ratio: 1.42,
+              roi_percent: 18.4,
+            },
+          ]),
+        });
+      }
+
+      if (url.includes('/api/evolutionary/summary')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            totals: {
+              totalTournaments: 1,
+              completedTournaments: 1,
+              runningTournaments: 0,
+              failedTournaments: 0,
+              totalGenerations: 2,
+              averageTopFitness: 82.0,
+              averageGenerationFitness: 65.0,
+            },
+            crossTournament: {
+              bestTournament: {
+                tournamentId: 'evo-3',
+                name: 'Claude Finals',
+                status: 'COMPLETED',
+                completedAt: '2026-03-19T11:00:00.000Z',
+                symbols: ['BTC', 'ETH'],
+                generationCount: 2,
+                latestTopFitness: 82,
+                latestAvgFitness: 65,
+                latestAvgPnl: 310.5,
+                latestSurvivalRate: 30,
+              },
+              latestVsPrevious: null,
+              recentPerformance: [
+                {
+                  tournamentId: 'evo-3',
+                  name: 'Claude Finals',
+                  status: 'COMPLETED',
+                  completedAt: '2026-03-19T11:00:00.000Z',
+                  symbols: ['BTC', 'ETH'],
+                  generationCount: 2,
+                  latestTopFitness: 82,
+                  latestAvgFitness: 65,
+                  latestAvgPnl: 310.5,
+                  latestSurvivalRate: 30,
+                },
+              ],
+            },
+            recentTournaments: [
+              {
+                tournamentId: 'evo-3',
+                name: 'Claude Finals',
+                status: 'COMPLETED',
+                currentGeneration: 2,
+                maxGenerations: 2,
+                populationSize: 8,
+                symbols: ['BTC', 'ETH'],
+                startedAt: '2026-03-19T10:30:00.000Z',
+                completedAt: '2026-03-19T11:00:00.000Z',
+                generationCount: 2,
+                latestTopFitness: 82,
+                latestAvgFitness: 65,
+                latestAvgPnl: 310.5,
+                latestSurvivalRate: 30,
+              },
+            ],
+            latestTournament: {
+              tournamentId: 'evo-3',
+              name: 'Claude Finals',
+              status: 'COMPLETED',
+              currentGeneration: 2,
+              maxGenerations: 2,
+              populationSize: 8,
+              symbols: ['BTC', 'ETH'],
+              startedAt: '2026-03-19T10:30:00.000Z',
+              completedAt: '2026-03-19T11:00:00.000Z',
+              generationCount: 2,
+              latestTopFitness: 82,
+              latestAvgFitness: 65,
+              latestAvgPnl: 310.5,
+              latestSurvivalRate: 30,
+              generationTimeline: [
+                {
+                  generation: 1,
+                  topFitness: 75,
+                  avgFitness: 58,
+                  avgPnl: 180.0,
+                  survivalRate: 30,
+                  populationCount: 8,
+                  survivorCount: 3,
+                  offspringCount: 5,
+                  retiredCount: 5,
+                  completedAt: '2026-03-19T10:45:00.000Z',
+                },
+                {
+                  generation: 2,
+                  topFitness: 82,
+                  avgFitness: 65,
+                  avgPnl: 310.5,
+                  survivalRate: 30,
+                  populationCount: 8,
+                  survivorCount: 3,
+                  offspringCount: 5,
+                  retiredCount: 5,
+                  completedAt: '2026-03-19T11:00:00.000Z',
+                },
+              ],
+            },
+          }),
+        });
+      }
+
+      if (url.endsWith('/api/evolutionary/tournament/evo-3')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            tournamentId: 'evo-3',
+            name: 'Claude Finals',
+            status: 'COMPLETED',
+            currentGeneration: 2,
+            startedAt: '2026-03-19T10:30:00.000Z',
+            completedAt: '2026-03-19T11:00:00.000Z',
+            config: {
+              populationSize: 8,
+              maxGenerations: 2,
+              symbols: ['BTC', 'ETH'],
+              claudeOrchestrated: true,
+              adversarialTraining: true,
+            },
+            generations: [
+              {
+                generation: 1,
+                competitionId: 'comp-adv-1',
+                population: ['agent-aa', 'agent-bb', 'adversary-aa'],
+                survivors: ['agent-aa', 'agent-bb'],
+                offspring: ['agent-cc'],
+                retired: ['adversary-aa'],
+                topAgentId: 'agent-aa',
+                topFitness: 75.0,
+                avgFitness: 58.0,
+                completedAt: '2026-03-19T10:45:00.000Z',
+                claudeDirective: {
+                  generation: 1,
+                  mutationSeverity: 'MEDIUM',
+                  survivalPercent: 30,
+                  crossoverStrategy: 'UNIFORM',
+                  diversityBoost: false,
+                  reasoning: 'Population showing moderate diversity, standard parameters apply.',
+                },
+                adversarialSummary: {
+                  sentimentAgentsCount: 2,
+                  adversaryAgentsCount: 1,
+                  sentimentWinRate: 100.0,
+                  beatingAgentIds: ['agent-aa', 'agent-bb'],
+                  matchups: [
+                    {
+                      sentimentAgentId: 'sent-agent-aa',
+                      adversaryAgentId: 'adv-agent-aa',
+                      sentimentFitness: 75.0,
+                      adversaryFitness: 40.5,
+                      sentimentWon: true,
+                    },
+                    {
+                      sentimentAgentId: 'sent-agent-bb',
+                      adversaryAgentId: 'adv-agent-aa',
+                      sentimentFitness: 38.0,
+                      adversaryFitness: 40.5,
+                      sentimentWon: false,
+                    },
+                  ],
+                },
+              },
+              {
+                generation: 2,
+                competitionId: 'comp-adv-2',
+                population: ['agent-aa', 'agent-bb', 'agent-cc'],
+                survivors: ['agent-aa'],
+                offspring: ['agent-dd'],
+                retired: ['agent-bb', 'agent-cc'],
+                topAgentId: 'agent-aa',
+                topFitness: 82.0,
+                avgFitness: 65.0,
+                completedAt: '2026-03-19T11:00:00.000Z',
+                claudeDirective: {
+                  generation: 2,
+                  mutationSeverity: 'LIGHT',
+                  survivalPercent: 25,
+                  crossoverStrategy: 'BLENDED',
+                  diversityBoost: true,
+                  reasoning: 'Strong top fitness warrants LIGHT mutation to preserve gains.',
+                },
+              },
+            ],
+          }),
+        });
+      }
+
+      if (url.includes('/api/evolutionary/tournament/evo-3/rollback') && init?.method === 'POST') {
+        if (rollbackFails) {
+          return Promise.resolve({
+            ok: false,
+            status: 400,
+            json: async () => ({ error: 'Generation 99 checkpoint not found' }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ success: true, restoredGeneration: 1 }),
+        });
+      }
+
+      if (url.endsWith('/api/agents/agent-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'agent-1',
+            agent_type: 'MOMENTUM',
+            risk_profile: 'AGGRESSIVE',
+            status: 'ACTIVE',
+            custom_name: 'Signal Hunter',
+            emoji: '🚀',
+            color: '#00FF00',
+            biography: 'Tracks breakout regimes.',
+            nickname: 'Hunter',
+            age_iterations: 14,
+            generation_number: 3,
+            created_at: '2026-03-17T09:00:00.000Z',
+            stats: {
+              total_competitions: 12,
+              total_wins: 8,
+              total_losses: 4,
+              win_rate_percent: 66.7,
+              total_pnl: 1234.56,
+              max_drawdown_percent: 9.2,
+              sharpe_ratio: 1.42,
+              roi_percent: 18.4,
+              trades_executed: 71,
+              consistency_score: 82,
+              avg_trade_profit: 17.38,
+            },
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/agent-1/history')) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+
+      if (url.includes('/api/agents/agent-1/genome')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ agentId: 'agent-1', genome: { position_size: 0.12 } }),
+        });
+      }
+
+      if (url.includes('/api/agents/agent-1/genealogy')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ agentId: 'agent-1', genealogy: [] }),
+        });
+      }
+
+      if (url.endsWith('/api/agents/adversary-1')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            id: 'adversary-1',
+            agent_type: 'ADVERSARY',
+            risk_profile: 'AGGRESSIVE',
+            status: 'ACTIVE',
+            custom_name: 'Counter Strike',
+            emoji: '⚔️',
+            color: '#dc2626',
+            biography: 'Adversary agent.',
+            nickname: 'Counter',
+            age_iterations: 5,
+            generation_number: 2,
+            created_at: '2026-03-18T09:00:00.000Z',
+            stats: {
+              total_competitions: 3,
+              total_wins: 1,
+              total_losses: 2,
+              win_rate_percent: 33.3,
+              total_pnl: -120.0,
+              max_drawdown_percent: 5.0,
+              sharpe_ratio: -0.5,
+              roi_percent: -1.2,
+              trades_executed: 15,
+              consistency_score: 40,
+              avg_trade_profit: -8.0,
+            },
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/adversary-1/history')) {
+        return Promise.resolve({ ok: true, json: async () => ([]) });
+      }
+
+      if (url.includes('/api/agents/adversary-1/genome')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            agentId: 'adversary-1',
+            genome: { modelArchitecture: 'LSTM', epsilon: 0.3 },
+          }),
+        });
+      }
+
+      if (url.includes('/api/agents/adversary-1/genealogy')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({ agentId: 'adversary-1', genealogy: [] }),
+        });
+      }
+
+      if (url.includes('/api/marl/evolution/best-genome')) {
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            agentId: 'agent-1',
+            fitnessScore: 82.0,
+            tournamentId: 'evo-3',
+            generation: 2,
+            foundAt: '2026-03-19T11:00:00.000Z',
+            genome: { position_size: 0.12 },
+          }),
+        });
+      }
+
+      if (url.endsWith('/api/marl/agents/learning')) {
+        return Promise.resolve({ ok: true, json: async () => ({ count: 0, agents: [] }) });
+      }
+
+      if (url.includes('/api/marl/agents/') && url.endsWith('/algorithm') && init?.method === 'POST') {
+        const agentId = url.split('/api/marl/agents/')[1]!.replace('/algorithm', '');
+        return Promise.resolve({
+          ok: true,
+          json: async () => ({
+            agentId,
+            algorithm: 'Q_TABLE',
+            policyNetwork: {
+              architecture: 'Feedforward',
+              updateRule: 'Gradient',
+              replayBuffer: '1000',
+            },
+          }),
+        });
+      }
+
+      return Promise.reject(new Error(`Unhandled fetch: ${url}`));
+    });
+
+    vi.stubGlobal('fetch', mockFetch);
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it('shows Claude-orchestrated badge, Adversarial Training badge, and Pop N badge in tournament detail (AC7)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('comp-adv-1');
+    expect(screen.getByText('Claude-orchestrated')).toBeTruthy();
+    expect(screen.getByText('Adversarial Training')).toBeTruthy();
+    expect(screen.getByText('Pop 8')).toBeTruthy();
+  }, 30000);
+
+  it('shows positive fitness trend badge for generation 2 relative to generation 1 (AC5)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    // evo-3 auto-loads; both generations visible (range set to 1–2 on load)
+    await screen.findByText('comp-adv-2');
+    // avgFitness went 58 → 65, trend = +7.0
+    expect(screen.getByText('+7.0 avg')).toBeTruthy();
+  }, 30000);
+
+  it('renders adversarial matchup table with WIN and LOSS result badges (AC3)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('Adversarial Round');
+    await screen.findByText('Sentiment agent');
+    expect(screen.getAllByText('WIN').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('LOSS').length).toBeGreaterThanOrEqual(1);
+  }, 30000);
+
+  it('renders Claude directive block with mutation severity, crossover strategy, and reasoning text (AC4)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('Claude Directive');
+    // Gen 1 directive params
+    await screen.findByText(
+      'Population showing moderate diversity, standard parameters apply.',
+    );
+    // Gen 2 directive params (diversityBoost + reasoning)
+    await screen.findByText('Strong top fitness warrants LIGHT mutation to preserve gains.');
+    expect(screen.getByText('+Diversity boost')).toBeTruthy();
+  }, 30000);
+
+  it('renders ADVERSARY badge for adversary agents in the agent registry list (AC1)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('Agent Management');
+    // Badge appears in the agent list button; agent_type also renders in the detail panel
+    const adversaryLabels = await screen.findAllByText('ADVERSARY');
+    expect(adversaryLabels.length).toBeGreaterThanOrEqual(1);
+  }, 30000);
+
+  it('shows LSTM architecture badge in the genome snapshot for an agent with modelArchitecture (AC2)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('Agent Management');
+    fireEvent.click(screen.getByRole('button', { name: /Counter Strike/i }));
+    await screen.findByText('LSTM');
+  }, 30000);
+
+  it('shows success message after restore checkpoint completes (AC6 success)', async () => {
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('comp-adv-1');
+    const restoreButtons = await screen.findAllByRole('button', { name: 'Restore checkpoint' });
+    expect(restoreButtons.length).toBeGreaterThan(0);
+    fireEvent.click(restoreButtons[0]!);
+    await screen.findByText(/Checkpoint for generation \d+ restored successfully/);
+  }, 30000);
+
+  it('shows Restoring... while rollback fetch is in flight (AC6 loading state)', async () => {
+    let resolveRollback!: (value: unknown) => void;
+    const originalImpl = mockFetch.getMockImplementation() as (input: string | URL | Request, init?: RequestInit) => Promise<unknown>;
+    mockFetch.mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/evo-3/rollback') && init?.method === 'POST') {
+        return new Promise(res => { resolveRollback = res; });
+      }
+      return originalImpl(input, init);
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('comp-adv-1');
+    const restoreButtons = await screen.findAllByRole('button', { name: 'Restore checkpoint' });
+    fireEvent.click(restoreButtons[0]!);
+    await screen.findByText('Restoring...');
+    resolveRollback({ ok: true, json: async () => ({}) });
+    await screen.findByText(/Checkpoint for generation \d+ restored successfully/);
+  }, 30000);
+
+  it('shows an error alert when restore checkpoint API returns a failure (AC6 error path)', async () => {
+    rollbackFails = true;
+    render(<App />);
+    fireEvent.click(screen.getByRole('button', { name: 'Agents' }));
+    await screen.findByText('comp-adv-1');
+    const restoreButtons = await screen.findAllByRole('button', { name: 'Restore checkpoint' });
+    fireEvent.click(restoreButtons[0]!);
+    await screen.findByRole('alert');
+    expect(screen.getByRole('alert')).toHaveTextContent('Generation 99 checkpoint not found');
+  }, 30000);
+});

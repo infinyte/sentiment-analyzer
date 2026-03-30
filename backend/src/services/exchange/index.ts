@@ -10,6 +10,8 @@ export { RiskManager } from './risk-manager.js';
 export { exchangeRegistry } from './exchange-registry.js';
 export type { ExchangeInterface, Order, Balance, PlaceOrderParams } from './exchange-interface.js';
 export { PaperExchange }      from './paper-exchange.js';
+export { RealisticPaperExchange, FallbackQuoteSource, HttpQuoteSource, FEE_PRESETS } from './realistic-paper-exchange.js';
+export type { RealisticPaperExchangeConfig, QuoteSource, FeeConfig, FeePreset } from './realistic-paper-exchange.js';
 export { BinanceUSExchange }  from './binance-us-exchange.js';
 export type { BinanceUSConfig } from './binance-us-exchange.js';
 export { CryptoComClient }    from './crypto-com-client.js';

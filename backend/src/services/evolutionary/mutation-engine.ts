@@ -31,6 +31,20 @@ import {
   NUMERIC_GENES,
   GenomeManager,
 } from './agent-genome.js';
+import {
+  type ArchitectureParams,
+  type LSTMParams,
+  type GANParams,
+  type TransformerParams,
+  type ModelArchitecture,
+  LSTM_PARAM_BOUNDS,
+  GAN_PARAM_BOUNDS,
+  TRANSFORMER_PARAM_BOUNDS,
+  VALID_ATTENTION_HEADS,
+  isLSTMParams,
+  isGANParams,
+  isTransformerParams,
+} from './architecture-params.js';
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
 
@@ -129,6 +143,15 @@ export class MutationEngine {
       mutated.policyWeights = this.perturbWeights(mutated.policyWeights, cfg.weightNoise);
     }
 
+    // ── Architecture-specific parameter mutation ──────────────────────────
+    if (mutated.modelArchitecture && mutated.architectureParams) {
+      mutated.architectureParams = this.mutateArchitectureParams(
+        mutated.architectureParams,
+        mutated.modelArchitecture,
+        cfg,
+      );
+    }
+
     // ── Compute scalar severity (0–1) ─────────────────────────────────────
     const mutationSeverity = this.computeSeverityScore(mutations, genome);
 
@@ -219,5 +242,71 @@ export class MutationEngine {
     // Scale by fraction of genome mutated to weight coverage
     const coverageFraction = mutations.length / NUMERIC_GENES.length;
     return Math.min(1, avg * 2 * coverageFraction);
+  }
+
+  // ── Architecture-specific mutation ─────────────────────────────────────────
+
+  /**
+   * Apply architecture-aware mutations to `params`.
+   *
+   * Integer genes receive ±step discrete mutations (1–3 steps depending on
+   * severity); float genes use the same additive-drift / multiplicative-drift
+   * logic applied to the main genome.
+   */
+  private mutateArchitectureParams(
+    params: ArchitectureParams,
+    architecture: ModelArchitecture,
+    cfg: SeverityConfig,
+  ): ArchitectureParams {
+    const clamp = (v: number, min: number, max: number, integer?: boolean): number => {
+      const clamped = Math.max(min, Math.min(max, v));
+      return integer ? Math.round(clamped) : clamped;
+    };
+
+    const driftFloat = (v: number, min: number, max: number): number => {
+      const shift = (Math.random() * 2 - 1) * cfg.driftFactor * (max - min);
+      return clamp(v + shift, min, max);
+    };
+
+    const driftMultiplicative = (v: number, min: number, max: number): number => {
+      const scale = 1 + (Math.random() * 2 - 1) * cfg.driftFactor;
+      return clamp(v * scale, min, max);
+    };
+
+    const driftInt = (v: number, min: number, max: number): number => {
+      const step = Math.ceil(cfg.driftFactor * (max - min) * 0.15);
+      const delta = Math.floor(Math.random() * step + 1) * (Math.random() < 0.5 ? -1 : 1);
+      return clamp(v + delta, min, max, true);
+    };
+
+    if ((architecture === 'LSTM' || architecture === 'HYBRID') && isLSTMParams(params)) {
+      return {
+        sequenceLength: driftInt(params.sequenceLength, LSTM_PARAM_BOUNDS.sequenceLength.min, LSTM_PARAM_BOUNDS.sequenceLength.max),
+        hiddenUnits:    driftInt(params.hiddenUnits,    LSTM_PARAM_BOUNDS.hiddenUnits.min,    LSTM_PARAM_BOUNDS.hiddenUnits.max),
+        dropout:        driftFloat(params.dropout,      LSTM_PARAM_BOUNDS.dropout.min,        LSTM_PARAM_BOUNDS.dropout.max),
+      } as LSTMParams;
+    }
+
+    if (architecture === 'GAN' && isGANParams(params)) {
+      return {
+        adversarialPressure: driftFloat(params.adversarialPressure, GAN_PARAM_BOUNDS.adversarialPressure.min, GAN_PARAM_BOUNDS.adversarialPressure.max),
+        discriminatorWeight: driftFloat(params.discriminatorWeight, GAN_PARAM_BOUNDS.discriminatorWeight.min, GAN_PARAM_BOUNDS.discriminatorWeight.max),
+        generatorLR:         driftMultiplicative(params.generatorLR, GAN_PARAM_BOUNDS.generatorLR.min,        GAN_PARAM_BOUNDS.generatorLR.max),
+      } as GANParams;
+    }
+
+    if (architecture === 'TRANSFORMER' && isTransformerParams(params)) {
+      // attentionHeads must stay in the valid set {1, 2, 4, 8}
+      const headIdx     = VALID_ATTENTION_HEADS.indexOf(params.attentionHeads as typeof VALID_ATTENTION_HEADS[number]);
+      const headDelta   = cfg.numGenes >= 4 ? (Math.random() < 0.5 ? -1 : 1) : 0;   // only mutate for MEDIUM+
+      const newHeadIdx  = Math.max(0, Math.min(VALID_ATTENTION_HEADS.length - 1, headIdx + headDelta));
+      return {
+        attentionHeads: VALID_ATTENTION_HEADS[newHeadIdx]!,
+        embeddingDim:   driftInt(params.embeddingDim,   TRANSFORMER_PARAM_BOUNDS.embeddingDim.min,   TRANSFORMER_PARAM_BOUNDS.embeddingDim.max),
+        feedforwardDim: driftInt(params.feedforwardDim, TRANSFORMER_PARAM_BOUNDS.feedforwardDim.min, TRANSFORMER_PARAM_BOUNDS.feedforwardDim.max),
+      } as TransformerParams;
+    }
+
+    return params;  // unknown type — return unchanged
   }
 }

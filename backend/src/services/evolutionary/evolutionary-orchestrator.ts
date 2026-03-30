@@ -363,6 +363,7 @@ export class EvolutionaryOrchestrator {
           id,
           riskProfile: this.getAgentRiskProfile(id),
           initialCapital,
+          architectureConfig: this.getAgentArchitectureConfig(id),
         })),
         symbols: cfg.symbols,
         duration,
@@ -741,6 +742,16 @@ export class EvolutionaryOrchestrator {
       .get(agentId) as { risk_profile: string } | undefined;
     const profile = row?.risk_profile ?? 'CONSERVATIVE';
     return profile as RiskProfile;
+  }
+
+  /**
+   * Load architecture config for an agent from its genome.
+   * Returns undefined if the agent has no modelArchitecture.
+   */
+  private getAgentArchitectureConfig(agentId: string): { modelArchitecture: import('./architecture-params.js').ModelArchitecture; architectureParams: import('./architecture-params.js').ArchitectureParams } | undefined {
+    const genome = this.genomeManager.loadGenome(agentId);
+    if (!genome?.modelArchitecture || !genome.architectureParams) return undefined;
+    return { modelArchitecture: genome.modelArchitecture, architectureParams: genome.architectureParams };
   }
 
   // ── SQLite persistence ────────────────────────────────────────────────────

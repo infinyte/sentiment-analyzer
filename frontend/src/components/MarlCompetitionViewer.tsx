@@ -568,6 +568,26 @@ function TournamentSchedulerTab() {
   );
 }
 
+// ─── Exchange mode helpers ────────────────────────────────────────────────────
+
+function formatExchangeMode(m: ExchangeMode): string {
+  switch (m) {
+    case 'SIMULATED':       return 'Simulated';
+    case 'REALISTIC_PAPER': return 'Realistic Paper';
+    case 'PAPER':           return 'Paper Trading';
+    case 'LIVE':            return 'Live Trading';
+  }
+}
+
+function exchangeModeColor(m: ExchangeMode): string {
+  switch (m) {
+    case 'SIMULATED':       return '#2563eb';
+    case 'REALISTIC_PAPER': return '#0891b2';
+    case 'PAPER':           return '#d97706';
+    case 'LIVE':            return '#dc2626';
+  }
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export function MarlCompetitionViewer() {
@@ -697,7 +717,7 @@ export function MarlCompetitionViewer() {
 
   // Fetch available broker credentials when switching to PAPER or LIVE mode
   useEffect(() => {
-    if (exchangeMode === 'SIMULATED') {
+    if (exchangeMode === 'SIMULATED' || exchangeMode === 'REALISTIC_PAPER') {
       setAvailableCredentials([]);
       setBrokerCredentialId('');
       return;
@@ -734,7 +754,7 @@ export function MarlCompetitionViewer() {
       evolutionaryRounds: mode === 'EVOLUTIONARY' ? evolutionaryRounds : undefined,
       learningEnabled,
       exchangeMode,
-      brokerCredentialId: exchangeMode !== 'SIMULATED' ? brokerCredentialId.trim() || undefined : undefined,
+      brokerCredentialId: (exchangeMode === 'PAPER' || exchangeMode === 'LIVE') ? brokerCredentialId.trim() || undefined : undefined,
     };
     startCompetition(config);
   };
@@ -1704,26 +1724,29 @@ export function MarlCompetitionViewer() {
               {/* Exchange mode */}
               <div style={{ gridColumn: '1 / -1' }}>
                 <label style={label}>Trading Mode</label>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  {(['SIMULATED', 'PAPER', 'LIVE'] as ExchangeMode[]).map(m => (
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
+                  {(['SIMULATED', 'REALISTIC_PAPER', 'PAPER', 'LIVE'] as ExchangeMode[]).map(m => (
                     <button
                       key={m}
                       type="button"
                       onClick={() => setExchangeMode(m)}
                       style={{
-                        ...btn(exchangeMode === m
-                          ? m === 'LIVE' ? '#dc2626' : m === 'PAPER' ? '#d97706' : '#2563eb'
-                          : '#e5e7eb'),
+                        ...btn(exchangeMode === m ? exchangeModeColor(m) : '#e5e7eb'),
                         color: exchangeMode === m ? '#fff' : '#374151',
                         fontSize: '0.8rem',
                         padding: '0.35rem 1rem',
                       }}
                     >
-                      {m === 'SIMULATED' ? 'Simulated' : m === 'PAPER' ? 'Paper Trading' : 'Live Trading'}
+                      {formatExchangeMode(m)}
                     </button>
                   ))}
                 </div>
-                {exchangeMode !== 'SIMULATED' && (
+                {exchangeMode === 'REALISTIC_PAPER' && (
+                  <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#0891b2', padding: '0.5rem 0.75rem', backgroundColor: '#f0f9ff', borderRadius: '0.375rem', border: '1px solid #bae6fd' }}>
+                    Realistic Paper uses live market prices with simulated fees and slippage — no real orders. Configure fee preset and slippage via the app config admin panel.
+                  </p>
+                )}
+                {(exchangeMode === 'PAPER' || exchangeMode === 'LIVE') && (
                   <div>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
                       <label style={{ ...label, marginBottom: 0 }}>Broker Credential</label>
@@ -1751,7 +1774,7 @@ export function MarlCompetitionViewer() {
                       </select>
                     ) : (
                       <p style={{ margin: '0.35rem 0 0', fontSize: '0.75rem', color: '#6b7280', padding: '0.5rem 0.75rem', backgroundColor: '#f9fafb', borderRadius: '0.375rem', border: '1px solid #e5e7eb' }}>
-                        No credentials stored for {exchangeMode} mode. Click &ldquo;+ Add Credential&rdquo; above.
+                        No credentials stored for {formatExchangeMode(exchangeMode)} mode. Click &ldquo;+ Add Credential&rdquo; above.
                       </p>
                     )}
                     {exchangeMode === 'LIVE' && (
@@ -2234,9 +2257,9 @@ export function MarlCompetitionViewer() {
                   <div style={{
                     padding: '0.5rem 0.75rem', backgroundColor: '#f3f4f6', borderRadius: '0.375rem',
                     fontSize: '0.875rem', fontWeight: '700',
-                    color: exchangeMode === 'LIVE' ? '#dc2626' : '#d97706',
+                    color: exchangeModeColor(exchangeMode),
                   }}>
-                    {exchangeMode}
+                    {formatExchangeMode(exchangeMode)}
                   </div>
                 </div>
                 <div>

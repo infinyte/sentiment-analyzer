@@ -7,7 +7,7 @@
 
 // ─── Enumerations ─────────────────────────────────────────────────────────────
 
-export type ExchangeMode   = 'SIMULATED' | 'PAPER' | 'LIVE';
+export type ExchangeMode   = 'SIMULATED' | 'PAPER' | 'REALISTIC_PAPER' | 'LIVE';
 export type BrokerProvider = 'ALPACA';
 export type OrderStatus    = 'PENDING' | 'SUBMITTED' | 'PARTIALLY_FILLED' | 'FILLED' | 'CANCELLED' | 'REJECTED';
 export type OrderSide      = 'BUY' | 'SELL';

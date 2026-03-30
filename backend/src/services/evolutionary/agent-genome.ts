@@ -17,6 +17,8 @@
 
 import Database from 'better-sqlite3';
 import { randomUUID } from 'node:crypto';
+import type { ModelArchitecture, ArchitectureParams } from './architecture-params.js';
+export type { ModelArchitecture, ArchitectureParams } from './architecture-params.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -61,6 +63,18 @@ export interface AgentGenome {
   /** Maximum steps to hold a position before forced close.  Range: [1, 20] (integer) */
   holdDurationMax: number;
 
+  // ── Model architecture ────────────────────────────────────────────────────
+  /**
+   * Signal-processing architecture used by this agent in the competition engine.
+   * Absent ≡ base feedforward policy network with no additional processing.
+   */
+  modelArchitecture?: ModelArchitecture;
+  /**
+   * Architecture-specific hyper-parameters (LSTMParams | GANParams | TransformerParams).
+   * Shape depends on modelArchitecture; absent when modelArchitecture is absent.
+   */
+  architectureParams?: ArchitectureParams;
+
   // ── Adversarial training fields ───────────────────────────────────────────
   /** Role of this agent in adversarial training. Absent ≡ 'SENTIMENT'. */
   agentType?: 'SENTIMENT' | 'ADVERSARY';
@@ -79,7 +93,7 @@ export interface GeneBounds {
 }
 
 /** Canonical valid ranges — used by crossover and mutation to clamp values. */
-export const GENE_BOUNDS: Record<keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId'>, GeneBounds> = {
+export const GENE_BOUNDS: Record<keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId' | 'modelArchitecture' | 'architectureParams'>, GeneBounds> = {
   epsilon:              { min: 0.01,   max: 0.50 },
   learningRate:         { min: 0.001,  max: 0.10 },
   gamma:                { min: 0.90,   max: 0.999 },
@@ -109,7 +123,7 @@ export const NUMERIC_GENES = Object.keys(GENE_BOUNDS) as Array<keyof typeof GENE
  *   holdDurationMax: [1, 5]    — very short hold windows
  */
 export const ADVERSARY_GENE_BOUNDS: Record<
-  keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId'>,
+  keyof Omit<AgentGenome, 'policyWeights' | 'agentType' | 'targetAgentId' | 'modelArchitecture' | 'architectureParams'>,
   GeneBounds
 > = {
   epsilon:              { min: 0.01,  max: 0.50 },

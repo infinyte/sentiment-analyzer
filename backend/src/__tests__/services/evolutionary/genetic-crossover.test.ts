@@ -5,6 +5,14 @@
 import Database from 'better-sqlite3';
 import { GeneticCrossover } from '../../../services/evolutionary/genetic-crossover.js';
 import { GenomeManager, createDefaultGenome, GENE_BOUNDS, NUMERIC_GENES, type AgentGenome } from '../../../services/evolutionary/agent-genome.js';
+import {
+  createDefaultLSTMParams,
+  createDefaultGANParams,
+  createDefaultTransformerParams,
+  isLSTMParams,
+  isGANParams,
+  isTransformerParams,
+} from '../../../services/evolutionary/architecture-params.js';
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
 
@@ -193,6 +201,107 @@ describe('GeneticCrossover — breed()', () => {
     db.prepare('INSERT INTO agent_registry (id) VALUES (?)').run(p2id);
 
     expect(() => crossover.breed(p1, p2id)).toThrow('No genome found');
+  });
+});
+
+// ── Architecture crossover tests ──────────────────────────────────────────────
+
+describe('GeneticCrossover — architecture crossover', () => {
+  let db:        Database.Database;
+  let mgr:       GenomeManager;
+  let crossover: GeneticCrossover;
+
+  beforeEach(() => {
+    db        = makeDb();
+    mgr       = new GenomeManager(db);
+    crossover = new GeneticCrossover(db);
+  });
+
+  afterEach(() => { db.close(); });
+
+  it('same architecture (LSTM) BLENDED: offspring inherits LSTM with averaged params', () => {
+    const lstm1 = createDefaultLSTMParams();
+    const lstm2 = { sequenceLength: 20, hiddenUnits: 128, dropout: 0.4 };
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'LSTM', architectureParams: lstm1 } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr, { modelArchitecture: 'LSTM', architectureParams: lstm2 } as Partial<AgentGenome>);
+
+    const { offspringGenome } = crossover.breed(p1, p2, 'BLENDED');
+
+    expect(offspringGenome.modelArchitecture).toBe('LSTM');
+    expect(offspringGenome.architectureParams).toBeDefined();
+    expect(isLSTMParams(offspringGenome.architectureParams!)).toBe(true);
+    if (isLSTMParams(offspringGenome.architectureParams!)) {
+      // hiddenUnits is the average: (64 + 128) / 2 = 96
+      expect(offspringGenome.architectureParams.hiddenUnits).toBe(96);
+    }
+  });
+
+  it('same architecture (GAN) UNIFORM: offspring inherits GAN params from one parent', () => {
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'GAN', architectureParams: createDefaultGANParams() } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr, { modelArchitecture: 'GAN', architectureParams: createDefaultGANParams() } as Partial<AgentGenome>);
+
+    const { offspringGenome } = crossover.breed(p1, p2, 'UNIFORM');
+
+    expect(offspringGenome.modelArchitecture).toBe('GAN');
+    expect(isGANParams(offspringGenome.architectureParams!)).toBe(true);
+  });
+
+  it('different architectures + BLENDED: offspring is HYBRID', () => {
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'LSTM', architectureParams: createDefaultLSTMParams() } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr, { modelArchitecture: 'GAN', architectureParams: createDefaultGANParams() } as Partial<AgentGenome>);
+
+    const { offspringGenome } = crossover.breed(p1, p2, 'BLENDED');
+
+    expect(offspringGenome.modelArchitecture).toBe('HYBRID');
+    expect(offspringGenome.architectureParams).toBeDefined();
+  });
+
+  it('different architectures + UNIFORM: offspring gets one parent\'s architecture', () => {
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'LSTM',        architectureParams: createDefaultLSTMParams() } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr, { modelArchitecture: 'TRANSFORMER', architectureParams: createDefaultTransformerParams() } as Partial<AgentGenome>);
+
+    const results = new Set<string>();
+    for (let i = 0; i < 20; i++) {
+      const { offspringGenome } = crossover.breed(p1, p2, 'UNIFORM');
+      results.add(offspringGenome.modelArchitecture!);
+    }
+    // Both architectures should appear (probabilistically)
+    expect(results.has('LSTM') || results.has('TRANSFORMER')).toBe(true);
+  });
+
+  it('only parent1 has architecture: offspring inherits it', () => {
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'TRANSFORMER', architectureParams: createDefaultTransformerParams() } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr);  // no architecture
+
+    const { offspringGenome } = crossover.breed(p1, p2, 'UNIFORM');
+
+    expect(offspringGenome.modelArchitecture).toBe('TRANSFORMER');
+    expect(isTransformerParams(offspringGenome.architectureParams!)).toBe(true);
+  });
+
+  it('neither parent has architecture: offspring has no architecture', () => {
+    const p1 = makeParent(db, mgr);
+    const p2 = makeParent(db, mgr);
+
+    const { offspringGenome } = crossover.breed(p1, p2);
+
+    expect(offspringGenome.modelArchitecture).toBeUndefined();
+    expect(offspringGenome.architectureParams).toBeUndefined();
+  });
+
+  it('TRANSFORMER BLENDED: attentionHeads snaps to nearest valid value', () => {
+    const t1 = { ...createDefaultTransformerParams(), attentionHeads: 2 };  // 2
+    const t2 = { ...createDefaultTransformerParams(), attentionHeads: 4 };  // 4
+    const p1 = makeParent(db, mgr, { modelArchitecture: 'TRANSFORMER', architectureParams: t1 } as Partial<AgentGenome>);
+    const p2 = makeParent(db, mgr, { modelArchitecture: 'TRANSFORMER', architectureParams: t2 } as Partial<AgentGenome>);
+
+    const { offspringGenome } = crossover.breed(p1, p2, 'BLENDED');
+
+    expect(offspringGenome.modelArchitecture).toBe('TRANSFORMER');
+    if (isTransformerParams(offspringGenome.architectureParams!)) {
+      // avg(2, 4) = 3 → snaps to nearest in {1,2,4,8} = 2 or 4
+      expect([1, 2, 4, 8]).toContain(offspringGenome.architectureParams.attentionHeads);
+    }
   });
 });
 

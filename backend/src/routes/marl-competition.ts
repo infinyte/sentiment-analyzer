@@ -372,7 +372,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       : !!(appConfigService.get('FINBERT_API_URL') || appConfigService.get('LUNARCRUSH_API_KEY'));
 
     // ─── exchangeMode / broker validation ────────────────────────────────────
-    const VALID_EXCHANGE_MODES = ['SIMULATED', 'PAPER', 'LIVE'] as const;
+    const VALID_EXCHANGE_MODES = ['SIMULATED', 'PAPER', 'REALISTIC_PAPER', 'LIVE'] as const;
     let exchangeMode: ExchangeMode = 'SIMULATED';
     if (body.exchangeMode !== undefined) {
       if (
@@ -384,6 +384,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
       exchangeMode = body.exchangeMode as ExchangeMode;
     }
 
+    // REALISTIC_PAPER does not require a broker credential — it is fully simulated
     let brokerCredentialId: string | undefined;
     if (exchangeMode === 'PAPER' || exchangeMode === 'LIVE') {
       if (typeof body.brokerCredentialId !== 'string' || !body.brokerCredentialId.trim()) {
@@ -471,7 +472,7 @@ router.post('/api/marl/competition/start', competitionWriteRateLimit, (req, res)
     // CPU-bound SIMULATED competitions run on a Worker Thread so the main
     // event loop stays responsive. Real-money modes (PAPER/LIVE) keep the
     // existing main-thread path because they use setInterval + broker I/O.
-    const isSimulated = exchangeMode === 'SIMULATED';
+    const isSimulated = exchangeMode === 'SIMULATED' || exchangeMode === 'REALISTIC_PAPER';
 
     const onSuccess = (result: Awaited<ReturnType<typeof engine.runCompetition>>) => {
       engine.updateRecord(competitionId, {

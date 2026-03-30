@@ -20,6 +20,13 @@ npm run dev:tournament-worker  # Tournament BullMQ worker (dev, watch mode)
 npm run dev:scraper-worker     # Scraper BullMQ worker (dev, watch mode)
 npm run worker:tournament      # Tournament BullMQ worker (production)
 npm run worker:scraper         # Scraper BullMQ worker (production)
+
+# MCP servers (stdio transport — connect via Claude Code or any MCP client)
+npm run dev:mcp:genetic-ops    # GA operations MCP server (dev, tsx)
+npm run dev:mcp:agent-manager  # Agent pool management MCP server (dev, tsx)
+npm run mcp:genetic-ops        # GA operations MCP server (production, requires build)
+npm run mcp:agent-manager      # Agent pool management MCP server (production, requires build)
+# Set DB_PATH env var to override the default ./sentiment_analyzer.db path
 ```
 
 ### Frontend
@@ -91,6 +98,59 @@ backend/src/services/
 ├── brokers/                     # Alpaca adapter + broker registry + factory
 └── backtesting-engine.ts
 ```
+
+### MCP Servers
+Two standalone stdio MCP servers expose the evolutionary GA services to Claude Code and other MCP clients.
+
+```
+backend/src/mcp/
+├── mcp-genetic-ops.ts     # GA operations: mutate_agent, crossover_agents, evaluate_fitness,
+│                          #   select_population, get_generation_summary
+└── mcp-agent-manager.ts   # Agent pool: register_agent, get_agent_health, assign_task,
+                           #   collect_results, get_pool_status
+```
+
+**Registering with Claude Code** — add to `.claude/settings.json` (or `settings.local.json`):
+```json
+{
+  "mcpServers": {
+    "genetic-ops": {
+      "command": "npm",
+      "args": ["run", "--prefix", "backend", "dev:mcp:genetic-ops"],
+      "env": { "DB_PATH": "./backend/sentiment_analyzer.db" }
+    },
+    "agent-manager": {
+      "command": "npm",
+      "args": ["run", "--prefix", "backend", "dev:mcp:agent-manager"],
+      "env": { "DB_PATH": "./backend/sentiment_analyzer.db" }
+    }
+  }
+}
+```
+
+Both servers connect to the same SQLite file used by the main backend (`DB_PATH` env var, default `./sentiment_analyzer.db`).
+
+**`genetic-ops` tool schemas:**
+
+| Tool | Required params | Optional params | Returns |
+|------|----------------|-----------------|---------|
+| `mutate_agent` | `agentId: string` | `severity: 'LIGHT'\|'MEDIUM'\|'HEAVY'` (default `MEDIUM`) | Changed parameters + scalar severity |
+| `crossover_agents` | `parent1Id: string`, `parent2Id: string` | `strategy: 'UNIFORM'\|'BLENDED'` (default `UNIFORM`) | `offspringId`, `generationNumber`, `inheritanceMap`, genome |
+| `evaluate_fitness` | `agentId: string` | `includePopulation: boolean` (default `false`) | fitness (0–100), rank, populationSize, component breakdown |
+| `select_population` | `agentIds: string[]` | `survivalPercent: number` 1–99 (default `30`) | `survivors[]`, `retirementCandidates[]`, `middleTier[]` with fitness |
+| `get_generation_summary` | `tournamentId: string` | `generation: number` (defaults to latest) | population IDs, per-agent fitness, `GenerationDirective` |
+
+**`agent-manager` tool schemas:**
+
+| Tool | Required params | Optional params | Returns |
+|------|----------------|-----------------|---------|
+| `register_agent` | — | `agentType`, `riskProfile`, `genomeOverrides`, `parentId1/2`, `generationNumber` | `agentId`, status, genome |
+| `get_agent_health` | `agentId: string` | — | lifetime stats, genome, fitness score |
+| `assign_task` | `agentIds: string[]`, `symbols: string[]` | `duration: number` (default `200`) | `taskId`, competition spec |
+| `collect_results` | `agentId: string` | `limit: number` 1–100 (default `10`) | recent competition results, newest first |
+| `get_pool_status` | — | `includeRetired: boolean`, `filterType: 'ML_BASED'\|'RULE_BASED'\|'ADVERSARY'\|'all'` | ranked agent list with fitness, generation, riskProfile |
+
+For complete usage examples and a worked one-generation cycle see `docs/GA_MCP_USAGE_EXAMPLES.md`.
 
 ### Queue & Worker Infrastructure
 ```

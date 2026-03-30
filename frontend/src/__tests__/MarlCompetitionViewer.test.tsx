@@ -785,3 +785,88 @@ describe('MarlCompetitionViewer — Scheduled tab', () => {
     expect(screen.getByLabelText('Schedule name')).toHaveValue('Daily MARL');
   });
 });
+
+// ── REALISTIC_PAPER mode selection ────────────────────────────────────────────
+
+describe('MarlCompetitionViewer — REALISTIC_PAPER exchange mode', () => {
+  it('renders a Realistic Paper button in the Trading Mode selector', () => {
+    render(<MarlCompetitionViewer />);
+    expect(screen.getByRole('button', { name: 'Realistic Paper' })).toBeInTheDocument();
+  });
+
+  it('renders all four mode buttons in order: Simulated, Realistic Paper, Paper Trading, Live Trading', () => {
+    render(<MarlCompetitionViewer />);
+    const modeButtons = ['Simulated', 'Realistic Paper', 'Paper Trading', 'Live Trading'];
+    for (const label of modeButtons) {
+      expect(screen.getByRole('button', { name: label })).toBeInTheDocument();
+    }
+  });
+
+  it('shows fees/slippage explanatory note when Realistic Paper is selected', () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Realistic Paper' }));
+    expect(screen.getByText(/realistic paper uses live market prices/i)).toBeInTheDocument();
+  });
+
+  it('hides broker credentials section when Realistic Paper is selected', () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Realistic Paper' }));
+    expect(screen.queryByText('Broker Credential')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /add credential/i })).not.toBeInTheDocument();
+  });
+
+  it('hides broker credentials section in Simulated mode', () => {
+    render(<MarlCompetitionViewer />);
+    // Default is SIMULATED — broker section should not be visible
+    expect(screen.queryByText('Broker Credential')).not.toBeInTheDocument();
+  });
+
+  it('shows broker credentials section when Paper Trading is selected', async () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Paper Trading' }));
+    await waitFor(() => expect(screen.getByText('Broker Credential')).toBeInTheDocument());
+  });
+
+  it('shows broker credentials section when Live Trading is selected', async () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Live Trading' }));
+    await waitFor(() => expect(screen.getByText('Broker Credential')).toBeInTheDocument());
+  });
+
+  it('does not show explanatory note in Simulated mode', () => {
+    render(<MarlCompetitionViewer />);
+    expect(screen.queryByText(/realistic paper uses live market prices/i)).not.toBeInTheDocument();
+  });
+
+  it('does not show explanatory note in Paper Trading mode', async () => {
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Paper Trading' }));
+    await waitFor(() => expect(screen.getByText('Broker Credential')).toBeInTheDocument());
+    expect(screen.queryByText(/realistic paper uses live market prices/i)).not.toBeInTheDocument();
+  });
+
+  it('sends REALISTIC_PAPER in start payload when selected', () => {
+    const startCompetition = vi.fn();
+    mockUseMarl.mockReturnValue({ ...defaultHook, startCompetition });
+
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Realistic Paper' }));
+    fireEvent.click(screen.getByRole('button', { name: /start tournament/i }));
+
+    expect(startCompetition).toHaveBeenCalledWith(
+      expect.objectContaining({ exchangeMode: 'REALISTIC_PAPER' }),
+    );
+  });
+
+  it('does not include brokerCredentialId when REALISTIC_PAPER is selected', () => {
+    const startCompetition = vi.fn();
+    mockUseMarl.mockReturnValue({ ...defaultHook, startCompetition });
+
+    render(<MarlCompetitionViewer />);
+    fireEvent.click(screen.getByRole('button', { name: 'Realistic Paper' }));
+    fireEvent.click(screen.getByRole('button', { name: /start tournament/i }));
+
+    const payload = startCompetition.mock.calls[0]?.[0] as Record<string, unknown>;
+    expect(payload.brokerCredentialId).toBeUndefined();
+  });
+});

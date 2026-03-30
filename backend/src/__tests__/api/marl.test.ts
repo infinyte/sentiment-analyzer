@@ -703,3 +703,50 @@ describe('GET /api/marl/info', () => {
     expect(blocked.headers['x-ratelimit-reset']).toBeDefined();
   });
 });
+
+// ── POST /api/marl/competition/start — REALISTIC_PAPER exchangeMode ───────────
+
+describe('POST /api/marl/competition/start — REALISTIC_PAPER exchangeMode', () => {
+  const validBody = {
+    mode: 'SINGLE',
+    agents: [
+      { id: 'alpha', riskProfile: 'AGGRESSIVE' },
+      { id: 'beta',  riskProfile: 'CONSERVATIVE' },
+    ],
+    symbols: ['BTC', 'ETH'],
+    duration: 200,
+    refreshInterval: 1000,
+    learningEnabled: true,
+  };
+
+  it('accepts REALISTIC_PAPER as a valid exchangeMode and returns 202', async () => {
+    const res = await request(app)
+      .post('/api/marl/competition/start')
+      .send({ ...validBody, exchangeMode: 'REALISTIC_PAPER' });
+    expect(res.status).toBe(202);
+    expect(res.body.status).toBe('STARTED');
+  });
+
+  it('does not require brokerCredentialId when exchangeMode is REALISTIC_PAPER', async () => {
+    const res = await request(app)
+      .post('/api/marl/competition/start')
+      .send({ ...validBody, exchangeMode: 'REALISTIC_PAPER' });
+    // should NOT return 400 about brokerCredentialId
+    expect(res.status).toBe(202);
+  });
+
+  it('returns 400 for an invalid exchangeMode string', async () => {
+    const res = await request(app)
+      .post('/api/marl/competition/start')
+      .send({ ...validBody, exchangeMode: 'FAKE_PAPER' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/exchangeMode/i);
+  });
+
+  it('SIMULATED mode still accepts without brokerCredentialId', async () => {
+    const res = await request(app)
+      .post('/api/marl/competition/start')
+      .send({ ...validBody, exchangeMode: 'SIMULATED' });
+    expect(res.status).toBe(202);
+  });
+});

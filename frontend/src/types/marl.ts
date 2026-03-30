@@ -6,7 +6,7 @@
 export type RiskProfile = 'CONSERVATIVE' | 'AGGRESSIVE' | 'SCALPING';
 export type CompetitionMode = 'SINGLE' | 'EVOLUTIONARY' | 'CONTINUOUS';
 export type SymbolSelectionMode = 'MANUAL' | 'AUTO';
-export type ExchangeMode = 'SIMULATED' | 'PAPER' | 'LIVE';
+export type ExchangeMode = 'SIMULATED' | 'REALISTIC_PAPER' | 'PAPER' | 'LIVE';
 
 export interface CompetitionAgent {
   id: string;

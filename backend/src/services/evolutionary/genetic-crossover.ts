@@ -25,6 +25,16 @@ import {
   NUMERIC_GENES,
   GenomeManager,
 } from './agent-genome.js';
+import {
+  type ArchitectureParams,
+  type ModelArchitecture,
+  type LSTMParams,
+  type GANParams,
+  type TransformerParams,
+  isLSTMParams,
+  isGANParams,
+  isTransformerParams,
+} from './architecture-params.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -103,6 +113,17 @@ export class GeneticCrossover {
       offspringGenome.policyWeights = this.genomeManager.clone(
         (g1.policyWeights ? g1 : g2)
       ).policyWeights;
+    }
+
+    // ── Architecture crossover ───────────────────────────────────────────
+    const archResult = this.crossoverArchitecture(
+      g1.modelArchitecture, g1.architectureParams,
+      g2.modelArchitecture, g2.architectureParams,
+      strategy,
+    );
+    if (archResult.modelArchitecture) {
+      offspringGenome.modelArchitecture = archResult.modelArchitecture;
+      offspringGenome.architectureParams = archResult.architectureParams;
     }
 
     // ── Register offspring ───────────────────────────────────────────────
@@ -196,6 +217,108 @@ export class GeneticCrossover {
       .prepare('SELECT risk_profile FROM agent_registry WHERE id = ?')
       .get(agentId) as { risk_profile: string } | undefined;
     return row?.risk_profile ?? 'CONSERVATIVE';
+  }
+
+  /**
+   * Resolve architecture and architectureParams for offspring.
+   *
+   * Rules:
+   *   - Both parents same architecture: crossover params field-by-field
+   *     (BLENDED averages compatible floats/ints; UNIFORM picks one parent's params)
+   *   - Parents have different architectures:
+   *     BLENDED → HYBRID offspring inheriting a randomly chosen parent's params
+   *     UNIFORM → randomly pick one parent's architecture + params wholesale
+   *   - Only one parent has architecture: offspring inherits it directly
+   *   - Neither has architecture: offspring has no architecture fields
+   */
+  private crossoverArchitecture(
+    arch1: ModelArchitecture | undefined,
+    params1: ArchitectureParams | undefined,
+    arch2: ModelArchitecture | undefined,
+    params2: ArchitectureParams | undefined,
+    strategy: CrossoverStrategy,
+  ): { modelArchitecture?: ModelArchitecture; architectureParams?: ArchitectureParams } {
+    // Neither parent has an architecture
+    if (!arch1 && !arch2) return {};
+
+    // Only one parent has an architecture — inherit it directly
+    if (arch1 && !arch2) return { modelArchitecture: arch1, architectureParams: params1 };
+    if (!arch1 && arch2) return { modelArchitecture: arch2, architectureParams: params2 };
+
+    // Both parents have an architecture
+    if (arch1 === arch2) {
+      // Same architecture — crossover the params
+      if (strategy === 'UNIFORM') {
+        // Pick one parent's params wholesale
+        const useParent1 = Math.random() < 0.5;
+        return {
+          modelArchitecture: arch1!,
+          architectureParams: useParent1 ? params1 : params2,
+        };
+      }
+      // BLENDED — average compatible numeric fields
+      return {
+        modelArchitecture: arch1!,
+        architectureParams: this.blendArchitectureParams(params1!, params2!),
+      };
+    }
+
+    // Different architectures
+    if (strategy === 'BLENDED') {
+      // Produce a HYBRID offspring using one parent's params as the base
+      const useParent1 = Math.random() < 0.5;
+      return {
+        modelArchitecture: 'HYBRID',
+        architectureParams: useParent1 ? params1 : params2,
+      };
+    }
+
+    // UNIFORM + different architectures → randomly pick one parent's architecture+params
+    const useParent1 = Math.random() < 0.5;
+    return {
+      modelArchitecture: useParent1 ? arch1! : arch2!,
+      architectureParams: useParent1 ? params1 : params2,
+    };
+  }
+
+  /**
+   * Blend two ArchitectureParams objects by averaging each numeric field.
+   * Both params must be the same shape (same architecture type).
+   */
+  private blendArchitectureParams(
+    p1: ArchitectureParams,
+    p2: ArchitectureParams,
+  ): ArchitectureParams {
+    if (isLSTMParams(p1) && isLSTMParams(p2)) {
+      return {
+        sequenceLength: Math.round((p1.sequenceLength + p2.sequenceLength) / 2),
+        hiddenUnits:    Math.round((p1.hiddenUnits    + p2.hiddenUnits)    / 2),
+        dropout:        (p1.dropout + p2.dropout) / 2,
+      } as LSTMParams;
+    }
+    if (isGANParams(p1) && isGANParams(p2)) {
+      return {
+        adversarialPressure: (p1.adversarialPressure + p2.adversarialPressure) / 2,
+        discriminatorWeight: (p1.discriminatorWeight + p2.discriminatorWeight) / 2,
+        generatorLR:         (p1.generatorLR         + p2.generatorLR)         / 2,
+      } as GANParams;
+    }
+    if (isTransformerParams(p1) && isTransformerParams(p2)) {
+      // attentionHeads: pick the parent with lower index in valid set (more conservative)
+      const headAvg = Math.round((p1.attentionHeads + p2.attentionHeads) / 2);
+      // Snap to nearest power-of-two in valid set {1,2,4,8}
+      const validHeads = [1, 2, 4, 8];
+      const attentionHeads = validHeads.reduce((best, h) =>
+        Math.abs(h - headAvg) < Math.abs(best - headAvg) ? h : best
+      );
+      return {
+        attentionHeads,
+        embeddingDim:   Math.round((p1.embeddingDim   + p2.embeddingDim)   / 2),
+        feedforwardDim: Math.round((p1.feedforwardDim + p2.feedforwardDim) / 2),
+      } as TransformerParams;
+    }
+    // Mismatched types — fall back to first parent's params
+    return p1;
   }
 
   /**

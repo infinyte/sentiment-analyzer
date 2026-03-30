@@ -70,13 +70,16 @@ const CONFIG_CATALOG: ConfigCatalogEntry[] = [
   { key: 'API_SECRET_KEY',          category: 'Auth',    description: 'Secret key for POST /api/refresh-sentiment auth',   isSecret: true,  defaultValue: '' },
 
   // ── Trading ──────────────────────────────────────────────────────────────
-  { key: 'TRADING_MODE',            category: 'Trading', description: 'Trading mode: paper | sandbox | live',              isSecret: false, defaultValue: 'paper' },
+  { key: 'TRADING_MODE',            category: 'Trading', description: 'Trading mode: paper | realistic_paper | sandbox | live', isSecret: false, defaultValue: 'paper' },
   { key: 'TRADING_PROVIDER',        category: 'Trading', description: 'Exchange provider: crypto-com | binance-us | coinbase | alpaca', isSecret: false, defaultValue: 'crypto-com' },
   { key: 'TRADING_INITIAL_CAPITAL', category: 'Trading', description: 'Starting capital for paper/simulated trading (USD)',isSecret: false, defaultValue: '10000' },
   { key: 'TRADING_MAX_LOSS_PERCENT', category: 'Trading', description: 'Kill-switch: max daily drawdown percentage',      isSecret: false, defaultValue: '5' },
   { key: 'TRADING_MAX_POSITION_PERCENT', category: 'Trading', description: 'Max percentage of capital in one position',  isSecret: false, defaultValue: '15' },
   { key: 'TRADING_MAX_OPEN_POSITIONS', category: 'Trading', description: 'Max number of concurrent open positions',      isSecret: false, defaultValue: '3' },
   { key: 'REQUIRE_MANUAL_APPROVAL', category: 'Trading', description: 'Require manual approval for live orders (true/false)', isSecret: false, defaultValue: 'false' },
+  { key: 'REALISTIC_PAPER_FEE_PRESET',      category: 'Trading', description: 'Fee preset for realistic paper mode: crypto-com | binance-us | coinbase | alpaca', isSecret: false, defaultValue: 'binance-us' },
+  { key: 'REALISTIC_PAPER_SLIPPAGE_BUY_PCT',  category: 'Trading', description: 'Buy-side slippage fraction for realistic paper mode (e.g. 0.001 = 0.1%)',  isSecret: false, defaultValue: '0.001' },
+  { key: 'REALISTIC_PAPER_SLIPPAGE_SELL_PCT', category: 'Trading', description: 'Sell-side slippage fraction for realistic paper mode (e.g. 0.001 = 0.1%)', isSecret: false, defaultValue: '0.001' },
 
   // ── Crypto.com exchange ───────────────────────────────────────────────────
   { key: 'CRYPTO_COM_API_KEY',      category: 'Crypto.com', description: 'Crypto.com Exchange API key',                   isSecret: true,  defaultValue: '' },
