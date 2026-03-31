@@ -1,0 +1,1 @@
+[BitConverter]::ToString([byte[]](1..32 | ForEach-Object { Get-Random -Maximum 256 })) -replace '-'
