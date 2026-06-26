@@ -104,10 +104,13 @@ export function AgentAvatar({ seed, color, size = 40, label }: AgentAvatarProps)
 
   // Feature variants — each draw advances the PRNG, so the combination is seed-stable.
   const topVariant   = Math.floor(rand() * 4); // 0 ears, 1 horns, 2 antenna, 3 fin
-  const eyeVariant   = Math.floor(rand() * 3); // 0 round, 1 oval, 2 happy
-  const mouthVariant = Math.floor(rand() * 3); // 0 smile, 1 small, 2 open
-  const hasCheeks    = rand() > 0.45;
-  const eyeDx        = 11 + Math.floor(rand() * 3); // eye spacing jitter
+  const eyeVariant   = Math.floor(rand() * 3); // 0 round, 1 sparkly, 2 happy
+  const mouthVariant = Math.floor(rand() * 3); // 0 grin, 1 smirk, 2 open + tongue
+  const hasBrows     = rand() > 0.5;
+  const eyeDx        = 10 + Math.floor(rand() * 3); // eye spacing jitter
+
+  // Thick cartoon outline that scales gently with avatar size.
+  const stroke = 2.6;
 
   return (
     <svg
@@ -120,79 +123,109 @@ export function AgentAvatar({ seed, color, size = 40, label }: AgentAvatarProps)
       style={{ display: 'block', flexShrink: 0 }}
     >
       {/* soft background disc tinted to the body colour */}
-      <circle cx="32" cy="32" r="31" fill={hsl(baseHue, baseSat * 0.4, 94)} stroke={outline} strokeOpacity={0.25} />
+      <circle cx="32" cy="32" r="31" fill={hsl(baseHue, baseSat * 0.4, 95)} stroke={outline} strokeOpacity={0.2} />
+      {/* ground shadow for a bit of depth */}
+      <ellipse cx="32" cy="57" rx="17" ry="3.4" fill={outline} opacity={0.15} />
 
-      {/* ── top feature ── */}
-      {topVariant === 0 && ( // ears
-        <g fill={body} stroke={outline} strokeWidth={1.5}>
-          <path d="M18 18 L13 5 L26 14 Z" />
-          <path d="M46 18 L51 5 L38 14 Z" />
+      {/* ── top feature (oversized, cartoon proportions) ── */}
+      {topVariant === 0 && ( // big floppy ears
+        <g fill={body} stroke={outline} strokeWidth={stroke} strokeLinejoin="round">
+          <path d="M17 20 Q9 8 17 4 Q26 8 25 17 Z" />
+          <path d="M47 20 Q55 8 47 4 Q38 8 39 17 Z" />
         </g>
       )}
-      {topVariant === 1 && ( // horns
-        <g fill={belly} stroke={outline} strokeWidth={1.5}>
-          <path d="M22 14 L19 4 L27 12 Z" />
-          <path d="M42 14 L45 4 L37 12 Z" />
+      {topVariant === 1 && ( // chunky horns
+        <g fill={belly} stroke={outline} strokeWidth={stroke} strokeLinejoin="round">
+          <path d="M21 15 Q17 4 25 3 Q27 9 27 14 Z" />
+          <path d="M43 15 Q47 4 39 3 Q37 9 37 14 Z" />
         </g>
       )}
-      {topVariant === 2 && ( // antenna
-        <g stroke={outline} strokeWidth={2} fill={accentColour}>
-          <line x1="32" y1="14" x2="32" y2="5" />
-          <circle cx="32" cy="4" r="3" stroke="none" />
+      {topVariant === 2 && ( // bouncy antenna with a shiny bobble
+        <g stroke={outline} strokeWidth={stroke} fill={accentColour} strokeLinecap="round">
+          <path d="M32 16 Q28 9 32 5" fill="none" />
+          <circle cx="32" cy="4" r="4" />
+          <circle cx="30.6" cy="2.8" r="1.2" stroke="none" fill="#ffffff" />
         </g>
       )}
-      {topVariant === 3 && ( // fin / spikes
-        <g fill={accentColour} stroke={outline} strokeWidth={1.2}>
-          <path d="M26 12 L32 2 L38 12 Z" />
-          <path d="M20 14 L24 7 L29 13 Z" />
-          <path d="M44 14 L40 7 L35 13 Z" />
+      {topVariant === 3 && ( // rounded fin / mohawk
+        <g fill={accentColour} stroke={outline} strokeWidth={stroke} strokeLinejoin="round">
+          <path d="M24 13 Q26 2 32 3 Q38 2 40 13 Z" />
         </g>
       )}
 
-      {/* ── body ── */}
-      <ellipse cx="32" cy="38" rx="20" ry="19" fill={body} stroke={outline} strokeWidth={2} />
+      {/* ── arms ── */}
+      <g fill={body} stroke={outline} strokeWidth={stroke} strokeLinejoin="round">
+        <ellipse cx="13" cy="40" rx="5" ry="6" />
+        <ellipse cx="51" cy="40" rx="5" ry="6" />
+      </g>
+
+      {/* ── feet ── */}
+      <g fill={belly} stroke={outline} strokeWidth={stroke} strokeLinejoin="round">
+        <ellipse cx="24" cy="55" rx="6" ry="4.5" />
+        <ellipse cx="40" cy="55" rx="6" ry="4.5" />
+      </g>
+
+      {/* ── body (big & round) ── */}
+      <ellipse cx="32" cy="37" rx="21" ry="20" fill={body} stroke={outline} strokeWidth={stroke} />
       {/* belly patch */}
-      <ellipse cx="32" cy="42" rx="12" ry="12" fill={belly} />
+      <ellipse cx="32" cy="41" rx="13" ry="13" fill={belly} />
+      {/* glossy highlight */}
+      <ellipse cx="24" cy="27" rx="7" ry="5" fill="#ffffff" opacity={0.28} />
 
-      {/* ── cheeks ── */}
-      {hasCheeks && (
-        <g fill={accentColour} opacity={0.8}>
-          <circle cx="19" cy="40" r="3.2" />
-          <circle cx="45" cy="40" r="3.2" />
+      {/* ── blush cheeks (always, for a friendly cartoon look) ── */}
+      <g fill={accentColour} opacity={0.55}>
+        <ellipse cx="18" cy="40" rx="4.2" ry="3" />
+        <ellipse cx="46" cy="40" rx="4.2" ry="3" />
+      </g>
+
+      {/* ── eyebrows ── */}
+      {hasBrows && (
+        <g stroke={outline} strokeWidth={2} strokeLinecap="round">
+          <path d={`M${32 - eyeDx - 4} 25 Q${32 - eyeDx} 23 ${32 - eyeDx + 4} 25`} fill="none" />
+          <path d={`M${32 + eyeDx - 4} 25 Q${32 + eyeDx} 23 ${32 + eyeDx + 4} 25`} fill="none" />
         </g>
       )}
 
-      {/* ── eyes ── */}
+      {/* ── eyes (large, glossy) ── */}
       <g fill={outline}>
-        {eyeVariant === 0 && ( // round
+        {eyeVariant === 0 && ( // big round
           <>
-            <circle cx={32 - eyeDx} cy="33" r="4" />
-            <circle cx={32 + eyeDx} cy="33" r="4" />
-            <circle cx={32 - eyeDx + 1.4} cy="31.6" r="1.3" fill="#ffffff" />
-            <circle cx={32 + eyeDx + 1.4} cy="31.6" r="1.3" fill="#ffffff" />
+            <circle cx={32 - eyeDx} cy="33" r="5.5" fill="#ffffff" stroke={outline} strokeWidth={1.4} />
+            <circle cx={32 + eyeDx} cy="33" r="5.5" fill="#ffffff" stroke={outline} strokeWidth={1.4} />
+            <circle cx={32 - eyeDx} cy="33.5" r="3" />
+            <circle cx={32 + eyeDx} cy="33.5" r="3" />
+            <circle cx={32 - eyeDx + 1.3} cy="32" r="1.4" fill="#ffffff" />
+            <circle cx={32 + eyeDx + 1.3} cy="32" r="1.4" fill="#ffffff" />
           </>
         )}
-        {eyeVariant === 1 && ( // oval
+        {eyeVariant === 1 && ( // tall sparkly
           <>
-            <ellipse cx={32 - eyeDx} cy="33" rx="3" ry="4.5" />
-            <ellipse cx={32 + eyeDx} cy="33" rx="3" ry="4.5" />
-            <circle cx={32 - eyeDx + 1} cy="31" r="1.1" fill="#ffffff" />
-            <circle cx={32 + eyeDx + 1} cy="31" r="1.1" fill="#ffffff" />
+            <ellipse cx={32 - eyeDx} cy="33" rx="4.5" ry="6" fill="#ffffff" stroke={outline} strokeWidth={1.4} />
+            <ellipse cx={32 + eyeDx} cy="33" rx="4.5" ry="6" fill="#ffffff" stroke={outline} strokeWidth={1.4} />
+            <circle cx={32 - eyeDx} cy="34" r="3" />
+            <circle cx={32 + eyeDx} cy="34" r="3" />
+            <circle cx={32 - eyeDx + 1.2} cy="32.4" r="1.3" fill="#ffffff" />
+            <circle cx={32 + eyeDx + 1.2} cy="32.4" r="1.3" fill="#ffffff" />
           </>
         )}
         {eyeVariant === 2 && ( // happy (^ ^)
-          <g stroke={outline} strokeWidth={2} fill="none" strokeLinecap="round">
-            <path d={`M${32 - eyeDx - 3} 34 Q${32 - eyeDx} 29 ${32 - eyeDx + 3} 34`} />
-            <path d={`M${32 + eyeDx - 3} 34 Q${32 + eyeDx} 29 ${32 + eyeDx + 3} 34`} />
+          <g stroke={outline} strokeWidth={2.6} fill="none" strokeLinecap="round">
+            <path d={`M${32 - eyeDx - 4} 35 Q${32 - eyeDx} 28 ${32 - eyeDx + 4} 35`} />
+            <path d={`M${32 + eyeDx - 4} 35 Q${32 + eyeDx} 28 ${32 + eyeDx + 4} 35`} />
           </g>
         )}
       </g>
 
       {/* ── mouth ── */}
-      <g stroke={outline} strokeWidth={2} fill="none" strokeLinecap="round">
-        {mouthVariant === 0 && <path d="M27 45 Q32 50 37 45" />}
-        {mouthVariant === 1 && <path d="M30 46 Q32 48 34 46" />}
-        {mouthVariant === 2 && <ellipse cx="32" cy="47" rx="3.5" ry="2.5" fill={accentColour} stroke={outline} />}
+      <g stroke={outline} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round">
+        {mouthVariant === 0 && <path d="M26 44 Q32 51 38 44" />}
+        {mouthVariant === 1 && <path d="M29 46 Q32 49 35 45" />}
+        {mouthVariant === 2 && (
+          <>
+            <path d="M27 44 Q32 51 37 44 Z" fill={hsl(baseHue, 40, 28)} />
+            <path d="M31 48 Q32 50 33 48" stroke={accentColour} strokeWidth={1.6} />
+          </>
+        )}
       </g>
     </svg>
   );

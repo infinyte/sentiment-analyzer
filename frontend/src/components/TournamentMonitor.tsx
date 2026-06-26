@@ -14,6 +14,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { tournamentApi, TournamentApiError } from '../services/tournamentApi.js';
+import { AgentAvatar } from './AgentAvatar';
 import type {
   AgentSnapshot,
   Tournament,
@@ -265,8 +266,11 @@ function AgentLeaderboard({
             <tr key={a.agentId} style={{ transition: 'all 0.3s ease' }}>
               <td style={tdStyle()}>{i + 1}</td>
               <td style={tdStyle()}>
-                <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
-                  {a.agentId.slice(0, 12)}…
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}>
+                  <AgentAvatar seed={a.agentId} size={26} />
+                  <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {a.agentId.slice(0, 12)}…
+                  </span>
                 </span>
               </td>
               <td style={tdStyle()}>

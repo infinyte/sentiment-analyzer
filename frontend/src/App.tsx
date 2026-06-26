@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentManagementDashboard } from './components/AgentManagementDashboard';
+import { AgentAvatar } from './components/AgentAvatar';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { SocialDashboard } from './components/SocialDashboard';
 import { ConfigEditor } from './components/ConfigEditor';
@@ -1706,9 +1707,12 @@ function BacktestingWorkspace() {
               {result.agentResults.map(agent => (
                 <div key={agent.agentId} style={{ border: '1px solid var(--border)', borderRadius: '0.625rem', padding: '0.9rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', marginBottom: '0.65rem' }}>
-                    <div>
-                      <div style={{ fontSize: '1rem', fontWeight: 700 }}>{agent.agentId}</div>
-                      <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{agent.agentType} / {agent.riskProfile}</div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                      <AgentAvatar seed={agent.agentId} size={40} />
+                      <div>
+                        <div style={{ fontSize: '1rem', fontWeight: 700 }}>{agent.agentId}</div>
+                        <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{agent.agentType} / {agent.riskProfile}</div>
+                      </div>
                     </div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
                       {agent.trades.length} trade(s)

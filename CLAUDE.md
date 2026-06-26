@@ -211,7 +211,7 @@ backend/src/workers/
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab
 - `components/AgentManagementDashboard.tsx` — agent registry, leaderboard, breeding controls, genealogy tree, tournament detail drill-down, generation trends, cross-tournament comparisons, genome snapshot
-- `components/AgentAvatar.tsx` — reusable, deterministic original-creature SVG avatar (Pokémon *aesthetic*, no copyrighted art). Seed-stable per agent id; honours the agent's accent `color` cosmetic. Decorative by default (`aria-hidden`); pass `label` for a standalone image. Currently wired into AgentManagementDashboard (registry/leaderboard/breeding/detail) — prototype ahead of app-wide rollout
+- `components/AgentAvatar.tsx` — reusable, deterministic cartoon original-creature SVG avatar (Pokémon *aesthetic*, no copyrighted art). Seed-stable per agent id; honours the agent's accent `color` cosmetic. Decorative by default (`aria-hidden`); pass `label` for a standalone image. Wired app-wide wherever agents render: `AgentManagementDashboard` (registry/leaderboard/breeding/detail), `MarlCompetitionViewer` (rankings, H2H, compare, trade log), `TournamentMonitor` (live table), and `App.tsx` Backtesting results
 - `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, info panel, and manual equity reload
 - `components/SocialDashboard.tsx` — trending topics, scraper health, manual social refresh, and scored-item detail drill-in
 - App dashboard polls every 10 minutes via `useEffect`; system health polls every 30 seconds; agent-management refreshes every 5 seconds via `refreshNonce`
