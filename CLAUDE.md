@@ -82,8 +82,9 @@ backend/src/services/
 │   └── agent-statistics-manager.ts  # Win-rate, PnL, history tracking
 ├── exchange/
 │   ├── exchange-interface.ts         # Shared Order/Balance/PlaceOrderParams types
-│   ├── exchange-factory.ts           # Factory routing PAPER→PaperExchange, SANDBOX/LIVE→provider
-│   ├── paper-exchange.ts             # In-memory paper trading (no real orders)
+│   ├── exchange-factory.ts           # Factory routing PAPER→PaperExchange, REALISTIC_PAPER→RealisticPaperExchange, SANDBOX/LIVE→provider; getTradingConfig()/getShadowTradingConfig()
+│   ├── paper-exchange.ts             # In-memory paper trading, zero fees/slippage (no real orders)
+│   ├── realistic-paper-exchange.ts   # Paper trading WITH fee presets + side-specific slippage; commission on every Order (REALISTIC_PAPER mode)
 │   ├── crypto-com-client.ts          # Crypto.com REST v2 HTTP client (HMAC-SHA256 auth)
 │   ├── crypto-com-exchange.ts        # ExchangeInterface adapter for Crypto.com
 │   ├── binance-us-exchange.ts        # ExchangeInterface adapter for Binance.US
@@ -93,6 +94,8 @@ backend/src/services/
 │   ├── risk-manager.ts               # Kill switch + daily-loss + order-size guard (MARL layer)
 │   ├── exchange-registry.ts          # Process-lifetime adapter singleton
 │   └── adapters/                     # coinbase-adapter.ts, binance-adapter.ts
+├── analytics/
+│   └── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -178,6 +181,7 @@ backend/src/workers/
 | Agent stats | `routes/agent-stats.ts` (factory) | `/api/agents/*` |
 | Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
+| Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
 **Important:** `/api/agents/stats/leaderboard` route must be registered before `/api/agents/:id` to avoid the wildcard swallowing it.
@@ -190,9 +194,19 @@ backend/src/workers/
 
 ### Exchange / Trading
 - Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us`, `TRADING_PROVIDER=coinbase`, or `TRADING_PROVIDER=alpaca` to switch)
-- PAPER mode always uses `PaperExchange` (in-memory, no real orders) regardless of provider
+- PAPER mode always uses `PaperExchange` (in-memory, **zero fees/slippage**, no real orders) regardless of provider
+- REALISTIC_PAPER mode uses `RealisticPaperExchange` — same in-memory simulation but with provider fee presets (maker/taker) + side-specific slippage, charging a `commission` on every `Order`. Fee preset via `REALISTIC_PAPER_FEE_PRESET` (default `binance-us`, 0% maker / 0.02% taker entry tier)
+- **Shadow harness:** set `SHADOW_MODE=true` to upgrade the default PAPER mode to REALISTIC_PAPER (or call `getShadowTradingConfig()`). Plain PAPER users (no `SHADOW_MODE`) are unaffected; explicit SANDBOX/LIVE selections are never downgraded
 - `TradingService` wraps any `ExchangeInterface` with 4 safety guards: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
 - SELL orders bypass the kill switch; only BUY orders are blocked when the loss threshold is hit
+
+### Paper Analytics (net-of-fees expectancy)
+- `services/analytics/expectancy.ts` is a **stateless** service: it reconstructs round-trip trades by FIFO-matching SELL fills against prior BUY fills per symbol (pro-rating each fill's `commission`), then computes net-of-fees metrics. No DB schema, no new dependencies
+- Read-only routes (share the trading router's exchange instance, so orders placed via `/api/trading/order` are reflected):
+  - `GET /api/paper/stats` → `ExpectancyReport` (win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, unrealized P&L)
+  - `GET /api/paper/trades?limit=N` → most recent N reconstructed `ClosedTrade`s
+  - `GET /api/paper/export` → writes report + closed trades to a timestamped JSON file under `<cwd>/data` (no schema)
+- Most meaningful in REALISTIC_PAPER/shadow mode where commissions are non-zero; in plain PAPER mode net == gross
 
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab
@@ -256,6 +270,10 @@ Current high-value frontend coverage includes:
 ### Key Optional
 - `BROKER_MASTER_KEY` — AES-256-GCM key for encrypted broker credential storage (`/api/marl/broker/*`)
 - `TRADING_PROVIDER` — `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`; selects exchange for SANDBOX/LIVE mode
+- `TRADING_MODE` — `paper` (default), `realistic_paper`, `sandbox`, or `live`
+- `SHADOW_MODE` — `true` upgrades the default `paper` mode to `realistic_paper` (fee/slippage model) for the shadow harness; ignored for explicit SANDBOX/LIVE
+- `REALISTIC_PAPER_FEE_PRESET` — fee preset for REALISTIC_PAPER: `binance-us` (default), `crypto-com`, `coinbase`, or `alpaca`
+- `REALISTIC_PAPER_SLIPPAGE_BUY_PCT` / `REALISTIC_PAPER_SLIPPAGE_SELL_PCT` — per-side slippage fractions (default `0.001` = 0.1% each way)
 - `ALPACA_API_KEY` / `ALPACA_API_SECRET` — Alpaca credentials (required when `TRADING_PROVIDER=alpaca` and mode is SANDBOX/LIVE)
 - `COINBASE_API_KEY` / `COINBASE_API_SECRET` — Coinbase Advanced Trade credentials (required when `TRADING_PROVIDER=coinbase`)
 - `COINBASE_TRADING_PAIR` — default Coinbase product ID, e.g. `BTC-USD` (default)

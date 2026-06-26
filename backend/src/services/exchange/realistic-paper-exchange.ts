@@ -37,7 +37,9 @@ export type FeePreset = 'crypto-com' | 'binance-us' | 'coinbase' | 'alpaca';
 
 export const FEE_PRESETS: Record<FeePreset, FeeConfig> = {
   'crypto-com': { maker: 0.0025, taker: 0.0050 },
-  'binance-us': { maker: 0.0010, taker: 0.0010 },
+  // Source: Binance.US public fee schedule, entry tier (0% maker / 0.02% taker),
+  // verified mid-2026. Re-verify before relying on it — tiers change with volume/BNB.
+  'binance-us': { maker: 0.0000, taker: 0.0002 },
   'coinbase':   { maker: 0.0060, taker: 0.0120 },
   'alpaca':     { maker: 0.0015, taker: 0.0025 },
 };
@@ -112,7 +114,7 @@ export interface RealisticPaperExchangeConfig {
 
   /**
    * Named fee preset selecting maker/taker rates for a known provider.
-   * Default: 'binance-us' (0.10 % / 0.10 %).
+   * Default: 'binance-us' (0 % maker / 0.02 % taker, entry tier).
    * Individual feeMaker / feeTaker fields override the preset when supplied.
    */
   feePreset?: FeePreset;
@@ -144,6 +146,9 @@ export interface RealisticPaperExchangeConfig {
 // ── RealisticPaperExchange ────────────────────────────────────────────────────
 
 export class RealisticPaperExchange implements ExchangeInterface {
+  /** Name of the fee preset in effect — surfaced for analytics/reporting. */
+  readonly feePreset: FeePreset;
+
   private readonly balances     = new Map<string, Balance>();
   private readonly orders       = new Map<string, Order>();
   private readonly feeMaker:    number;
@@ -158,7 +163,8 @@ export class RealisticPaperExchange implements ExchangeInterface {
     this.balances.set('USDT', { symbol: 'USDT', available: capital, held: 0, total: capital });
 
     // Fee resolution: individual fields override the preset when supplied
-    const preset     = FEE_PRESETS[config.feePreset ?? 'binance-us'];
+    this.feePreset   = config.feePreset ?? 'binance-us';
+    const preset     = FEE_PRESETS[this.feePreset];
     this.feeMaker    = config.feeMaker ?? preset.maker;
     this.feeTaker    = config.feeTaker ?? preset.taker;
 

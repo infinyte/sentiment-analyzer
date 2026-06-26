@@ -33,7 +33,10 @@ import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
 import { createTradingRouter }      from './routes/trading.js';
+import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
 import { createAdminConfigRouter }  from './routes/admin-config.js';
+import { ExchangeFactory, getTradingConfig } from './services/exchange/exchange-factory.js';
+import type { ExchangeInterface } from './services/exchange/exchange-interface.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
@@ -977,8 +980,30 @@ if (storage.isHealthy()) {
   logger.warn('DB-dependent routes skipped (storage not connected)');
 }
 
-// Trading routes (paper / sandbox / live exchange)
-app.use('/api/trading', createTradingRouter());
+// Trading routes (paper / sandbox / live exchange).
+// Build the exchange once and share it with the paper-analytics router so
+// /api/paper/* reflects orders placed through /api/trading/order. If construction
+// fails (e.g. missing live credentials), the trading router rebuilds lazily and
+// surfaces the configuration error as a 503, and analytics simply isn't mounted.
+let sharedTradingConfig: ReturnType<typeof getTradingConfig> | undefined;
+let sharedTradingExchange: ExchangeInterface | undefined;
+try {
+  sharedTradingConfig = getTradingConfig();
+  sharedTradingExchange = ExchangeFactory.create(sharedTradingConfig);
+} catch (err) {
+  logger.warn('shared trading exchange unavailable; paper analytics disabled', {
+    error: err instanceof Error ? err.message : String(err),
+  });
+}
+
+app.use('/api/trading', createTradingRouter(sharedTradingExchange, sharedTradingConfig));
+
+if (sharedTradingExchange) {
+  app.use(createPaperAnalyticsRouter(sharedTradingExchange, {
+    initialCapital: sharedTradingConfig?.initialCapital,
+    feePreset:      appConfigService.get('REALISTIC_PAPER_FEE_PRESET'),
+  }));
+}
 
 // 404 handler
 app.use((req, res) => {
