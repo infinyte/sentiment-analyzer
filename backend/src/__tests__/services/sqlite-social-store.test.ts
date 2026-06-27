@@ -43,10 +43,16 @@ describe('SocialStorageService queryItems', () => {
   });
 
   it('supports keyset cursor pagination for high-volume item queries', () => {
+    // Timestamps must be relative to "now": queryItems filters on
+    // `fetched_at >= datetime('now', '-sinceHours hours')`, so fixed past dates
+    // drift out of the window as the wall clock advances (and the test flakes).
+    // Only the recency ordering (a newest → c oldest) matters here.
+    const now = Date.now();
+    const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
     store.upsertItems([
-      makeItem({ id: 'a', source_id: 'a', fetched_at: '2026-03-17T12:00:00.000Z', content_created_at: '2026-03-17T12:00:00.000Z', score_composite: 95 }),
-      makeItem({ id: 'b', source_id: 'b', fetched_at: '2026-03-17T11:00:00.000Z', content_created_at: '2026-03-17T11:00:00.000Z', score_composite: 90 }),
-      makeItem({ id: 'c', source_id: 'c', fetched_at: '2026-03-17T10:00:00.000Z', content_created_at: '2026-03-17T10:00:00.000Z', score_composite: 85 }),
+      makeItem({ id: 'a', source_id: 'a', fetched_at: hoursAgo(0), content_created_at: hoursAgo(0), score_composite: 95 }),
+      makeItem({ id: 'b', source_id: 'b', fetched_at: hoursAgo(1), content_created_at: hoursAgo(1), score_composite: 90 }),
+      makeItem({ id: 'c', source_id: 'c', fetched_at: hoursAgo(2), content_created_at: hoursAgo(2), score_composite: 85 }),
     ]);
 
     const firstPage = store.queryItems({ sort: 'recency', limit: 2, sinceHours: 999 });
