@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AgentManagementDashboard } from './components/AgentManagementDashboard';
 import { AgentAvatar } from './components/AgentAvatar';
+import { ShadowHarnessDashboard } from './components/ShadowHarnessDashboard';
 import { MarlCompetitionViewer } from './components/MarlCompetitionViewer';
 import { SocialDashboard } from './components/SocialDashboard';
 import { ConfigEditor } from './components/ConfigEditor';
@@ -2564,7 +2565,7 @@ function DetailModal({ symbol, onClose }: DetailModalProps) {
 // MAIN APP
 // ============================================================================
 
-type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading' | 'admin' | 'tournaments';
+type ActiveView = 'dashboard' | 'agents' | 'marl' | 'social' | 'backtesting' | 'trading' | 'shadow' | 'admin' | 'tournaments';
 
 export default function App() {
   const { coins, loading, error, lastUpdated } = useCoins();
@@ -2733,6 +2734,9 @@ export default function App() {
           </button>
           <button style={navTabStyle('trading')} onClick={() => setActiveView('trading')}>
             Trading
+          </button>
+          <button style={navTabStyle('shadow')} onClick={() => setActiveView('shadow')}>
+            Shadow Live
           </button>
           <button style={navTabStyle('admin')} onClick={() => setActiveView('admin')}>
             Admin
@@ -2947,6 +2951,9 @@ export default function App() {
         )}
         {activeView === 'trading' && (
           <TradingWorkspace />
+        )}
+        {activeView === 'shadow' && (
+          <ShadowHarnessDashboard />
         )}
         {activeView === 'admin' && (
           <ConfigEditor />

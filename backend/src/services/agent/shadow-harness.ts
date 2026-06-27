@@ -89,7 +89,19 @@ export class ShadowHarness {
   private maxHistory  = DEFAULT_MAX_HISTORY;
   private readonly history: CycleSummary[] = [];
 
+  // Live subscribers (the SSE stream). A Set keeps subscribe/unsubscribe O(1).
+  private readonly cycleListeners = new Set<(summary: CycleSummary) => void>();
+
   constructor(private readonly orchestrator: TradingAgentOrchestrator) {}
+
+  /**
+   * Subscribe to completed cycles (success and error). Returns an unsubscribe
+   * function. Used by the SSE stream to push each cycle to connected clients.
+   */
+  onCycle(listener: (summary: CycleSummary) => void): () => void {
+    this.cycleListeners.add(listener);
+    return () => { this.cycleListeners.delete(listener); };
+  }
 
   // ── Control ────────────────────────────────────────────────────────────────
 
@@ -206,6 +218,14 @@ export class ShadowHarness {
     this.history.push(summary);
     // Bound memory: drop oldest beyond maxHistory.
     while (this.history.length > this.maxHistory) this.history.shift();
+    // Notify live subscribers; a misbehaving listener must not break the loop.
+    for (const listener of this.cycleListeners) {
+      try {
+        listener(summary);
+      } catch (err: unknown) {
+        logger.warn('shadow-harness: cycle listener threw', { error: err instanceof Error ? err.message : String(err) });
+      }
+    }
   }
 }
 
