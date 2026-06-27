@@ -10,13 +10,19 @@
  *   POST start    — begin the loop; body { symbols[], intervalMs?, dryRun?, maxHistory? }
  *   POST stop     — stop the loop
  *   POST tick     — run one cycle immediately; body { symbols?, dryRun? } → OrchestrationReport
+ *   GET  stream   — Server-Sent Events: initial status snapshot, then one event per cycle (Phase 6)
  *
- * In-memory only — no DB schema, no new dependencies. (Live streaming UI is Phase 6.)
+ * In-memory only — no DB schema, no new dependencies. SSE (not WebSockets) for the
+ * live feed, per the project constraint.
  */
 
 import { Router } from 'express';
+import type { Request, Response } from 'express';
 import type { ShadowHarness } from '../services/agent/shadow-harness.js';
 import logger from '../logger.js';
+
+// Heartbeat keeps proxies/load balancers from idling the SSE connection shut.
+const SSE_HEARTBEAT_MS = 15_000;
 
 export function createShadowHarnessRouter(harness: ShadowHarness): Router {
   const router = Router();
@@ -24,6 +30,11 @@ export function createShadowHarnessRouter(harness: ShadowHarness): Router {
   // GET /api/shadow/status
   router.get('/api/shadow/status', (_req, res) => {
     res.json(harness.getStatus());
+  });
+
+  // GET /api/shadow/stream — Server-Sent Events live feed
+  router.get('/api/shadow/stream', (req, res) => {
+    streamShadowEvents(harness, req, res);
   });
 
   // POST /api/shadow/start
@@ -80,6 +91,47 @@ export function createShadowHarnessRouter(harness: ShadowHarness): Router {
   });
 
   return router;
+}
+
+// ── SSE streaming ──────────────────────────────────────────────────────────────
+
+/** Write one named SSE event. */
+function sendEvent(res: Response, event: string, data: unknown): void {
+  res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+}
+
+/**
+ * Stream shadow-harness activity to one client as Server-Sent Events:
+ *   • an immediate `status` event with the current snapshot,
+ *   • a `cycle` event each time the harness completes a cycle,
+ *   • `: heartbeat` comments to keep the connection open.
+ * Cleans up the subscription + heartbeat when the client disconnects.
+ *
+ * Exported for unit testing with mock req/res.
+ */
+export function streamShadowEvents(harness: ShadowHarness, req: Request, res: Response): void {
+  res.writeHead(200, {
+    'Content-Type':      'text/event-stream',
+    'Cache-Control':     'no-cache, no-transform',
+    Connection:          'keep-alive',
+    'X-Accel-Buffering': 'no',   // disable proxy buffering so events flush immediately
+  });
+
+  // Initial snapshot so a fresh client renders immediately, not after the first cycle.
+  sendEvent(res, 'status', harness.getStatus());
+
+  const unsubscribe = harness.onCycle(summary => sendEvent(res, 'cycle', summary));
+
+  const heartbeat = setInterval(() => { res.write(': heartbeat\n\n'); }, SSE_HEARTBEAT_MS);
+  if (typeof heartbeat.unref === 'function') heartbeat.unref();
+
+  const cleanup = () => {
+    clearInterval(heartbeat);
+    unsubscribe();
+    logger.debug('shadow-harness: SSE client disconnected');
+  };
+  req.on('close', cleanup);
+  req.on('error', cleanup);
 }
 
 // ── Body parsing ────────────────────────────────────────────────────────────

@@ -19,11 +19,13 @@ import {
   TradingAgentOrchestrator,
   type AgentSignal,
 } from '../services/agent/trading-orchestrator.js';
+import type { MarlPolicyFeeder } from '../services/agent/marl-policy-feeder.js';
 import logger from '../logger.js';
 
 export function createAgentOrchestratorRouter(
   orchestrator: TradingAgentOrchestrator,
   mode: string,
+  marlFeeder?: MarlPolicyFeeder,
 ): Router {
   const router = Router();
 
@@ -31,6 +33,33 @@ export function createAgentOrchestratorRouter(
   router.get('/api/agent/config', (_req, res) => {
     res.json({ mode, policy: orchestrator.getConfig() });
   });
+
+  // ── Phase 7: MARL research feeder ──────────────────────────────────────────
+  if (marlFeeder) {
+    // GET /api/agent/marl-policy — the policy the best evolved genome recommends
+    router.get('/api/agent/marl-policy', async (_req, res) => {
+      try {
+        const rec = await marlFeeder.recommend();
+        if (!rec) { res.status(404).json({ error: 'no evolved agent available to derive a policy from' }); return; }
+        res.json(rec);
+      } catch (err: unknown) {
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+    });
+
+    // POST /api/agent/apply-marl-policy — apply that policy to the live orchestrator
+    router.post('/api/agent/apply-marl-policy', async (_req, res) => {
+      try {
+        const rec = await marlFeeder.recommend();
+        if (!rec) { res.status(404).json({ error: 'no evolved agent available to derive a policy from' }); return; }
+        const config = orchestrator.setConfig(rec.params);
+        logger.info('agent-orchestrator: applied MARL-fed policy', { agentId: rec.provenance.agentId, params: rec.params });
+        res.json({ applied: true, config, provenance: rec.provenance });
+      } catch (err: unknown) {
+        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      }
+    });
+  }
 
   // POST /api/agent/run
   router.post('/api/agent/run', async (req, res) => {

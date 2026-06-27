@@ -1,4 +1,7 @@
+import { EventEmitter } from 'node:events';
+import type { Request, Response } from 'express';
 import { ShadowHarness } from '../../services/agent/shadow-harness.js';
+import { streamShadowEvents } from '../../routes/shadow-harness.js';
 import type {
   TradingAgentOrchestrator,
   OrchestrationReport,
@@ -147,5 +150,72 @@ describe('ShadowHarness', () => {
     expect(status.cycleCount).toBeGreaterThanOrEqual(5);
     // newest first → descending cycle numbers
     expect(status.recent[0]!.cycle).toBeGreaterThan(status.recent[2]!.cycle);
+  });
+
+  // ── Cycle event emitter ─────────────────────────────────────────────────────
+
+  it('onCycle notifies subscribers on each cycle and unsubscribe stops them', async () => {
+    const harness = new ShadowHarness(stubOrchestrator(jest.fn().mockResolvedValue(makeReport({ executedCount: 3 }))));
+    const seen: number[] = [];
+    const unsubscribe = harness.onCycle(s => seen.push(s.executedCount));
+
+    await harness.runOnce(['BTC']);
+    await harness.runOnce(['BTC']);
+    expect(seen).toEqual([3, 3]);
+
+    unsubscribe();
+    await harness.runOnce(['BTC']);
+    expect(seen).toEqual([3, 3]);   // no further notifications
+  });
+
+  it('a throwing listener does not break the cycle', async () => {
+    const harness = new ShadowHarness(stubOrchestrator(jest.fn().mockResolvedValue(makeReport())));
+    harness.onCycle(() => { throw new Error('bad listener'); });
+    await expect(harness.runOnce(['BTC'])).resolves.toBeDefined();
+    expect(harness.getStatus().cycleCount).toBe(1);
+  });
+});
+
+// ── SSE stream ────────────────────────────────────────────────────────────────
+
+describe('streamShadowEvents (SSE)', () => {
+  function mockResponse() {
+    return {
+      writeHead: jest.fn(),
+      write:     jest.fn(),
+      end:       jest.fn(),
+    } as unknown as Response & { writeHead: jest.Mock; write: jest.Mock };
+  }
+
+  it('writes the SSE headers and an initial status snapshot', () => {
+    const harness = new ShadowHarness(stubOrchestrator(jest.fn().mockResolvedValue(makeReport())));
+    const req = new EventEmitter() as unknown as Request;
+    const res = mockResponse();
+
+    streamShadowEvents(harness, req, res);
+
+    const [status, headers] = (res.writeHead as jest.Mock).mock.calls[0]!;
+    expect(status).toBe(200);
+    expect(headers['Content-Type']).toBe('text/event-stream');
+    expect((res.write as jest.Mock).mock.calls[0]![0]).toMatch(/^event: status\ndata: /);
+  });
+
+  it('pushes a cycle event when the harness completes a cycle, and stops after disconnect', async () => {
+    const harness = new ShadowHarness(stubOrchestrator(jest.fn().mockResolvedValue(makeReport({ executedCount: 1 }))));
+    const req = new EventEmitter() as unknown as Request;
+    const res = mockResponse();
+
+    streamShadowEvents(harness, req, res);
+    (res.write as jest.Mock).mockClear();
+
+    await harness.runOnce(['BTC']);
+    const frames = (res.write as jest.Mock).mock.calls.map(c => c[0] as string);
+    expect(frames.some(f => f.startsWith('event: cycle\ndata: '))).toBe(true);
+
+    // Client disconnects → unsubscribe; further cycles must not write.
+    (req as unknown as EventEmitter).emit('close');
+    (res.write as jest.Mock).mockClear();
+    await harness.runOnce(['BTC']);
+    expect((res.write as jest.Mock)).not.toHaveBeenCalled();
   });
 });

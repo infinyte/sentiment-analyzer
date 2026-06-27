@@ -99,7 +99,8 @@ backend/src/services/
 │   └── walk-forward.ts          # Phase 5 walk-forward validation: roll IS/OOS windows, optimize policy params on IS, score OOS net-of-fees; reuses resolvePolicyAction + expectancy.ts
 ├── agent/
 │   ├── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
-│   └── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
+│   ├── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
+│   └── marl-policy-feeder.ts    # Phase 7 research feeder: maps best evolved genome (entryThreshold→minStrength, positionSizePct→tradeFraction) onto live PolicyParams
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -186,8 +187,8 @@ backend/src/workers/
 | Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
-| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
-| Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` |
+| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` + `/api/agent/marl-policy` + `/api/agent/apply-marl-policy` |
+| Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` + `/api/shadow/stream` (SSE) |
 | Walk-forward | `routes/walk-forward.ts` (factory) | `/api/walk-forward/run` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
@@ -222,10 +223,14 @@ backend/src/workers/
 - Routes (`routes/agent-orchestrator.ts`): `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` returns an `OrchestrationReport` (per-symbol decisions + portfolio snapshot). `dryRun` decides without placing orders. No DB schema, no new deps
 - The orchestrator is built once in `app.ts` over the shared exchange and shared by both the `/api/agent/*` and `/api/shadow/*` routers
 
+### MARL Research Feeder (Phase 7)
+- `services/agent/marl-policy-feeder.ts` — closes the loop from evolution back to the live agent. `MarlPolicyFeeder` reads the **best evolved agent** (via an injected `BestAgentProvider`; app wiring uses the agents repo leaderboard `getTopAgents(1)` + `loadGenome`) and maps its genome onto live `PolicyParams`: `entryThreshold`→`minStrength`, `positionSizePct`→`tradeFractionOfCapital` (clamped to safety rails, defaults on non-finite genes). Pure mapping + decoupled provider — no GA-stack coupling, no schema, no new deps
+- Routes (added to `routes/agent-orchestrator.ts`): `GET /api/agent/marl-policy` returns the recommended params + provenance (agentId, fitness, raw genes); `POST /api/agent/apply-marl-policy` applies them to the live orchestrator via `orchestrator.setConfig()`. Both 404 until a tournament has produced an agent. Phase 5 walk-forward can validate the fed params before they are trusted
+
 ### Shadow Harness (Phase 4)
 - `services/agent/shadow-harness.ts` — `ShadowHarness` drives the shared orchestrator on a fixed `setInterval`, accumulating a track record the `/api/paper/*` analytics measure. Process-lifetime, **in-memory only** (bounded ring buffer of cycle summaries) — no DB schema, no new deps. Timer is `unref()`d; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` so the shared exchange is REALISTIC_PAPER
 - Routes (`routes/shadow-harness.ts`): `GET /api/shadow/status` (state + recent cycles, newest first); `POST /api/shadow/start` body `{ symbols[], intervalMs?, dryRun?, maxHistory? }`; `POST /api/shadow/stop`; `POST /api/shadow/tick` body `{ symbols?, dryRun? }` runs one cycle now → `OrchestrationReport`
-- Live streaming UI for this is Phase 6 (SSE) — not built; the status endpoint is poll-friendly in the meantime
+- **Live stream (Phase 6):** `harness.onCycle(listener)` exposes an in-process subscription; `GET /api/shadow/stream` is a Server-Sent Events feed (`streamShadowEvents`) — an initial `status` event then one `cycle` event per completed cycle, with heartbeats and disconnect cleanup. SSE (not WebSockets) per the project constraint
 
 ### Walk-Forward Validation (Phase 5)
 - `services/analytics/walk-forward.ts` — pure, synchronous walk-forward analysis that guards the decision policy against overfitting. Rolls sequential in-sample (IS) / out-of-sample (OOS) windows; per fold it optimizes `PolicyParams` (`minStrength`, `tradeFractionOfCapital`) on IS by an objective, then scores those params on the unseen OOS window. Reuses the **same** policy the live agent uses (`resolvePolicyAction`, extracted from the orchestrator) and the **same** net-of-fees scoring (`expectancy.ts`) with the realistic exchange's fee/slippage fill math
@@ -238,6 +243,7 @@ backend/src/workers/
 - `components/AgentAvatar.tsx` — reusable, deterministic cartoon original-creature SVG avatar (Pokémon *aesthetic*, no copyrighted art). Seed-stable per agent id; honours the agent's accent `color` cosmetic. Decorative by default (`aria-hidden`); pass `label` for a standalone image. Wired app-wide wherever agents render: `AgentManagementDashboard` (registry/leaderboard/breeding/detail), `MarlCompetitionViewer` (rankings, H2H, compare, trade log), `TournamentMonitor` (live table), and `App.tsx` Backtesting results
 - `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, info panel, and manual equity reload
 - `components/SocialDashboard.tsx` — trending topics, scraper health, manual social refresh, and scored-item detail drill-in
+- `components/ShadowHarnessDashboard.tsx` — Phase 6 "Shadow Live" tab: start/stop/tick controls, live cycle feed streamed via `EventSource` from `/api/shadow/stream`, and the net-of-fees expectancy snapshot from `/api/paper/stats`
 - App dashboard polls every 10 minutes via `useEffect`; system health polls every 30 seconds; agent-management refreshes every 5 seconds via `refreshNonce`
 - UI styling is mostly inline styles inside focused components; extend the existing pattern rather than introducing a new design system for isolated changes
 - ChartJS via `react-chartjs-2` for price/equity charts

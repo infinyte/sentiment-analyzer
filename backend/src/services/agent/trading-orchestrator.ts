@@ -155,6 +155,24 @@ export class TradingAgentOrchestrator {
     return { ...this.config };
   }
 
+  /**
+   * Update the decision-policy config at runtime (used by the Phase 7 MARL feeder
+   * to apply an evolved policy to the live agent). Validated/clamped; returns the
+   * effective config. Non-finite or out-of-range fields are ignored.
+   */
+  setConfig(partial: Partial<OrchestratorConfig>): OrchestratorConfig {
+    if (partial.minStrength !== undefined && Number.isFinite(partial.minStrength)) {
+      this.config.minStrength = Math.max(0, partial.minStrength);
+    }
+    if (partial.tradeFractionOfCapital !== undefined && Number.isFinite(partial.tradeFractionOfCapital)) {
+      this.config.tradeFractionOfCapital = Math.min(1, Math.max(0, partial.tradeFractionOfCapital));
+    }
+    if (partial.maxSymbols !== undefined && Number.isFinite(partial.maxSymbols)) {
+      this.config.maxSymbols = Math.max(1, Math.floor(partial.maxSymbols));
+    }
+    return this.getConfig();
+  }
+
   /** Run one decision cycle across the requested symbols. */
   async run(params: RunParams = {}): Promise<OrchestrationReport> {
     const dryRun = params.dryRun ?? false;
