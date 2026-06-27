@@ -1,10 +1,11 @@
 import {
   ExchangeFactory,
   getTradingConfig,
+  getShadowTradingConfig,
   TradingMode,
 } from '../../services/exchange/exchange-factory.js';
 import { PaperExchange } from '../../services/exchange/paper-exchange.js';
-import { RealisticPaperExchange } from '../../services/exchange/realistic-paper-exchange.js';
+import { RealisticPaperExchange, FEE_PRESETS } from '../../services/exchange/realistic-paper-exchange.js';
 import { AlpacaExchange } from '../../services/exchange/alpaca-exchange.js';
 
 describe('exchange-factory', () => {
@@ -173,5 +174,67 @@ describe('exchange-factory', () => {
     });
     expect(exchange).toBeInstanceOf(PaperExchange);
     expect(exchange).not.toBeInstanceOf(RealisticPaperExchange);
+  });
+
+  // ── Phase 1: shadow harness default ────────────────────────────────────────
+
+  it('binance-us fee preset is the current 0% maker / 0.02% taker entry tier', () => {
+    expect(FEE_PRESETS['binance-us'].maker).toBe(0.0000);
+    expect(FEE_PRESETS['binance-us'].taker).toBe(0.0002);
+  });
+
+  it('default config (no SHADOW_MODE) returns the naive PaperExchange', () => {
+    delete process.env.SHADOW_MODE;
+    delete process.env.TRADING_MODE;
+
+    const config = getTradingConfig();
+    const exchange = ExchangeFactory.create(config);
+
+    expect(config.mode).toBe(TradingMode.PAPER);
+    expect(exchange).toBeInstanceOf(PaperExchange);
+    expect(exchange).not.toBeInstanceOf(RealisticPaperExchange);
+  });
+
+  it('SHADOW_MODE=true upgrades the default PAPER mode to REALISTIC_PAPER', () => {
+    delete process.env.TRADING_MODE;
+    process.env.SHADOW_MODE = 'true';
+
+    const config = getTradingConfig();
+    const exchange = ExchangeFactory.create(config);
+
+    expect(config.mode).toBe(TradingMode.REALISTIC_PAPER);
+    expect(exchange).toBeInstanceOf(RealisticPaperExchange);
+
+    delete process.env.SHADOW_MODE;
+  });
+
+  it('SHADOW_MODE never downgrades an explicit SANDBOX/LIVE selection', () => {
+    process.env.TRADING_MODE = 'sandbox';
+    process.env.TRADING_PROVIDER = 'alpaca';
+    process.env.SHADOW_MODE = 'true';
+
+    const config = getTradingConfig();
+    expect(config.mode).toBe(TradingMode.SANDBOX);
+
+    delete process.env.SHADOW_MODE;
+  });
+
+  it('getShadowTradingConfig forces REALISTIC_PAPER regardless of TRADING_MODE', () => {
+    process.env.TRADING_MODE = 'paper';
+
+    const config = getShadowTradingConfig();
+    const exchange = ExchangeFactory.create(config);
+
+    expect(config.mode).toBe(TradingMode.REALISTIC_PAPER);
+    expect(exchange).toBeInstanceOf(RealisticPaperExchange);
+  });
+
+  it('shadow exchange uses the binance-us preset by default (0.02% taker)', () => {
+    delete process.env.REALISTIC_PAPER_FEE_PRESET;
+
+    const config = getShadowTradingConfig();
+    const exchange = ExchangeFactory.create(config) as RealisticPaperExchange;
+
+    expect(exchange.feePreset).toBe('binance-us');
   });
 });

@@ -33,7 +33,20 @@ import socialMediaRoutes from './routes/social-media.js';
 import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
 import { createTradingRouter }      from './routes/trading.js';
+import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
+import { createAgentOrchestratorRouter } from './routes/agent-orchestrator.js';
+import { createShadowHarnessRouter } from './routes/shadow-harness.js';
+import { createWalkForwardRouter } from './routes/walk-forward.js';
+import {
+  TradingAgentOrchestrator,
+  SentimentSignalSource,
+  StaticSignalSource,
+} from './services/agent/trading-orchestrator.js';
+import { ShadowHarness } from './services/agent/shadow-harness.js';
 import { createAdminConfigRouter }  from './routes/admin-config.js';
+import { ExchangeFactory, getTradingConfig } from './services/exchange/exchange-factory.js';
+import { TradingService } from './services/exchange/trading-service.js';
+import type { ExchangeInterface } from './services/exchange/exchange-interface.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
 import { TrendingTopicsEngine } from './services/trending-topics.js';
@@ -977,8 +990,54 @@ if (storage.isHealthy()) {
   logger.warn('DB-dependent routes skipped (storage not connected)');
 }
 
-// Trading routes (paper / sandbox / live exchange)
-app.use('/api/trading', createTradingRouter());
+// Trading routes (paper / sandbox / live exchange).
+// Build the exchange once and share it with the paper-analytics router so
+// /api/paper/* reflects orders placed through /api/trading/order. If construction
+// fails (e.g. missing live credentials), the trading router rebuilds lazily and
+// surfaces the configuration error as a 503, and analytics simply isn't mounted.
+let sharedTradingConfig: ReturnType<typeof getTradingConfig> | undefined;
+let sharedTradingExchange: ExchangeInterface | undefined;
+try {
+  sharedTradingConfig = getTradingConfig();
+  sharedTradingExchange = ExchangeFactory.create(sharedTradingConfig);
+} catch (err) {
+  logger.warn('shared trading exchange unavailable; paper analytics disabled', {
+    error: err instanceof Error ? err.message : String(err),
+  });
+}
+
+app.use('/api/trading', createTradingRouter(sharedTradingExchange, sharedTradingConfig));
+
+// Walk-forward validation — pure compute, no exchange needed (mounted unconditionally).
+app.use(createWalkForwardRouter({ feePreset: appConfigService.get('REALISTIC_PAPER_FEE_PRESET') }));
+
+if (sharedTradingExchange) {
+  app.use(createPaperAnalyticsRouter(sharedTradingExchange, {
+    initialCapital: sharedTradingConfig?.initialCapital,
+    feePreset:      appConfigService.get('REALISTIC_PAPER_FEE_PRESET'),
+  }));
+
+  // Phase 3 agent orchestrator + Phase 4 shadow harness share ONE orchestrator
+  // over the shared exchange, so manual runs and the automated loop flow through
+  // the same safety-guarded path and are measured by /api/paper/*. Signals come
+  // from cached sentiment when the DB is up, else a HOLD-everything default.
+  const agentConfig = sharedTradingConfig ?? getTradingConfig();
+  const agentTradingService = new TradingService(sharedTradingExchange, {
+    initialCapital:            agentConfig.initialCapital,
+    maxLossPercentage:         agentConfig.maxLossPercentage,
+    maxPositionSizePercentage: agentConfig.maxPositionSizePercentage,
+    maxOpenPositions:          agentConfig.maxOpenPositions,
+    requireManualApproval:     agentConfig.requireManualApproval,
+  });
+  const agentOrchestrator = new TradingAgentOrchestrator({
+    exchange:       sharedTradingExchange,
+    tradingService: agentTradingService,
+    signalSource:   storage.isHealthy() ? new SentimentSignalSource(storage) : new StaticSignalSource(),
+  });
+
+  app.use(createAgentOrchestratorRouter(agentOrchestrator, agentConfig.mode));
+  app.use(createShadowHarnessRouter(new ShadowHarness(agentOrchestrator)));
+}
 
 // 404 handler
 app.use((req, res) => {

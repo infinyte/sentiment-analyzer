@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, type CSSProperties, type FormEvent } 
 import { Line } from 'react-chartjs-2';
 import { useMarlCompetition } from '../hooks/useMarlCompetition';
 import { useTournamentScheduler } from '../hooks/useTournamentScheduler';
+import { AgentAvatar } from './AgentAvatar';
 import type {
   CompetitionConfig,
   CompetitionAgent as CompetitionAgentSpec,
@@ -168,7 +169,12 @@ function RankingsTable({ rankings }: { rankings: import('../types/marl').FinalRa
           {rankings.map(r => (
             <tr key={r.agentId} style={{ borderBottom: '1px solid #f3f4f6' }}>
               <td style={{ padding: '0.5rem 0.75rem', fontWeight: '700', color: r.rank === 1 ? '#d97706' : '#374151' }}>#{r.rank}</td>
-              <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500' }}>{r.agentId}</td>
+              <td style={{ padding: '0.5rem 0.75rem', fontWeight: '500' }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <AgentAvatar seed={r.agentId} size={28} />
+                  {r.agentId}
+                </span>
+              </td>
               <td style={{ padding: '0.5rem 0.75rem' }}>${r.finalCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
               <td style={{ padding: '0.5rem 0.75rem', color: r.totalReturn >= 0 ? '#16a34a' : '#dc2626', fontWeight: '600' }}>{pct(r.totalReturn)}</td>
               <td style={{ padding: '0.5rem 0.75rem' }}>{fmt(r.sharpeRatio, 3)}</td>
@@ -1936,7 +1942,8 @@ export function MarlCompetitionViewer() {
                   minWidth: '160px',
                 }}
               >
-                <div style={{ fontSize: '0.75rem', fontWeight: '700', color: '#374151', marginBottom: '0.3rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.75rem', fontWeight: '700', color: '#374151', marginBottom: '0.3rem' }}>
+                  <AgentAvatar seed={sel.agentId} size={26} />
                   {sel.agentId}
                   <span style={{
                     marginLeft: '0.4rem',
@@ -2081,7 +2088,12 @@ export function MarlCompetitionViewer() {
                 <tbody>
                   {results.competitorImpact.map(c => (
                     <tr key={c.agentId} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                      <td style={{ padding: '0.4rem 0.75rem' }}>{c.agentId}</td>
+                      <td style={{ padding: '0.4rem 0.75rem' }}>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <AgentAvatar seed={c.agentId} size={26} />
+                          {c.agentId}
+                        </span>
+                      </td>
                       <td style={{ padding: '0.4rem 0.75rem' }}>{(c.averageLiquidityImpact * 10000).toFixed(1)}</td>
                       <td style={{ padding: '0.4rem 0.75rem' }}>{c.timesOutbid}</td>
                       <td style={{ padding: '0.4rem 0.75rem' }}>{c.timesOutsold}</td>
@@ -2177,7 +2189,12 @@ export function MarlCompetitionViewer() {
                     <tbody>
                       {tradeLog.map(entry => (
                         <tr key={entry.agentId} style={{ borderBottom: '1px solid #f3f4f6' }}>
-                          <td style={{ padding: '0.4rem 0.75rem', fontWeight: '500' }}>{entry.agentId}</td>
+                          <td style={{ padding: '0.4rem 0.75rem', fontWeight: '500' }}>
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <AgentAvatar seed={entry.agentId} size={26} />
+                              {entry.agentId}
+                            </span>
+                          </td>
                           <td style={{ padding: '0.4rem 0.75rem' }}>{entry.tradesExecuted}</td>
                           <td style={{ padding: '0.4rem 0.75rem' }}>${entry.finalCapital.toLocaleString(undefined, { maximumFractionDigits: 0 })}</td>
                           <td style={{ padding: '0.4rem 0.75rem', color: entry.totalReturn >= 0 ? '#16a34a' : '#dc2626', fontWeight: '600' }}>{pct(entry.totalReturn)}</td>

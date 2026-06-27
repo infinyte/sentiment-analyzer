@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { AgentAvatar } from './AgentAvatar';
 
 type AgentSortKey = 'winRate' | 'pnl' | 'generation' | 'competitions';
 
@@ -2452,16 +2453,19 @@ export function AgentManagementDashboard() {
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'flex-start' }}>
-                        <div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                            <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>{displayName(agent)}</span>
-                            {isAdversary && (
-                              <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '999px', backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
-                                ADVERSARY
-                              </span>
-                            )}
+                        <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', minWidth: 0 }}>
+                          <AgentAvatar seed={agent.id} color={agent.color} size={44} />
+                          <div style={{ minWidth: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontWeight: 800, color: '#0f172a', fontSize: '1rem' }}>{displayName(agent)}</span>
+                              {isAdversary && (
+                                <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '999px', backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
+                                  ADVERSARY
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ marginTop: '0.25rem', color: '#64748b', fontSize: '0.85rem' }}>{agent.agent_type} · {agent.risk_profile}</div>
                           </div>
-                          <div style={{ marginTop: '0.25rem', color: '#64748b', fontSize: '0.85rem' }}>{agent.agent_type} · {agent.risk_profile}</div>
                         </div>
                         <span style={{ color: accent, fontWeight: 800 }}>{formatPercent(agent.win_rate_percent)}</span>
                       </div>
@@ -2500,7 +2504,8 @@ export function AgentManagementDashboard() {
                   }}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                      <AgentAvatar seed={agent.id} color={agent.color} size={32} />
                       <span style={{ fontWeight: 700, color: '#0f172a' }}>#{index + 1} {displayName(agent)}</span>
                       {isAdversary && (
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.15rem 0.45rem', borderRadius: '999px', backgroundColor: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca' }}>
@@ -2530,9 +2535,12 @@ export function AgentManagementDashboard() {
                 <div style={{ color: '#64748b' }}>Select agents in the detail panel to mark them ready for evolution.</div>
               ) : breedingPoolAgents.map(agent => (
                 <div key={agent.id} style={{ display: 'flex', justifyContent: 'space-between', gap: '0.75rem', alignItems: 'center', border: '1px solid #e2e8f0', borderRadius: '0.85rem', padding: '0.75rem' }}>
-                  <div>
-                    <div style={{ color: '#0f172a', fontWeight: 700 }}>{displayName(agent)}</div>
-                    <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.85rem' }}>{agent.agent_type} · Gen {agent.generation_number ?? 0}</div>
+                  <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', minWidth: 0 }}>
+                    <AgentAvatar seed={agent.id} color={agent.color} size={36} />
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: '#0f172a', fontWeight: 700 }}>{displayName(agent)}</div>
+                      <div style={{ marginTop: '0.2rem', color: '#64748b', fontSize: '0.85rem' }}>{agent.agent_type} · Gen {agent.generation_number ?? 0}</div>
+                    </div>
                   </div>
                   <button
                     onClick={() => toggleBreedingPool(agent.id)}
@@ -2711,6 +2719,7 @@ export function AgentManagementDashboard() {
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <AgentAvatar seed={selectedAgent.id} color={selectedAgent.color} size={56} label={`Avatar for ${displayName(selectedAgent)}`} />
                     <h3 style={{ margin: 0, fontSize: '1.5rem', color: '#0f172a' }}>{displayName(selectedAgent)}</h3>
                     <span
                       style={{

@@ -15,19 +15,29 @@
 import { Router } from 'express';
 import { ExchangeFactory, getTradingConfig } from '../services/exchange/exchange-factory.js';
 import { TradingService } from '../services/exchange/trading-service.js';
+import type { ExchangeInterface } from '../services/exchange/exchange-interface.js';
 import { appConfigService } from '../services/app-config-service.js';
 import logger from '../logger.js';
 
-export function createTradingRouter(): Router {
+/**
+ * @param injectedExchange Optional pre-built exchange to reuse (so other routers —
+ *   e.g. paper analytics — observe the same order history). Falls back to building
+ *   one from `getTradingConfig()` when omitted.
+ * @param injectedConfig   Optional config matching the injected exchange.
+ */
+export function createTradingRouter(
+  injectedExchange?: ExchangeInterface,
+  injectedConfig?: ReturnType<typeof getTradingConfig>,
+): Router {
   const router = Router();
   let config: ReturnType<typeof getTradingConfig>;
-  let exchange: ReturnType<typeof ExchangeFactory.create>;
+  let exchange: ExchangeInterface;
   let tradingService: TradingService;
   let startupError: string | null = null;
 
   try {
-    config = getTradingConfig();
-    exchange = ExchangeFactory.create(config);
+    config = injectedConfig ?? getTradingConfig();
+    exchange = injectedExchange ?? ExchangeFactory.create(config);
     tradingService = new TradingService(exchange, {
       initialCapital:            config.initialCapital,
       maxLossPercentage:         config.maxLossPercentage,

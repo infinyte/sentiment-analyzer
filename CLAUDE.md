@@ -82,8 +82,9 @@ backend/src/services/
 │   └── agent-statistics-manager.ts  # Win-rate, PnL, history tracking
 ├── exchange/
 │   ├── exchange-interface.ts         # Shared Order/Balance/PlaceOrderParams types
-│   ├── exchange-factory.ts           # Factory routing PAPER→PaperExchange, SANDBOX/LIVE→provider
-│   ├── paper-exchange.ts             # In-memory paper trading (no real orders)
+│   ├── exchange-factory.ts           # Factory routing PAPER→PaperExchange, REALISTIC_PAPER→RealisticPaperExchange, SANDBOX/LIVE→provider; getTradingConfig()/getShadowTradingConfig()
+│   ├── paper-exchange.ts             # In-memory paper trading, zero fees/slippage (no real orders)
+│   ├── realistic-paper-exchange.ts   # Paper trading WITH fee presets + side-specific slippage; commission on every Order (REALISTIC_PAPER mode)
 │   ├── crypto-com-client.ts          # Crypto.com REST v2 HTTP client (HMAC-SHA256 auth)
 │   ├── crypto-com-exchange.ts        # ExchangeInterface adapter for Crypto.com
 │   ├── binance-us-exchange.ts        # ExchangeInterface adapter for Binance.US
@@ -93,6 +94,12 @@ backend/src/services/
 │   ├── risk-manager.ts               # Kill switch + daily-loss + order-size guard (MARL layer)
 │   ├── exchange-registry.ts          # Process-lifetime adapter singleton
 │   └── adapters/                     # coinbase-adapter.ts, binance-adapter.ts
+├── analytics/
+│   ├── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
+│   └── walk-forward.ts          # Phase 5 walk-forward validation: roll IS/OOS windows, optimize policy params on IS, score OOS net-of-fees; reuses resolvePolicyAction + expectancy.ts
+├── agent/
+│   ├── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
+│   └── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -178,6 +185,10 @@ backend/src/workers/
 | Agent stats | `routes/agent-stats.ts` (factory) | `/api/agents/*` |
 | Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
+| Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
+| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
+| Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` |
+| Walk-forward | `routes/walk-forward.ts` (factory) | `/api/walk-forward/run` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
 **Important:** `/api/agents/stats/leaderboard` route must be registered before `/api/agents/:id` to avoid the wildcard swallowing it.
@@ -190,13 +201,41 @@ backend/src/workers/
 
 ### Exchange / Trading
 - Default provider: Crypto.com REST v2 (set `TRADING_PROVIDER=binance-us`, `TRADING_PROVIDER=coinbase`, or `TRADING_PROVIDER=alpaca` to switch)
-- PAPER mode always uses `PaperExchange` (in-memory, no real orders) regardless of provider
+- PAPER mode always uses `PaperExchange` (in-memory, **zero fees/slippage**, no real orders) regardless of provider
+- REALISTIC_PAPER mode uses `RealisticPaperExchange` — same in-memory simulation but with provider fee presets (maker/taker) + side-specific slippage, charging a `commission` on every `Order`. Fee preset via `REALISTIC_PAPER_FEE_PRESET` (default `binance-us`, 0% maker / 0.02% taker entry tier)
+- **Shadow harness:** set `SHADOW_MODE=true` to upgrade the default PAPER mode to REALISTIC_PAPER (or call `getShadowTradingConfig()`). Plain PAPER users (no `SHADOW_MODE`) are unaffected; explicit SANDBOX/LIVE selections are never downgraded
 - `TradingService` wraps any `ExchangeInterface` with 4 safety guards: kill switch (max loss %), max open positions, position size cap, $1 minimum notional
 - SELL orders bypass the kill switch; only BUY orders are blocked when the loss threshold is hit
+
+### Paper Analytics (net-of-fees expectancy)
+- `services/analytics/expectancy.ts` is a **stateless** service: it reconstructs round-trip trades by FIFO-matching SELL fills against prior BUY fills per symbol (pro-rating each fill's `commission`), then computes net-of-fees metrics. No DB schema, no new dependencies
+- Read-only routes (share the trading router's exchange instance, so orders placed via `/api/trading/order` are reflected):
+  - `GET /api/paper/stats` → `ExpectancyReport` (win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, unrealized P&L)
+  - `GET /api/paper/trades?limit=N` → most recent N reconstructed `ClosedTrade`s
+  - `GET /api/paper/export` → writes report + closed trades to a timestamped JSON file under `<cwd>/data` (no schema)
+- Most meaningful in REALISTIC_PAPER/shadow mode where commissions are non-zero; in plain PAPER mode net == gross
+
+### Agent Orchestrator (Phase 3)
+- `services/agent/trading-orchestrator.ts` — `TradingAgentOrchestrator` runs **one** decision cycle: per symbol it takes an `AgentSignal` (direction + 0–1 strength), applies a transparent policy, and routes orders through the safety-guarded `TradingService` onto the **shared** paper exchange — so trades it places are measured by `/api/paper/*`. Stateless: exchange balances are the only source of truth for cash/positions. The continuous loop/scheduler is Phase 4 (not built)
+- Policy is asymmetric on purpose: a BUY needs `strength ≥ minStrength` (default 0.3) and no existing position; a SELL closes the full position regardless of strength (de-risking always allowed); never shorts. BUY notional = `tradeFractionOfCapital` (default 0.1) × available USDT
+- `SignalSource` is pluggable: `StaticSignalSource` (HOLD-everything default / explicit signals) and `SentimentSignalSource` (reads cached `storage.getSentiment` → BULL/BEAR/NEUTRAL → BUY/SELL/HOLD, `confidence` → strength)
+- Routes (`routes/agent-orchestrator.ts`): `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` returns an `OrchestrationReport` (per-symbol decisions + portfolio snapshot). `dryRun` decides without placing orders. No DB schema, no new deps
+- The orchestrator is built once in `app.ts` over the shared exchange and shared by both the `/api/agent/*` and `/api/shadow/*` routers
+
+### Shadow Harness (Phase 4)
+- `services/agent/shadow-harness.ts` — `ShadowHarness` drives the shared orchestrator on a fixed `setInterval`, accumulating a track record the `/api/paper/*` analytics measure. Process-lifetime, **in-memory only** (bounded ring buffer of cycle summaries) — no DB schema, no new deps. Timer is `unref()`d; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` so the shared exchange is REALISTIC_PAPER
+- Routes (`routes/shadow-harness.ts`): `GET /api/shadow/status` (state + recent cycles, newest first); `POST /api/shadow/start` body `{ symbols[], intervalMs?, dryRun?, maxHistory? }`; `POST /api/shadow/stop`; `POST /api/shadow/tick` body `{ symbols?, dryRun? }` runs one cycle now → `OrchestrationReport`
+- Live streaming UI for this is Phase 6 (SSE) — not built; the status endpoint is poll-friendly in the meantime
+
+### Walk-Forward Validation (Phase 5)
+- `services/analytics/walk-forward.ts` — pure, synchronous walk-forward analysis that guards the decision policy against overfitting. Rolls sequential in-sample (IS) / out-of-sample (OOS) windows; per fold it optimizes `PolicyParams` (`minStrength`, `tradeFractionOfCapital`) on IS by an objective, then scores those params on the unseen OOS window. Reuses the **same** policy the live agent uses (`resolvePolicyAction`, extracted from the orchestrator) and the **same** net-of-fees scoring (`expectancy.ts`) with the realistic exchange's fee/slippage fill math
+- `simulatePolicy` replays long-only fills (slippage + taker commission), force-closing on the final bar so each replay is flat-to-flat (clean concatenation of OOS streams). `generateFolds` supports rolling (fixed IS) and `anchored` (growing IS). Objectives: `netPnl` (default), `expectancy`, `profitFactor`, `sharpe`. Reports per-fold IS/OOS metrics, an aggregate OOS `ExpectancyReport`, and **walk-forward efficiency** = mean(OOS obj) / mean(IS obj)
+- Route (`routes/walk-forward.ts`): `POST /api/walk-forward/run` accepts an explicit `bars[]` (price+signal series) **or** a bare `prices[]` array (momentum signals derived via `deriveMomentumSignals`), plus `candidates[]` (default 3×3 grid), `inSampleSize`, `outOfSampleSize`, `anchored?`, `objective?`. No DB schema, no new deps
 
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab
 - `components/AgentManagementDashboard.tsx` — agent registry, leaderboard, breeding controls, genealogy tree, tournament detail drill-down, generation trends, cross-tournament comparisons, genome snapshot
+- `components/AgentAvatar.tsx` — reusable, deterministic cartoon original-creature SVG avatar (Pokémon *aesthetic*, no copyrighted art). Seed-stable per agent id; honours the agent's accent `color` cosmetic. Decorative by default (`aria-hidden`); pass `label` for a standalone image. Wired app-wide wherever agents render: `AgentManagementDashboard` (registry/leaderboard/breeding/detail), `MarlCompetitionViewer` (rankings, H2H, compare, trade log), `TournamentMonitor` (live table), and `App.tsx` Backtesting results
 - `components/MarlCompetitionViewer.tsx` (37KB) — tournament UI, equity curves, H2H, info panel, and manual equity reload
 - `components/SocialDashboard.tsx` — trending topics, scraper health, manual social refresh, and scored-item detail drill-in
 - App dashboard polls every 10 minutes via `useEffect`; system health polls every 30 seconds; agent-management refreshes every 5 seconds via `refreshNonce`
@@ -256,6 +295,10 @@ Current high-value frontend coverage includes:
 ### Key Optional
 - `BROKER_MASTER_KEY` — AES-256-GCM key for encrypted broker credential storage (`/api/marl/broker/*`)
 - `TRADING_PROVIDER` — `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`; selects exchange for SANDBOX/LIVE mode
+- `TRADING_MODE` — `paper` (default), `realistic_paper`, `sandbox`, or `live`
+- `SHADOW_MODE` — `true` upgrades the default `paper` mode to `realistic_paper` (fee/slippage model) for the shadow harness; ignored for explicit SANDBOX/LIVE
+- `REALISTIC_PAPER_FEE_PRESET` — fee preset for REALISTIC_PAPER: `binance-us` (default), `crypto-com`, `coinbase`, or `alpaca`
+- `REALISTIC_PAPER_SLIPPAGE_BUY_PCT` / `REALISTIC_PAPER_SLIPPAGE_SELL_PCT` — per-side slippage fractions (default `0.001` = 0.1% each way)
 - `ALPACA_API_KEY` / `ALPACA_API_SECRET` — Alpaca credentials (required when `TRADING_PROVIDER=alpaca` and mode is SANDBOX/LIVE)
 - `COINBASE_API_KEY` / `COINBASE_API_SECRET` — Coinbase Advanced Trade credentials (required when `TRADING_PROVIDER=coinbase`)
 - `COINBASE_TRADING_PAIR` — default Coinbase product ID, e.g. `BTC-USD` (default)

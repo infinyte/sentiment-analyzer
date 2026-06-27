@@ -16,6 +16,11 @@
  *   TRADING_PROVIDER=binance-us  → uses BinanceUSExchange
  *   TRADING_PROVIDER=coinbase    → uses CoinbaseExchange (Advanced Trade API v3)
  *   TRADING_PROVIDER=alpaca      → uses AlpacaExchange (Trading + Crypto Data APIs)
+ *
+ * Shadow harness:
+ *   SHADOW_MODE=true             → upgrades the default PAPER mode to REALISTIC_PAPER
+ *                                  (fee + slippage model). See getShadowTradingConfig().
+ *   REALISTIC_PAPER_FEE_PRESET   → fee preset for REALISTIC_PAPER (default 'binance-us')
  */
 
 import type { AccountMode } from './exchange-adapter.js';
@@ -100,9 +105,17 @@ function cfg(key: string): string | undefined {
 
 export function getTradingConfig(): TradingConfig {
   const raw  = (cfg('TRADING_MODE') ?? 'paper').toLowerCase();
-  const mode = Object.values(TradingMode).includes(raw as TradingMode)
+  let mode = Object.values(TradingMode).includes(raw as TradingMode)
     ? (raw as TradingMode)
     : TradingMode.PAPER;
+
+  // Shadow-harness opt-in: SHADOW_MODE=true upgrades the *default* PAPER mode to
+  // REALISTIC_PAPER so the harness trades through the fee/slippage model. It only
+  // upgrades PAPER — an explicit SANDBOX/LIVE selection is never touched, and plain
+  // PAPER users (no SHADOW_MODE) keep the frictionless naive exchange unchanged.
+  if (mode === TradingMode.PAPER && (cfg('SHADOW_MODE') ?? '').toLowerCase() === 'true') {
+    mode = TradingMode.REALISTIC_PAPER;
+  }
 
   const rawProvider = (cfg('TRADING_PROVIDER') ?? 'crypto-com').toLowerCase();
   if (!SUPPORTED_TRADING_PROVIDERS.includes(rawProvider as TradingProvider)) {
@@ -123,6 +136,19 @@ export function getTradingConfig(): TradingConfig {
     maxOpenPositions:          parseInt(cfg('TRADING_MAX_OPEN_POSITIONS')    ?? '3',     10),
     requireManualApproval:     (cfg('REQUIRE_MANUAL_APPROVAL') ?? '').toLowerCase() === 'true',
   };
+}
+
+/**
+ * Trading config for the realistic shadow harness.
+ *
+ * Identical to getTradingConfig() but forces mode = REALISTIC_PAPER regardless of
+ * TRADING_MODE, so the harness always trades through the fee + slippage model.
+ * Fee preset still comes from REALISTIC_PAPER_FEE_PRESET (default 'binance-us').
+ * Use this — or set SHADOW_MODE=true — to run cost-aware paper trading; plain
+ * getTradingConfig() with no SHADOW_MODE preserves the legacy frictionless default.
+ */
+export function getShadowTradingConfig(): TradingConfig {
+  return { ...getTradingConfig(), mode: TradingMode.REALISTIC_PAPER };
 }
 
 export class ExchangeFactory {

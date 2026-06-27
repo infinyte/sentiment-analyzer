@@ -134,8 +134,9 @@ describe('RealisticPaperExchange — fee presets (AC3)', () => {
     expect(FEE_PRESETS['crypto-com'].taker).toBeCloseTo(0.005, 6);
   });
 
-  it('binance-us preset: taker 0.10 %', () => {
-    expect(FEE_PRESETS['binance-us'].taker).toBeCloseTo(0.001, 6);
+  it('binance-us preset: maker 0 % / taker 0.02 % (entry tier)', () => {
+    expect(FEE_PRESETS['binance-us'].maker).toBeCloseTo(0.0000, 6);
+    expect(FEE_PRESETS['binance-us'].taker).toBeCloseTo(0.0002, 6);
   });
 
   it('coinbase preset: taker 1.20 %', () => {
