@@ -34,6 +34,8 @@ import { createAgentStatsRouter } from './routes/agent-stats.js';
 import { createEvolutionaryRouter } from './routes/evolutionary.js';
 import { createTradingRouter }      from './routes/trading.js';
 import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
+import { createAgentOrchestratorRouter } from './routes/agent-orchestrator.js';
+import { SentimentSignalSource, StaticSignalSource } from './services/agent/trading-orchestrator.js';
 import { createAdminConfigRouter }  from './routes/admin-config.js';
 import { ExchangeFactory, getTradingConfig } from './services/exchange/exchange-factory.js';
 import type { ExchangeInterface } from './services/exchange/exchange-interface.js';
@@ -1002,6 +1004,15 @@ if (sharedTradingExchange) {
   app.use(createPaperAnalyticsRouter(sharedTradingExchange, {
     initialCapital: sharedTradingConfig?.initialCapital,
     feePreset:      appConfigService.get('REALISTIC_PAPER_FEE_PRESET'),
+  }));
+
+  // Phase 3 agent orchestrator — shares the same exchange so its trades flow
+  // through the safety guards and are measured by /api/paper/*. Signals come
+  // from cached sentiment when the DB is up, else a HOLD-everything default.
+  app.use(createAgentOrchestratorRouter(sharedTradingExchange, {
+    signalSource: storage.isHealthy()
+      ? new SentimentSignalSource(storage)
+      : new StaticSignalSource(),
   }));
 }
 

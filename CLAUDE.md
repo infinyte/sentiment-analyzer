@@ -96,6 +96,8 @@ backend/src/services/
 │   └── adapters/                     # coinbase-adapter.ts, binance-adapter.ts
 ├── analytics/
 │   └── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
+├── agent/
+│   └── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -182,6 +184,7 @@ backend/src/workers/
 | Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
+| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
 **Important:** `/api/agents/stats/leaderboard` route must be registered before `/api/agents/:id` to avoid the wildcard swallowing it.
@@ -207,6 +210,12 @@ backend/src/workers/
   - `GET /api/paper/trades?limit=N` → most recent N reconstructed `ClosedTrade`s
   - `GET /api/paper/export` → writes report + closed trades to a timestamped JSON file under `<cwd>/data` (no schema)
 - Most meaningful in REALISTIC_PAPER/shadow mode where commissions are non-zero; in plain PAPER mode net == gross
+
+### Agent Orchestrator (Phase 3)
+- `services/agent/trading-orchestrator.ts` — `TradingAgentOrchestrator` runs **one** decision cycle: per symbol it takes an `AgentSignal` (direction + 0–1 strength), applies a transparent policy, and routes orders through the safety-guarded `TradingService` onto the **shared** paper exchange — so trades it places are measured by `/api/paper/*`. Stateless: exchange balances are the only source of truth for cash/positions. The continuous loop/scheduler is Phase 4 (not built)
+- Policy is asymmetric on purpose: a BUY needs `strength ≥ minStrength` (default 0.3) and no existing position; a SELL closes the full position regardless of strength (de-risking always allowed); never shorts. BUY notional = `tradeFractionOfCapital` (default 0.1) × available USDT
+- `SignalSource` is pluggable: `StaticSignalSource` (HOLD-everything default / explicit signals) and `SentimentSignalSource` (reads cached `storage.getSentiment` → BULL/BEAR/NEUTRAL → BUY/SELL/HOLD, `confidence` → strength)
+- Routes (`routes/agent-orchestrator.ts`): `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` returns an `OrchestrationReport` (per-symbol decisions + portfolio snapshot). `dryRun` decides without placing orders. No DB schema, no new deps
 
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab
