@@ -15,51 +15,21 @@
  */
 
 import { Router } from 'express';
-import type { ExchangeInterface } from '../services/exchange/exchange-interface.js';
-import { TradingService } from '../services/exchange/trading-service.js';
-import { getTradingConfig } from '../services/exchange/exchange-factory.js';
 import {
   TradingAgentOrchestrator,
-  type SignalSource,
   type AgentSignal,
-  type OrchestratorConfig,
 } from '../services/agent/trading-orchestrator.js';
 import logger from '../logger.js';
 
-export interface AgentOrchestratorOptions {
-  /** Signal provider. Defaults to a HOLD-everything static source. */
-  signalSource?: SignalSource;
-  /** Decision-policy overrides. */
-  config?: Partial<OrchestratorConfig>;
-}
-
 export function createAgentOrchestratorRouter(
-  exchange: ExchangeInterface,
-  options: AgentOrchestratorOptions = {},
+  orchestrator: TradingAgentOrchestrator,
+  mode: string,
 ): Router {
   const router = Router();
-  const tradingConfig = getTradingConfig();
-
-  const tradingService = new TradingService(exchange, {
-    initialCapital:            tradingConfig.initialCapital,
-    maxLossPercentage:         tradingConfig.maxLossPercentage,
-    maxPositionSizePercentage: tradingConfig.maxPositionSizePercentage,
-    maxOpenPositions:          tradingConfig.maxOpenPositions,
-    requireManualApproval:     tradingConfig.requireManualApproval,
-  });
-
-  const orchestrator = new TradingAgentOrchestrator({
-    exchange,
-    tradingService,
-    signalSource: options.signalSource ?? { async getSignal(symbol) {
-      return { symbol, signal: 'HOLD', strength: 0, reasoning: 'no signal source configured' };
-    } },
-    config: options.config,
-  });
 
   // GET /api/agent/config
   router.get('/api/agent/config', (_req, res) => {
-    res.json({ mode: tradingConfig.mode, policy: orchestrator.getConfig() });
+    res.json({ mode, policy: orchestrator.getConfig() });
   });
 
   // POST /api/agent/run

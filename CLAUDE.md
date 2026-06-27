@@ -97,7 +97,8 @@ backend/src/services/
 ├── analytics/
 │   └── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
 ├── agent/
-│   └── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
+│   ├── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
+│   └── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -185,6 +186,7 @@ backend/src/workers/
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
 | Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
+| Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
 **Important:** `/api/agents/stats/leaderboard` route must be registered before `/api/agents/:id` to avoid the wildcard swallowing it.
@@ -216,6 +218,12 @@ backend/src/workers/
 - Policy is asymmetric on purpose: a BUY needs `strength ≥ minStrength` (default 0.3) and no existing position; a SELL closes the full position regardless of strength (de-risking always allowed); never shorts. BUY notional = `tradeFractionOfCapital` (default 0.1) × available USDT
 - `SignalSource` is pluggable: `StaticSignalSource` (HOLD-everything default / explicit signals) and `SentimentSignalSource` (reads cached `storage.getSentiment` → BULL/BEAR/NEUTRAL → BUY/SELL/HOLD, `confidence` → strength)
 - Routes (`routes/agent-orchestrator.ts`): `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` returns an `OrchestrationReport` (per-symbol decisions + portfolio snapshot). `dryRun` decides without placing orders. No DB schema, no new deps
+- The orchestrator is built once in `app.ts` over the shared exchange and shared by both the `/api/agent/*` and `/api/shadow/*` routers
+
+### Shadow Harness (Phase 4)
+- `services/agent/shadow-harness.ts` — `ShadowHarness` drives the shared orchestrator on a fixed `setInterval`, accumulating a track record the `/api/paper/*` analytics measure. Process-lifetime, **in-memory only** (bounded ring buffer of cycle summaries) — no DB schema, no new deps. Timer is `unref()`d; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` so the shared exchange is REALISTIC_PAPER
+- Routes (`routes/shadow-harness.ts`): `GET /api/shadow/status` (state + recent cycles, newest first); `POST /api/shadow/start` body `{ symbols[], intervalMs?, dryRun?, maxHistory? }`; `POST /api/shadow/stop`; `POST /api/shadow/tick` body `{ symbols?, dryRun? }` runs one cycle now → `OrchestrationReport`
+- Live streaming UI for this is Phase 6 (SSE) — not built; the status endpoint is poll-friendly in the meantime
 
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab

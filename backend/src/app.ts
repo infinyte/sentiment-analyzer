@@ -35,9 +35,16 @@ import { createEvolutionaryRouter } from './routes/evolutionary.js';
 import { createTradingRouter }      from './routes/trading.js';
 import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
 import { createAgentOrchestratorRouter } from './routes/agent-orchestrator.js';
-import { SentimentSignalSource, StaticSignalSource } from './services/agent/trading-orchestrator.js';
+import { createShadowHarnessRouter } from './routes/shadow-harness.js';
+import {
+  TradingAgentOrchestrator,
+  SentimentSignalSource,
+  StaticSignalSource,
+} from './services/agent/trading-orchestrator.js';
+import { ShadowHarness } from './services/agent/shadow-harness.js';
 import { createAdminConfigRouter }  from './routes/admin-config.js';
 import { ExchangeFactory, getTradingConfig } from './services/exchange/exchange-factory.js';
+import { TradingService } from './services/exchange/trading-service.js';
 import type { ExchangeInterface } from './services/exchange/exchange-interface.js';
 import { SocialScraperService } from './services/social-scraper.js';
 import type { ScrapedPost, SocialPlatform } from './services/social-scraper.js';
@@ -1006,14 +1013,26 @@ if (sharedTradingExchange) {
     feePreset:      appConfigService.get('REALISTIC_PAPER_FEE_PRESET'),
   }));
 
-  // Phase 3 agent orchestrator — shares the same exchange so its trades flow
-  // through the safety guards and are measured by /api/paper/*. Signals come
+  // Phase 3 agent orchestrator + Phase 4 shadow harness share ONE orchestrator
+  // over the shared exchange, so manual runs and the automated loop flow through
+  // the same safety-guarded path and are measured by /api/paper/*. Signals come
   // from cached sentiment when the DB is up, else a HOLD-everything default.
-  app.use(createAgentOrchestratorRouter(sharedTradingExchange, {
-    signalSource: storage.isHealthy()
-      ? new SentimentSignalSource(storage)
-      : new StaticSignalSource(),
-  }));
+  const agentConfig = sharedTradingConfig ?? getTradingConfig();
+  const agentTradingService = new TradingService(sharedTradingExchange, {
+    initialCapital:            agentConfig.initialCapital,
+    maxLossPercentage:         agentConfig.maxLossPercentage,
+    maxPositionSizePercentage: agentConfig.maxPositionSizePercentage,
+    maxOpenPositions:          agentConfig.maxOpenPositions,
+    requireManualApproval:     agentConfig.requireManualApproval,
+  });
+  const agentOrchestrator = new TradingAgentOrchestrator({
+    exchange:       sharedTradingExchange,
+    tradingService: agentTradingService,
+    signalSource:   storage.isHealthy() ? new SentimentSignalSource(storage) : new StaticSignalSource(),
+  });
+
+  app.use(createAgentOrchestratorRouter(agentOrchestrator, agentConfig.mode));
+  app.use(createShadowHarnessRouter(new ShadowHarness(agentOrchestrator)));
 }
 
 // 404 handler
