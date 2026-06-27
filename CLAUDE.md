@@ -99,7 +99,8 @@ backend/src/services/
 │   └── walk-forward.ts          # Phase 5 walk-forward validation: roll IS/OOS windows, optimize policy params on IS, score OOS net-of-fees; reuses resolvePolicyAction + expectancy.ts
 ├── agent/
 │   ├── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
-│   └── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
+│   ├── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
+│   └── marl-policy-feeder.ts    # Phase 7 research feeder: maps best evolved genome (entryThreshold→minStrength, positionSizePct→tradeFraction) onto live PolicyParams
 ├── synthetic-market-generator.ts # 5-regime OHLCV-style price series for agent pre-training
 ├── pre-trainer.ts                # Runs MarlTradingAgent through synthetic episodes, persists state
 ├── brokers/                     # Alpaca adapter + broker registry + factory
@@ -186,7 +187,7 @@ backend/src/workers/
 | Evolutionary | `routes/evolutionary.ts` (factory) | `/api/evolutionary/*` + `/api/evolutionary/breed` + `/api/evolutionary/summary` + `/api/agents/:id/genome` + `/api/agents/:id/genealogy` + `/api/marl/evolution/history` + `/api/marl/evolution/best-genome` + `/api/marl/evolution/population` |
 | Trading | `routes/trading.ts` | `/api/trading/*` |
 | Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
-| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
+| Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` + `/api/agent/marl-policy` + `/api/agent/apply-marl-policy` |
 | Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` + `/api/shadow/stream` (SSE) |
 | Walk-forward | `routes/walk-forward.ts` (factory) | `/api/walk-forward/run` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
@@ -221,6 +222,10 @@ backend/src/workers/
 - `SignalSource` is pluggable: `StaticSignalSource` (HOLD-everything default / explicit signals) and `SentimentSignalSource` (reads cached `storage.getSentiment` → BULL/BEAR/NEUTRAL → BUY/SELL/HOLD, `confidence` → strength)
 - Routes (`routes/agent-orchestrator.ts`): `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` returns an `OrchestrationReport` (per-symbol decisions + portfolio snapshot). `dryRun` decides without placing orders. No DB schema, no new deps
 - The orchestrator is built once in `app.ts` over the shared exchange and shared by both the `/api/agent/*` and `/api/shadow/*` routers
+
+### MARL Research Feeder (Phase 7)
+- `services/agent/marl-policy-feeder.ts` — closes the loop from evolution back to the live agent. `MarlPolicyFeeder` reads the **best evolved agent** (via an injected `BestAgentProvider`; app wiring uses the agents repo leaderboard `getTopAgents(1)` + `loadGenome`) and maps its genome onto live `PolicyParams`: `entryThreshold`→`minStrength`, `positionSizePct`→`tradeFractionOfCapital` (clamped to safety rails, defaults on non-finite genes). Pure mapping + decoupled provider — no GA-stack coupling, no schema, no new deps
+- Routes (added to `routes/agent-orchestrator.ts`): `GET /api/agent/marl-policy` returns the recommended params + provenance (agentId, fitness, raw genes); `POST /api/agent/apply-marl-policy` applies them to the live orchestrator via `orchestrator.setConfig()`. Both 404 until a tournament has produced an agent. Phase 5 walk-forward can validate the fed params before they are trusted
 
 ### Shadow Harness (Phase 4)
 - `services/agent/shadow-harness.ts` — `ShadowHarness` drives the shared orchestrator on a fixed `setInterval`, accumulating a track record the `/api/paper/*` analytics measure. Process-lifetime, **in-memory only** (bounded ring buffer of cycle summaries) — no DB schema, no new deps. Timer is `unref()`d; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` so the shared exchange is REALISTIC_PAPER

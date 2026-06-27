@@ -43,6 +43,7 @@ import {
   StaticSignalSource,
 } from './services/agent/trading-orchestrator.js';
 import { ShadowHarness } from './services/agent/shadow-harness.js';
+import { MarlPolicyFeeder } from './services/agent/marl-policy-feeder.js';
 import { createAdminConfigRouter }  from './routes/admin-config.js';
 import { ExchangeFactory, getTradingConfig } from './services/exchange/exchange-factory.js';
 import { TradingService } from './services/exchange/trading-service.js';
@@ -1035,7 +1036,24 @@ if (sharedTradingExchange) {
     signalSource:   storage.isHealthy() ? new SentimentSignalSource(storage) : new StaticSignalSource(),
   });
 
-  app.use(createAgentOrchestratorRouter(agentOrchestrator, agentConfig.mode));
+  // Phase 7: MARL research feeder — maps the best evolved genome (leaderboard top
+  // + its persisted genome) onto the live decision policy. Available only when the
+  // DB is up; the routes 404 gracefully until a tournament has produced an agent.
+  const marlFeeder = storage.isHealthy()
+    ? new MarlPolicyFeeder({
+        getBestAgent: async () => {
+          const agents = createRepositories({ driver: 'sqlite', db: storage.getDb() }).agents;
+          const top = await agents.getTopAgents(1);
+          if (top.length === 0) return null;
+          const best = top[0]!;
+          const genome = await agents.loadGenome(best.agent_id);
+          if (!genome) return null;
+          return { agentId: best.agent_id, genome, fitnessScore: best.win_rate_percent, source: 'leaderboard-top' };
+        },
+      })
+    : undefined;
+
+  app.use(createAgentOrchestratorRouter(agentOrchestrator, agentConfig.mode, marlFeeder));
   app.use(createShadowHarnessRouter(new ShadowHarness(agentOrchestrator)));
 }
 

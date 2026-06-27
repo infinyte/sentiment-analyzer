@@ -241,6 +241,19 @@ describe('TradingAgentOrchestrator — decisions', () => {
     const report = await orch.run({ symbols: ['A', 'B', 'C', 'D'] });
     expect(report.symbolsEvaluated).toBe(2);
   });
+
+  it('setConfig updates the live policy and clamps out-of-range values', () => {
+    const ex = new FakeExchange(10_000, { BTC: 100 });
+    const orch = new TradingAgentOrchestrator({
+      exchange: ex, tradingService: makeTradingService(ex), signalSource: new StaticSignalSource(),
+    });
+    const cfg = orch.setConfig({ minStrength: 0.7, tradeFractionOfCapital: 2, maxSymbols: 5 });
+    expect(cfg.minStrength).toBe(0.7);
+    expect(cfg.tradeFractionOfCapital).toBe(1);   // clamped to ≤ 1
+    expect(cfg.maxSymbols).toBe(5);
+    // non-finite ignored
+    expect(orch.setConfig({ minStrength: NaN }).minStrength).toBe(0.7);
+  });
 });
 
 // ── Signal sources ─────────────────────────────────────────────────────────────
