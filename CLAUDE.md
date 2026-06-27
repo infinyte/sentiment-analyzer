@@ -95,7 +95,8 @@ backend/src/services/
 │   ├── exchange-registry.ts          # Process-lifetime adapter singleton
 │   └── adapters/                     # coinbase-adapter.ts, binance-adapter.ts
 ├── analytics/
-│   └── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
+│   ├── expectancy.ts            # Stateless net-of-fees expectancy: FIFO round-trip reconstruction from Order[], consumes order.commission
+│   └── walk-forward.ts          # Phase 5 walk-forward validation: roll IS/OOS windows, optimize policy params on IS, score OOS net-of-fees; reuses resolvePolicyAction + expectancy.ts
 ├── agent/
 │   ├── trading-orchestrator.ts  # Phase 3 single-cycle agent: signal → decision policy → safety-guarded TradingService → shared exchange; SignalSource (StaticSignalSource, sentiment-backed SentimentSignalSource)
 │   └── shadow-harness.ts        # Phase 4 continuous runner: interval-drives the orchestrator, overlap-guarded, bounded in-memory cycle history
@@ -187,6 +188,7 @@ backend/src/workers/
 | Paper analytics | `routes/paper-analytics.ts` (factory) | `/api/paper/stats` + `/api/paper/trades` + `/api/paper/export` |
 | Agent orchestrator | `routes/agent-orchestrator.ts` (factory) | `/api/agent/config` + `/api/agent/run` |
 | Shadow harness | `routes/shadow-harness.ts` (factory) | `/api/shadow/status` + `/api/shadow/start` + `/api/shadow/stop` + `/api/shadow/tick` |
+| Walk-forward | `routes/walk-forward.ts` (factory) | `/api/walk-forward/run` |
 | Core endpoints | `index.ts` directly | `/coins`, `/sentiment/:symbol`, `/health`, `/trending`, etc. |
 
 **Important:** `/api/agents/stats/leaderboard` route must be registered before `/api/agents/:id` to avoid the wildcard swallowing it.
@@ -224,6 +226,11 @@ backend/src/workers/
 - `services/agent/shadow-harness.ts` — `ShadowHarness` drives the shared orchestrator on a fixed `setInterval`, accumulating a track record the `/api/paper/*` analytics measure. Process-lifetime, **in-memory only** (bounded ring buffer of cycle summaries) — no DB schema, no new deps. Timer is `unref()`d; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` so the shared exchange is REALISTIC_PAPER
 - Routes (`routes/shadow-harness.ts`): `GET /api/shadow/status` (state + recent cycles, newest first); `POST /api/shadow/start` body `{ symbols[], intervalMs?, dryRun?, maxHistory? }`; `POST /api/shadow/stop`; `POST /api/shadow/tick` body `{ symbols?, dryRun? }` runs one cycle now → `OrchestrationReport`
 - Live streaming UI for this is Phase 6 (SSE) — not built; the status endpoint is poll-friendly in the meantime
+
+### Walk-Forward Validation (Phase 5)
+- `services/analytics/walk-forward.ts` — pure, synchronous walk-forward analysis that guards the decision policy against overfitting. Rolls sequential in-sample (IS) / out-of-sample (OOS) windows; per fold it optimizes `PolicyParams` (`minStrength`, `tradeFractionOfCapital`) on IS by an objective, then scores those params on the unseen OOS window. Reuses the **same** policy the live agent uses (`resolvePolicyAction`, extracted from the orchestrator) and the **same** net-of-fees scoring (`expectancy.ts`) with the realistic exchange's fee/slippage fill math
+- `simulatePolicy` replays long-only fills (slippage + taker commission), force-closing on the final bar so each replay is flat-to-flat (clean concatenation of OOS streams). `generateFolds` supports rolling (fixed IS) and `anchored` (growing IS). Objectives: `netPnl` (default), `expectancy`, `profitFactor`, `sharpe`. Reports per-fold IS/OOS metrics, an aggregate OOS `ExpectancyReport`, and **walk-forward efficiency** = mean(OOS obj) / mean(IS obj)
+- Route (`routes/walk-forward.ts`): `POST /api/walk-forward/run` accepts an explicit `bars[]` (price+signal series) **or** a bare `prices[]` array (momentum signals derived via `deriveMomentumSignals`), plus `candidates[]` (default 3×3 grid), `inSampleSize`, `outOfSampleSize`, `anchored?`, `objective?`. No DB schema, no new deps
 
 ### Frontend
 - `App.tsx` (40KB) — app shell plus Dashboard, Sentiment Lab, sentiment refresh, system-health pill, and Backtesting tab

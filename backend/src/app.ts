@@ -36,6 +36,7 @@ import { createTradingRouter }      from './routes/trading.js';
 import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
 import { createAgentOrchestratorRouter } from './routes/agent-orchestrator.js';
 import { createShadowHarnessRouter } from './routes/shadow-harness.js';
+import { createWalkForwardRouter } from './routes/walk-forward.js';
 import {
   TradingAgentOrchestrator,
   SentimentSignalSource,
@@ -1006,6 +1007,9 @@ try {
 }
 
 app.use('/api/trading', createTradingRouter(sharedTradingExchange, sharedTradingConfig));
+
+// Walk-forward validation — pure compute, no exchange needed (mounted unconditionally).
+app.use(createWalkForwardRouter({ feePreset: appConfigService.get('REALISTIC_PAPER_FEE_PRESET') }));
 
 if (sharedTradingExchange) {
   app.use(createPaperAnalyticsRouter(sharedTradingExchange, {

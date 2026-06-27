@@ -102,6 +102,35 @@ export interface RunParams {
 // Quantities at or below this are treated as no position (float-dust guard).
 const POSITION_EPSILON = 1e-8;
 
+// ── Decision policy (pure) ────────────────────────────────────────────────────
+
+/**
+ * Transparent decision policy, extracted as a pure function so the live agent and
+ * the walk-forward validator score the *same* rules. Asymmetric by design:
+ * entering (BUY) requires conviction ≥ minStrength, but de-risking (SELL to close)
+ * is always permitted regardless of strength — the same risk-off bias as the
+ * trading layer, where SELLs bypass the kill switch. Never shorts: a SELL with no
+ * position is a no-op.
+ */
+export function resolvePolicyAction(
+  signal: { signal: 'BUY' | 'SELL' | 'HOLD'; strength: number },
+  hasPosition: boolean,
+  minStrength: number,
+): { action: 'BUY' | 'SELL' | 'HOLD'; reason: string } {
+  if (signal.signal === 'BUY') {
+    if (hasPosition) return { action: 'HOLD', reason: 'BUY signal but already holding; no add' };
+    if (signal.strength < minStrength) {
+      return { action: 'HOLD', reason: `BUY strength ${fmt(signal.strength)} < min ${fmt(minStrength)}` };
+    }
+    return { action: 'BUY', reason: `BUY signal, strength ${fmt(signal.strength)}` };
+  }
+  if (signal.signal === 'SELL') {
+    if (!hasPosition) return { action: 'HOLD', reason: 'SELL signal but no open position' };
+    return { action: 'SELL', reason: 'SELL signal; closing position' };
+  }
+  return { action: 'HOLD', reason: 'HOLD signal' };
+}
+
 // ── Orchestrator ────────────────────────────────────────────────────────────
 
 export class TradingAgentOrchestrator {
@@ -256,28 +285,11 @@ export class TradingAgentOrchestrator {
     }
   }
 
-  /**
-   * Transparent policy. Asymmetric by design: entering (BUY) requires conviction
-   * ≥ minStrength, but de-risking (SELL to close) is always permitted regardless
-   * of strength — the same risk-off bias as the trading layer, where SELLs bypass
-   * the kill switch. The agent never shorts: a SELL with no position is a no-op.
-   */
   private resolveAction(
     signal: AgentSignal,
     hasPosition: boolean,
   ): { action: 'BUY' | 'SELL' | 'HOLD'; reason: string } {
-    if (signal.signal === 'BUY') {
-      if (hasPosition) return { action: 'HOLD', reason: 'BUY signal but already holding; no add' };
-      if (signal.strength < this.config.minStrength) {
-        return { action: 'HOLD', reason: `BUY strength ${fmt(signal.strength)} < min ${fmt(this.config.minStrength)}` };
-      }
-      return { action: 'BUY', reason: `BUY signal, strength ${fmt(signal.strength)}` };
-    }
-    if (signal.signal === 'SELL') {
-      if (!hasPosition) return { action: 'HOLD', reason: 'SELL signal but no open position' };
-      return { action: 'SELL', reason: 'SELL signal; closing position' };
-    }
-    return { action: 'HOLD', reason: 'HOLD signal' };
+    return resolvePolicyAction(signal, hasPosition, this.config.minStrength);
   }
 
   private async snapshotPortfolio(): Promise<OrchestrationReport['portfolio']> {
