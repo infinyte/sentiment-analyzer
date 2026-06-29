@@ -141,10 +141,6 @@ describe('exchange-factory', () => {
     }) as RealisticPaperExchange;
 
     // Coinbase taker fee is 1.2% — verify via a test order
-    // inject a fixed-price quote source so the test is deterministic
-    const { FallbackQuoteSource } = await import('../../services/exchange/realistic-paper-exchange.js');
-    const fixedSource = new FallbackQuoteSource();  // random-walk only, no HTTP
-    // Can't inject after construction, but we can verify the type at minimum
     expect(exchange).toBeInstanceOf(RealisticPaperExchange);
 
     delete process.env.REALISTIC_PAPER_FEE_PRESET;

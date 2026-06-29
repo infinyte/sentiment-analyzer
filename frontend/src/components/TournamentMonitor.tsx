@@ -325,9 +325,6 @@ function ElapsedClock({ tournament }: { tournament: Tournament }) {
   }, [tournament.status]);
 
   const base = tournament.totalElapsedMs;
-  const live  = tournament.status === 'RUNNING' && tournament.startedAt
-    ? base + (Date.now() - new Date(tournament.startedAt).getTime()) - base
-    : base;
 
   void tick; // trigger re-render on tick
 

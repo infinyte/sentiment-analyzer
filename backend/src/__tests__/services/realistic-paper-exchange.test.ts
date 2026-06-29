@@ -212,7 +212,7 @@ describe('RealisticPaperExchange — slippage by side (AC4)', () => {
   });
 
   it('SELL execution price = basePrice × (1 - slippageSellPct)', async () => {
-    const ex = new RealisticPaperExchange({
+    const _ex = new RealisticPaperExchange({
       initialCapital: 0,
       quoteSource: fixedQuote(PRICE),
       slippageBuyPct: 0,
@@ -296,7 +296,7 @@ describe('RealisticPaperExchange — balance accounting with fees (AC5)', () => 
   });
 
   it('SELL: USDT credited = grossValue - commission', async () => {
-    const ex = new RealisticPaperExchange({
+    const _ex = new RealisticPaperExchange({
       quoteSource: fixedQuote(PRICE),
       slippageBuyPct: buySlip,
       slippageSellPct: sellSlip,
@@ -310,10 +310,10 @@ describe('RealisticPaperExchange — balance accounting with fees (AC5)', () => 
       feeTaker: 0,
     });
     await exNoFee.placeOrder({ symbol: 'BTC', side: 'BUY', size: SIZE, price: PRICE });
-    const usdtAfterBuy = (await exNoFee.getBalance('USDT')).total;
+    const _usdtAfterBuy = (await exNoFee.getBalance('USDT')).total;
 
     // Now place SELL with fee
-    const exSell = new RealisticPaperExchange({
+    const _exSell = new RealisticPaperExchange({
       initialCapital: 0,
       quoteSource: fixedQuote(PRICE),
       slippageBuyPct: 0,

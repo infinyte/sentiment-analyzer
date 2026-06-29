@@ -60,7 +60,7 @@ function makeItem(id: string, overrides: Partial<SocialMediaItem> = {}): SocialM
 // Because IngestQueue is imported directly (not the singleton), we can construct
 // a fresh queue per test and monkey-patch its internal reference.
 
-function makeIngestQueue(store: SocialStorageService, concurrency = 2): IngestQueue {
+function _makeIngestQueue(store: SocialStorageService, concurrency = 2): IngestQueue {
   const q = new IngestQueue(concurrency);
   // Access the private processPayload indirectly — we override socialStore by
   // mocking the module. Since Jest module cache is shared, we patch the imported

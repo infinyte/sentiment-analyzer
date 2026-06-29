@@ -1847,6 +1847,8 @@ export function AgentManagementDashboard() {
     };
 
     void loadOverview();
+    // agents.length is read only to decide whether to show the first-load spinner; including it would refetch every time agents changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshNonce]);
 
   useEffect(() => {
@@ -1927,6 +1929,8 @@ export function AgentManagementDashboard() {
     };
 
     void loadDetail();
+    // selectedAgent?.id is read only to decide whether to flash the loading spinner; including it would cause an extra fetch right after selection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentId, refreshNonce]);
 
   useEffect(() => {
@@ -1951,6 +1955,8 @@ export function AgentManagementDashboard() {
     };
 
     void loadTournament();
+    // selectedTournament?.tournamentId is read only to decide whether to flash the loading spinner; including it would cause re-fetches on every load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTournamentId, refreshNonce]);
 
   useEffect(() => {
@@ -1958,6 +1964,8 @@ export function AgentManagementDashboard() {
 
     const maxGeneration = Math.max(...selectedTournament.generations.map(generation => generation.generation), 1);
     setGenerationRange({ start: 1, end: maxGeneration });
+    // Resetting the slider when the tournament identity changes is the intent; generations content updates should not reset user-selected range.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTournament?.tournamentId]);
 
   useEffect(() => {
@@ -1979,6 +1987,8 @@ export function AgentManagementDashboard() {
     setAlgorithmSelection(storedAlgorithm === 'POLICY_GRADIENT' || storedAlgorithm === 'DQN' ? storedAlgorithm : DEFAULT_AGENT_ALGORITHM);
     setAlgorithmError(null);
     setAlgorithmSuccess(null);
+    // algorithmStateByAgent is read to seed the selection at agent-switch time only; including it would reset user edits on every refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedAgentId]);
 
   const filteredAgents = [...agents]
@@ -2007,6 +2017,7 @@ export function AgentManagementDashboard() {
       .filter(tournament => matchesTournamentFilters(tournament, tournamentStatusFilter, tournamentSymbolFilter))
       .map(tournament => tournament.tournamentId)
     : [];
+  const filteredRecentTournamentIdsKey = filteredRecentTournamentIds.join('|');
 
   useEffect(() => {
     if (!evolutionSummary) return;
@@ -2019,7 +2030,9 @@ export function AgentManagementDashboard() {
     if (!selectedTournamentId || !filteredRecentTournamentIds.includes(selectedTournamentId)) {
       setSelectedTournamentId(filteredRecentTournamentIds[0] ?? null);
     }
-  }, [evolutionSummary, selectedTournamentId, filteredRecentTournamentIds.join('|')]);
+    // filteredRecentTournamentIds is referentially fresh each render; the joined key tracks its contents and avoids infinite loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [evolutionSummary, selectedTournamentId, filteredRecentTournamentIdsKey]);
 
   const totalAgents = agents.length;
   const averageWinRate = totalAgents > 0 ? agents.reduce((sum, agent) => sum + agent.win_rate_percent, 0) / totalAgents : 0;

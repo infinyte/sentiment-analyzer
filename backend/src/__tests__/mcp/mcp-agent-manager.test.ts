@@ -4,6 +4,7 @@
  * Tests the service-layer logic called by each mcp-agent-manager tool handler.
  */
 
+import { randomUUID } from 'crypto';
 import Database from 'better-sqlite3';
 import { GenomeManager, createDefaultGenome } from '../../services/evolutionary/agent-genome.js';
 import { AgentStatisticsManager } from '../../services/evolutionary/agent-statistics-manager.js';
@@ -176,7 +177,6 @@ describe('collect_results tool logic', () => {
   });
 
   it('returns competition records ordered most-recent-first', () => {
-    const { randomUUID } = require('crypto');
     const id = mgr.registerNewAgent();
 
     // Insert two competition records

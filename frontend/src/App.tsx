@@ -714,10 +714,39 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
   const [rankingResult, setRankingResult] = useState<SentimentRankingResponse | null>(null);
   const [labTab, setLabTab] = useState<SentimentLabTab>('analyze');
 
-  const [modesOpen, setModesOpen] = useState(false);
   const [modesLoading, setModesLoading] = useState(false);
   const [modesError, setModesError] = useState<string | null>(null);
   const [modesData, setModesData] = useState<SentimentModesResponse | null>(null);
+
+  useEffect(() => {
+    if (labTab !== 'modes' || modesData || modesLoading || modesError) return;
+    let cancelled = false;
+    setModesLoading(true);
+    setModesError(null);
+    void (async () => {
+      try {
+        const response = await fetch('/api/info/modes');
+        const payload = await response.json();
+        if (cancelled) return;
+        if (!response.ok) {
+          throw new Error(payload.error ?? `HTTP ${response.status}`);
+        }
+        setModesData(payload as SentimentModesResponse);
+      } catch (err) {
+        if (cancelled) return;
+        setModesError(err instanceof Error ? err.message : 'Failed to load mode reference');
+      } finally {
+        if (!cancelled) setModesLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [labTab, modesData, modesLoading, modesError]);
+
+  useEffect(() => {
+    if (!refreshToast) return;
+    const timer = setTimeout(() => setRefreshToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [refreshToast]);
 
   if (error) {
     return (
@@ -867,41 +896,6 @@ function Dashboard({ coins, loading, error, lastUpdated, onCoinSelect }: Dashboa
       setRankingLoading(false);
     }
   };
-
-  const toggleModes = async () => {
-    const nextOpen = !modesOpen;
-    setModesOpen(nextOpen);
-
-    if (!nextOpen || modesData) return;
-
-    setModesLoading(true);
-    setModesError(null);
-
-    try {
-      const response = await fetch('/api/info/modes');
-      const payload = await response.json();
-      if (!response.ok) {
-        throw new Error(payload.error ?? `HTTP ${response.status}`);
-      }
-      setModesData(payload as SentimentModesResponse);
-    } catch (err) {
-      setModesError(err instanceof Error ? err.message : 'Failed to load mode reference');
-    } finally {
-      setModesLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (labTab === 'modes' && !modesData && !modesLoading && !modesError) {
-      void toggleModes();
-    }
-  }, [labTab, modesData, modesLoading, modesError]);
-
-  useEffect(() => {
-    if (!refreshToast) return;
-    const timer = setTimeout(() => setRefreshToast(null), 3500);
-    return () => clearTimeout(timer);
-  }, [refreshToast]);
 
   const triggerSentimentRefresh = async () => {
     const apiKey = refreshApiKey.trim();
@@ -1752,7 +1746,7 @@ function TradingWorkspace() {
   const [balancesError, setBalancesError] = useState<string | null>(null);
 
   const [statsData, setStatsData] = useState<TradingStats | null>(null);
-  const [statsLoading, setStatsLoading] = useState(false);
+  const [_statsLoading, setStatsLoading] = useState(false);
   const [statsError, setStatsError] = useState<string | null>(null);
 
   const [orderSymbol, setOrderSymbol] = useState('BTC');

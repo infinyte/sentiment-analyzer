@@ -174,13 +174,11 @@ jest.mock('../../database/sqlite-social-store.js', () => ({
 
 import request from 'supertest';
 import app from '../../index.js';
-import { storage } from '../../storage.js';
 import { createRepositories } from '../../repositories/factory.js';
 import { brokerRegistry } from '../../services/brokers/broker-registry.js';
 import { createBrokerAdapter } from '../../services/brokers/broker-factory.js';
 import { resetMarlRateLimitersForTests } from '../../routes/marl-competition.js';
 
-const storageMock = storage as jest.Mocked<typeof storage>;
 const registryMock = brokerRegistry as jest.Mocked<typeof brokerRegistry>;
 const factoryMock  = createBrokerAdapter as jest.Mock;
 // Access the stable mock broker repo created by the factory mock

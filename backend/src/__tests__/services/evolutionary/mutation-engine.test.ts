@@ -4,7 +4,7 @@
 
 import Database from 'better-sqlite3';
 import { MutationEngine, type MutationSeverity } from '../../../services/evolutionary/mutation-engine.js';
-import { GenomeManager, createDefaultGenome, GENE_BOUNDS, NUMERIC_GENES } from '../../../services/evolutionary/agent-genome.js';
+import { GenomeManager, createDefaultGenome, GENE_BOUNDS, NUMERIC_GENES, type AgentGenome } from '../../../services/evolutionary/agent-genome.js';
 import {
   createDefaultLSTMParams,
   createDefaultGANParams,
@@ -262,7 +262,7 @@ describe('MutationEngine — mutate() with extreme genomes', () => {
     }
 
     for (let i = 0; i < 100; i++) {
-      const { genome: m } = engine.mutate(minGenome as any, 'HEAVY');
+      const { genome: m } = engine.mutate(minGenome as unknown as AgentGenome, 'HEAVY');
       for (const key of NUMERIC_GENES) {
         expect(m[key] as number).toBeGreaterThanOrEqual(GENE_BOUNDS[key].min);
       }
@@ -276,7 +276,7 @@ describe('MutationEngine — mutate() with extreme genomes', () => {
     }
 
     for (let i = 0; i < 100; i++) {
-      const { genome: m } = engine.mutate(maxGenome as any, 'HEAVY');
+      const { genome: m } = engine.mutate(maxGenome as unknown as AgentGenome, 'HEAVY');
       for (const key of NUMERIC_GENES) {
         expect(m[key] as number).toBeLessThanOrEqual(GENE_BOUNDS[key].max);
       }

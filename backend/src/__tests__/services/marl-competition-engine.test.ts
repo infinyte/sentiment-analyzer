@@ -60,6 +60,7 @@ import {
   type AgentObservation,
   type CompetitionConfig,
 } from '../../services/marl-competition-engine';
+import type { TradingSignal } from '../../services/sentiment-analyzer';
 
 function createObservation(overrides: Partial<AgentObservation> = {}): AgentObservation {
   return {
@@ -381,10 +382,9 @@ describe('MarlCompetitionEngine', () => {
 // ─── computeLiveSignal + holdSignal ───────────────────────────────────────────
 
 describe('MarlCompetitionEngine — computeLiveSignal and holdSignal', () => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   type PrivateEngine = {
-    computeLiveSignal: (symbol: string, livePrice: number) => Promise<any>;
-    holdSignal:        (symbol: string, price: number)    => any;
+    computeLiveSignal: (symbol: string, livePrice: number) => Promise<TradingSignal>;
+    holdSignal:        (symbol: string, price: number)    => TradingSignal;
   };
 
   beforeEach(() => {

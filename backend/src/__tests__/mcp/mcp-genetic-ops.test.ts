@@ -11,7 +11,6 @@ import { MutationEngine } from '../../services/evolutionary/mutation-engine.js';
 import { GeneticCrossover } from '../../services/evolutionary/genetic-crossover.js';
 import { FitnessCalculator, type AgentStats } from '../../services/evolutionary/fitness-calculator.js';
 import { SelectionAlgorithm } from '../../services/evolutionary/selection-algorithm.js';
-import { AgentStatisticsManager } from '../../services/evolutionary/agent-statistics-manager.js';
 import { GenomeManager, createDefaultGenome, NUMERIC_GENES } from '../../services/evolutionary/agent-genome.js';
 import { GenerationResultStore } from '../../services/evolutionary/generation-result-store.js';
 

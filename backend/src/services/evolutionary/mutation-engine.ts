@@ -229,7 +229,7 @@ export class MutationEngine {
    * Compute a 0–1 severity score based on average relative change across
    * all mutated genes.
    */
-  private computeSeverityScore(mutations: MutationRecord[], original: AgentGenome): number {
+  private computeSeverityScore(mutations: MutationRecord[], _original: AgentGenome): number {
     if (mutations.length === 0) return 0;
 
     const relativeChanges = mutations.map(({ param, oldValue, newValue }) => {

@@ -30,7 +30,6 @@ import { GeneticCrossover, type CrossoverStrategy } from '../services/evolutiona
 import { FitnessCalculator, type AgentStats as FitnessAgentStats } from '../services/evolutionary/fitness-calculator.js';
 import { SelectionAlgorithm } from '../services/evolutionary/selection-algorithm.js';
 import { AgentStatisticsManager } from '../services/evolutionary/agent-statistics-manager.js';
-import { GenomeManager } from '../services/evolutionary/agent-genome.js';
 import { GenerationResultStore } from '../services/evolutionary/generation-result-store.js';
 import path from 'node:path';
 
@@ -56,7 +55,6 @@ const mutationEngine = new MutationEngine(db);
 const crossover      = new GeneticCrossover(db);
 const fitnessCalc    = new FitnessCalculator();
 const statsManager   = new AgentStatisticsManager(db);
-const genomeManager  = new GenomeManager(db);
 const resultStore    = new GenerationResultStore(db);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

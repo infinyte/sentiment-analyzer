@@ -10,7 +10,6 @@ import {
   createRandomLSTMParams,
   createRandomGANParams,
   createRandomTransformerParams,
-  createRandomArchitectureParams,
   isLSTMParams,
   isGANParams,
   isTransformerParams,

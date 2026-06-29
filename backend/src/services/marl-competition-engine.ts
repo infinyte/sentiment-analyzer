@@ -16,8 +16,6 @@ import { SentimentAnalyzerEngine } from './sentiment-analyzer.js';
 import type { TradingSignal, MarketData, NewsData } from './sentiment-analyzer.js';
 import { CoinGeckoService } from './coingecko.js';
 import type { Coin } from '../types.js';
-import { exchangeRegistry } from './exchange/exchange-registry.js';
-import { RiskManager } from './exchange/risk-manager.js';
 import type { RiskManagerConfig } from './exchange/risk-manager.js';
 import { storage } from '../storage.js';
 import logger from '../logger.js';

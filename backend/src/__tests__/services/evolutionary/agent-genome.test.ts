@@ -11,7 +11,6 @@ import {
   createRandomGenome,
   GENE_BOUNDS,
   NUMERIC_GENES,
-  type AgentGenome,
 } from '../../../services/evolutionary/agent-genome.js';
 
 // ── DB helpers ────────────────────────────────────────────────────────────────
