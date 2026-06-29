@@ -12,7 +12,7 @@ const makeCoinRaw = (overrides: Record<string, unknown> = {}) => ({
   market_cap: 850_000_000_000,
   total_volume: 25_000_000_000,
   price_change_percentage_24h: 2.5,
-  price_change_percentage_7d: -3.2,
+  price_change_percentage_7d_in_currency: -3.2,
   high_24h: 46_000,
   low_24h: 44_000,
   market_cap_rank: 1,
@@ -81,6 +81,40 @@ describe('CoinGeckoService', () => {
       expect.stringContaining('per_page=10'),
       expect.anything()
     );
+  });
+
+  // 1.2.2b — Requests the 7d price-change window (CoinGecko only returns 7d when asked)
+  it('getTopCoins: requests the 24h,7d price_change_percentage window', async () => {
+    mockFetch.mockResolvedValue(mockOkResponse([makeCoinRaw()]));
+
+    await service.getTopCoins();
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('price_change_percentage=24h,7d'),
+      expect.anything()
+    );
+  });
+
+  // 1.2.2c — Maps 7d change from price_change_percentage_7d_in_currency
+  it('getTopCoins: maps price_change_7d_percent from the *_in_currency field', async () => {
+    mockFetch.mockResolvedValue(
+      mockOkResponse([makeCoinRaw({ price_change_percentage_7d_in_currency: -7.5 })])
+    );
+
+    const [coin] = await service.getTopCoins();
+
+    expect(coin.price_change_7d_percent).toBe(-7.5);
+  });
+
+  // 1.2.2d — Degrades to 0 when the 7d field is absent
+  it('getTopCoins: defaults price_change_7d_percent to 0 when absent', async () => {
+    mockFetch.mockResolvedValue(
+      mockOkResponse([makeCoinRaw({ price_change_percentage_7d_in_currency: undefined })])
+    );
+
+    const [coin] = await service.getTopCoins();
+
+    expect(coin.price_change_7d_percent).toBe(0);
   });
 
   // 1.2.3 — Symbol is always uppercase

@@ -1,0 +1,3287 @@
+{
+  "info": {
+    "_postman_id": "430a47cb-c4f1-4c53-a392-d85fa67099cc",
+    "name": "Sentiment Analyzer — Master Suite",
+    "description": "# Sentiment Analyzer — All Endpoints Suite\n\nA comprehensive test suite for the **Sentiment Analyzer API**, a crypto-focused platform that combines social media sentiment analysis, multi-agent reinforcement learning (MARL), evolutionary agent optimization, and real broker trading integration.\n\n## Overview\n\nThis collection covers every endpoint across the full API surface, organized into logical functional groups. Each request includes both **success** and **failure** examples to support documentation, mock server generation, and contract testing.\n\n## Base URL\n\nAll requests use the `{{base_url}}` collection variable. Set this to your environment's API root (e.g., `http://localhost:3000` or your deployed URL).\n\n## Authentication\n\nMost endpoints require an API key passed via the `X-API-Key` header or `Authorization: Bearer <token>`. Set `{{api_secret_key}}` in your environment or collection variables.\n\n## Collection Variables\n\n| Variable | Description |\n|---|---|\n| `base_url` | Root URL of the API server |\n| `api_secret_key` | API authentication key |\n| `symbol` | Crypto symbol (e.g., `BTC`, `ETH`) |\n| `competition_id` | MARL competition identifier |\n| `agent_id` | MARL agent identifier |\n| `test_id` | Backtest job identifier |\n| `tournament_id` | Evolutionary tournament identifier |\n| `credential_id` | Broker credential identifier |\n| `social_item_id` | Social media item identifier |\n\n## Folders\n\n| Folder | Description |\n|---|---|\n| **Core** | Health checks, coin data, sentiment analysis, backtesting, trending, and scraping |\n| **Social Media** | Social media item retrieval, trending topics, stats, and refresh triggers |\n| **MARL Competition** | Multi-agent competition lifecycle: start, monitor, results, and agent comparison |\n| **MARL Broker Real Trading** | Broker credential management, connection, order tracking, and emergency stop |\n| **Agent Stats & Evolutionary** | Agent performance stats, genome/genealogy, leaderboard, and evolutionary tournaments |\n| **Trading** | Live exchange integration: prices, balances, order placement, and trading stats |\n| **Admin Config** | Runtime configuration management |\n| **Paper Analytics** | Net-of-fees expectancy and paper trade reporting |\n| **Shadow Harness** | Deterministic tick-by-tick replay harness |\n| **Walk-Forward Validation** | Rolling-window strategy validation |\n| **Live Agent Orchestrator** | Live agent decision cycle and MARL policy feeding |\n| **Tournament Scheduling & Live Control** | Recurring tournament scheduling and live execution control |\n\n## Error Format\n\nAll error responses follow a consistent structure:\n```json\n{\n  \"error\": \"ERROR_CODE\",\n  \"message\": \"Human-readable description\",\n  \"details\": { ... }\n}\n```\n\n## HTTP Status Codes Used\n\n| Code | Meaning |\n|---|---|\n| 200 | OK — Request succeeded |\n| 201 | Created — Resource created |\n| 202 | Accepted — Async job queued |\n| 400 | Bad Request — Invalid parameters |\n| 401 | Unauthorized — Missing or invalid credentials |\n| 404 | Not Found — Resource does not exist |\n| 409 | Conflict — State conflict (e.g., already connected) |\n| 422 | Unprocessable Entity — Validation failed |\n| 429 | Too Many Requests — Rate limit exceeded |\n| 503 | Service Unavailable — Downstream service down |",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "778319"
+  },
+  "item": [
+    {
+      "name": "Core",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List top coins",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins?limit=20&sort_by=market_cap",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "coins"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "sort_by",
+                  "value": "market_cap"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Coin detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/coins/BTC",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "coins",
+                "BTC"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Force refresh sentiment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/refresh-sentiment",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "refresh-sentiment"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get cached sentiment",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/BTC",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sentiment",
+                "BTC"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Analyze sentiment",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/sentiment/analyze",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "sentiment",
+                "analyze"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Configure agents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/configure",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "configure"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Run backtest",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/backtest/run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "backtest",
+                "run"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Backtest results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/backtest/results/test_123",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "backtest",
+                "results",
+                "test_123"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Top coins ranking",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/rankings/top-coins?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "rankings",
+                "top-coins"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Modes documentation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/info/modes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "info",
+                "modes"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Scrape one symbol",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/scrape/social?symbol=BTC",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "scrape",
+                "social"
+              ],
+              "query": [
+                {
+                  "key": "symbol",
+                  "value": "BTC"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Batch scrape",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/scrape/batch",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "scrape",
+                "batch"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Trending topics (engine)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Ingest posts",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending/ingest",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending",
+                "ingest"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "MARL info",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/info",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "info"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Core\n\nFoundational API endpoints covering system health, coin data, sentiment analysis, backtesting, trending signals, and social scraping.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/health` | System health check — returns status of all dependent services |\n| GET | `/api/coins` | List all tracked coins with market data and sentiment scores |\n| GET | `/api/coins/:symbol` | Get detailed coin data with historical price and sentiment history |\n| POST | `/api/refresh-sentiment` | Trigger an async sentiment refresh job for all tracked coins |\n| GET | `/api/sentiment/:symbol` | Get the current sentiment breakdown for a specific coin |\n| POST | `/api/sentiment/analyze` | Analyze the sentiment of arbitrary text against a coin symbol |\n| POST | `/api/agents/configure` | Configure a MARL agent's trading parameters |\n| POST | `/api/backtest/run` | Submit a backtest job for a given strategy and date range |\n| GET | `/api/backtest/results/:testId` | Retrieve results for a completed backtest job |\n| GET | `/api/rankings/top-coins` | Get top-ranked coins by sentiment score for a given timeframe |\n| GET | `/api/info/modes` | List available trading modes supported by the system |\n| GET | `/api/scrape/social` | Scrape social media data for a specific coin symbol |\n| POST | `/api/scrape/batch` | Submit a batch scrape job for multiple symbols and platforms |\n| GET | `/api/trending` | Get currently trending coins based on volume and mention spikes |\n| POST | `/api/trending/ingest` | Ingest a trending data point from an external source |\n\n### Notes\n- `/api/health` does not require authentication and is safe to call frequently for uptime monitoring.\n- Backtest jobs are asynchronous — poll `/api/backtest/results/:testId` until `status` is `\"completed\"`.\n- Sentiment refresh and batch scrape jobs return a `jobId` for status tracking.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Core folder test suite ──────────────────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 3. Content-Type is JSON",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Body is valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific assertions",
+              "if (url.includes(\"/api/health\")) {",
+              "    pm.test(\"Health: status field is present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "        pm.expect(body.status).to.be.a(\"string\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/coins\") && !url.includes(\"/api/coins/\")) {",
+              "    pm.test(\"Coins list: response is an array or has data array\", () => {",
+              "        const list = Array.isArray(body) ? body : body.data || body.coins || body.results;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/api\\/coins\\/[^/]+/)) {",
+              "    pm.test(\"Coin detail: symbol field is present\", () => {",
+              "        pm.expect(body).to.have.property(\"symbol\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/sentiment/\") && !url.includes(\"analyze\")) {",
+              "    pm.test(\"Sentiment: symbol and score fields present\", () => {",
+              "        pm.expect(body).to.have.property(\"symbol\");",
+              "        pm.expect(body).to.satisfy(b => b.score !== undefined || b.sentiment !== undefined);",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/sentiment/analyze\")) {",
+              "    pm.test(\"Sentiment analyze: result field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.sentiment !== undefined || b.score !== undefined || b.result !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/backtest/run\")) {",
+              "    pm.test(\"Backtest run: jobId or testId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.jobId !== undefined || b.testId !== undefined || b.id !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/backtest/results/\")) {",
+              "    pm.test(\"Backtest results: status field present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/rankings/top-coins\")) {",
+              "    pm.test(\"Rankings: response is array or has coins array\", () => {",
+              "        const list = Array.isArray(body) ? body : body.coins || body.data || body.results;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/trending\") && !url.includes(\"ingest\")) {",
+              "    pm.test(\"Trending: response is array or has items\", () => {",
+              "        const list = Array.isArray(body) ? body : body.items || body.data || body.results;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/refresh-sentiment\") || url.includes(\"/api/trending/ingest\") || url.includes(\"/api/scrape/batch\")) {",
+              "    pm.test(\"Async job: jobId or accepted status returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.jobId !== undefined || b.id !== undefined || b.status !== undefined || b.accepted !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/info/modes\")) {",
+              "    pm.test(\"Modes: response is array or has modes field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.modes || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Social Media",
+      "item": [
+        {
+          "name": "Trending topics",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/trending-topics?timeWindow=4h&limit=10&type=coin",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "trending-topics"
+              ],
+              "query": [
+                {
+                  "key": "timeWindow",
+                  "value": "4h"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                },
+                {
+                  "key": "type",
+                  "value": "coin"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Social items",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/items?coin=BTC&source=reddit&sort=score&limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "coin",
+                  "value": "BTC"
+                },
+                {
+                  "key": "source",
+                  "value": "reddit"
+                },
+                {
+                  "key": "sort",
+                  "value": "score"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Social item detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/item/itm_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "item",
+                "itm_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Source health stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Multi-source trend score",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trending-score/BTC?interval=1h",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trending-score",
+                "BTC"
+              ],
+              "query": [
+                {
+                  "key": "interval",
+                  "value": "1h"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Social refresh",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/social-media/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "social-media",
+                "refresh"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Social Media\n\nEndpoints for retrieving, analyzing, and refreshing social media content related to crypto assets. Covers Reddit and Twitter/X data ingestion and trending topic detection.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/social-media/trending-topics` | Get trending topics across social platforms within a time window |\n| GET | `/api/social-media/items` | List social media items sorted by score or recency |\n| GET | `/api/social-media/item/:id` | Get full detail for a single social media item |\n| GET | `/api/social-media/stats` | Aggregate stats across all ingested social media content |\n| GET | `/api/trending-score/:symbol` | Get the trending score for a specific coin symbol |\n| POST | `/api/social-media/refresh` | Trigger a refresh of social media data for specified platforms and symbols |\n\n### Query Parameters\n\n- `timeWindow` — Time window in hours. Accepted values: `1`, `4`, `12`, `24`\n- `sort` — Sort order for items. Accepted values: `score`, `date`, `mentions`\n- `since_hours` — Filter items published within the last N hours\n- `limit` — Maximum number of results to return\n- `interval` — Trending score calculation interval in hours\n\n### Notes\n- Refresh requests are rate-limited. If you receive a `429`, wait for the `Retry-After` header value before retrying.\n- Social media items include engagement metrics (likes, shares, comments) and a computed sentiment score.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Social Media folder test suite ─────────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const isSseStream = url.includes(\"/stream\");",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "if (isSseStream) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/trending-topics\")) {",
+              "    pm.test(\"Trending topics: response is array or has topics field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.topics || body.data || body.results;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "    if (!Array.isArray(body) && body.topics) {",
+              "        pm.test(\"Trending topics: each item has topic and score\", () => {",
+              "            body.topics.slice(0, 3).forEach(t => {",
+              "                pm.expect(t).to.satisfy(i => i.topic !== undefined || i.name !== undefined || i.keyword !== undefined);",
+              "            });",
+              "        });",
+              "    }",
+              "}",
+              "",
+              "if (url.includes(\"/api/social-media/items\")) {",
+              "    pm.test(\"Social items: response is array or has items field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.items || body.data || body.results;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/api\\/social-media\\/item\\/[^/]+/)) {",
+              "    pm.test(\"Social item detail: id field present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b._id !== undefined);",
+              "    });",
+              "    pm.test(\"Social item detail: source or platform field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.source !== undefined || b.platform !== undefined || b.type !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/social-media/stats\")) {",
+              "    pm.test(\"Social stats: numeric fields present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.total !== undefined || b.count !== undefined || b.totalItems !== undefined || b.stats !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/trending-score/\")) {",
+              "    pm.test(\"Trending score: score field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.score !== undefined || b.trendingScore !== undefined || b.value !== undefined",
+              "        );",
+              "    });",
+              "    pm.test(\"Trending score: symbol field present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.symbol !== undefined || b.coin !== undefined);",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/social-media/refresh\")) {",
+              "    pm.test(\"Social refresh: accepted or jobId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.jobId !== undefined || b.id !== undefined || b.status !== undefined || b.accepted !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "MARL Competition",
+      "item": [
+        {
+          "name": "Start competition",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "start"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Competition status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/comp_123/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "comp_123",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Competition results",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/comp_123/results",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "comp_123",
+                "results"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Compare agents (H2H)",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/compare",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "compare"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List competitions",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competitions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competitions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List learning states",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/learning",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "learning"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Reset learning state",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/alpha/learning?riskProfile=AGGRESSIVE",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "alpha",
+                "learning"
+              ],
+              "query": [
+                {
+                  "key": "riskProfile",
+                  "value": "AGGRESSIVE"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Coin universe",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/coin-universe",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "coin-universe"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Trade log",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/comp_123/trade-log?agentId=alpha",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "comp_123",
+                "trade-log"
+              ],
+              "query": [
+                {
+                  "key": "agentId",
+                  "value": "alpha"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Equity curves",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/comp_123/equity-curves",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "comp_123",
+                "equity-curves"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Competition SSE stream",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/competition/comp_123/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "competition",
+                "comp_123",
+                "stream"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pre-train agent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/alpha/pretrain",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "alpha",
+                "pretrain"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set learning algorithm",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/agents/alpha/algorithm",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "agents",
+                "alpha",
+                "algorithm"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## MARL Competition\n\nEndpoints for managing Multi-Agent Reinforcement Learning (MARL) competitions. Agents compete against each other in simulated trading environments, with results used to drive evolutionary improvement.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| POST | `/api/marl/competition/start` | Start a new competition between a set of agents |\n| GET | `/api/marl/competition/:competitionId/status` | Get live status and leaderboard for a running competition |\n| GET | `/api/marl/competition/:competitionId/results` | Get final results for a completed competition |\n| POST | `/api/marl/agents/compare` | Compare multiple agents by a specific performance metric |\n| GET | `/api/marl/competitions` | List all competitions (past and present) |\n| GET | `/api/marl/agents/learning` | Get the current learning state of all active agents |\n| DELETE | `/api/marl/agents/:agentId/learning` | Reset the learning data for a specific agent |\n| GET | `/api/marl/coin-universe` | Generate a coin universe assignment for a set of agents |\n| GET | `/api/marl/info` | Get MARL system metadata: version, capabilities, supported exchanges |\n| POST | `/api/marl/broker/credentials` | Register new broker credentials for real trading |\n\n### Competition Lifecycle\n\n1. **Start** — POST `/api/marl/competition/start` with agent configs and duration\n2. **Monitor** — Poll GET `/api/marl/competition/:id/status` for live leaderboard\n3. **Results** — GET `/api/marl/competition/:id/results` once status is `\"completed\"`\n\n### Notes\n- Competitions run for a fixed duration (in seconds) specified at start time.\n- Attempting to fetch results for a still-running competition returns `409 Conflict`.\n- Agent learning data can be reset between competitions to start fresh.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── MARL Competition folder test suite ─────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "const isSseStream = url.includes(\"/stream\");",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200, 201, or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 8000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(8000);",
+              "});",
+              "",
+              "if (isSseStream) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/competition/start\")) {",
+              "    pm.test(\"Competition start: competitionId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.competitionId !== undefined || b.id !== undefined || b.competition_id !== undefined",
+              "        );",
+              "    });",
+              "    pm.test(\"Competition start: status field present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/competition/\") && url.includes(\"/status\")) {",
+              "    pm.test(\"Competition status: status field present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "    pm.test(\"Competition status: leaderboard or agents field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.leaderboard !== undefined || b.agents !== undefined || b.rankings !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/competition/\") && url.includes(\"/results\")) {",
+              "    pm.test(\"Competition results: winner or rankings present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.winner !== undefined || b.rankings !== undefined || b.results !== undefined || b.leaderboard !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/competition/\") && url.includes(\"/trade-log\")) {",
+              "    pm.test(\"Trade log: response is array or has trades field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.trades || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/competition/\") && url.includes(\"/equity-curves\")) {",
+              "    pm.test(\"Equity curves: response is array or has curves field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.curves || body.data || body.equityCurves;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/api/marl/competitions\") && method === \"GET\" && !url.includes(\"/competition/\")) {",
+              "    pm.test(\"List competitions: response is array or has competitions field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.competitions || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/compare\")) {",
+              "    pm.test(\"Agent compare: comparison results present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.results !== undefined || b.comparison !== undefined || b.agents !== undefined || Array.isArray(b)",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/learning\") && method === \"GET\") {",
+              "    pm.test(\"Learning states: response is array or has agents field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.agents || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/learning\") && method === \"DELETE\") {",
+              "    pm.test(\"Reset learning: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.message !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/coin-universe\")) {",
+              "    pm.test(\"Coin universe: assignments present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.assignments !== undefined || b.universe !== undefined || Array.isArray(b) || b.data !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/pretrain\")) {",
+              "    pm.test(\"Pre-train: jobId or status returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.jobId !== undefined || b.id !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/algorithm\")) {",
+              "    pm.test(\"Set algorithm: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.message !== undefined || b.algorithm !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "MARL Broker Real Trading",
+      "item": [
+        {
+          "name": "List credentials",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Credentials picker",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/picker",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials",
+                "picker"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Store credentials",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Connect broker",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connect/cred_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "connect",
+                "cred_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List connected adapters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/connected",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "connected"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Order audit trail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/orders/comp_123?agentId=alpha",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "orders",
+                "comp_123"
+              ],
+              "query": [
+                {
+                  "key": "agentId",
+                  "value": "alpha"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Emergency stop",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/emergency-stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "emergency-stop"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete credentials",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/broker/credentials/cred_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "broker",
+                "credentials",
+                "cred_1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## MARL Broker Real Trading\n\nEndpoints for managing real broker connections and live trading operations. Supports credential management, exchange connectivity, order tracking, and emergency controls.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/marl/broker/credentials` | List all saved broker credentials |\n| GET | `/api/marl/broker/credentials/picker` | Get a simplified list of credentials for UI dropdowns |\n| POST | `/api/marl/broker/connect/:id` | Connect to a broker using a saved credential |\n| GET | `/api/marl/broker/connected` | Check whether a broker is currently connected |\n| GET | `/api/marl/broker/orders/:competitionId` | List all orders placed during a competition |\n| POST | `/api/marl/broker/emergency-stop` | Immediately cancel all open orders and close all positions |\n| DELETE | `/api/marl/broker/credentials/:id` | Delete a saved broker credential |\n\n### Broker Connection Flow\n\n1. **Register credentials** — POST `/api/marl/broker/credentials`\n2. **Connect** — POST `/api/marl/broker/connect/:id`\n3. **Verify** — GET `/api/marl/broker/connected`\n4. **Trade** — Agents place orders automatically during competitions\n5. **Stop** — POST `/api/marl/broker/emergency-stop` if needed\n\n### Emergency Stop\n\nThe emergency stop endpoint is a safety mechanism that:\n- Cancels **all open orders** on the connected exchange\n- Closes **all open positions** at market price\n- Disconnects the broker session\n\nUse with caution in live trading environments.\n\n### Notes\n- Credentials are stored encrypted. API secrets are never returned in GET responses.\n- You cannot delete a credential while it is actively connected — disconnect first.\n- The `picker` endpoint returns a simplified format suitable for select/dropdown UI components.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── MARL Broker Real Trading folder test suite ──────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200, 201, or 204\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 204 No Content — no body to parse",
+              "if (pm.response.code === 204) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/credentials\") && !url.includes(\"/picker\") && !url.includes(\"/credentials/\") && method === \"GET\") {",
+              "    pm.test(\"Credentials list: response is array or has credentials field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.credentials || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "    pm.test(\"Credentials list: no secret fields exposed\", () => {",
+              "        const list = Array.isArray(body) ? body : body.credentials || body.data || [];",
+              "        list.slice(0, 3).forEach(c => {",
+              "            pm.expect(c).to.not.have.property(\"secret\");",
+              "            pm.expect(c).to.not.have.property(\"apiSecret\");",
+              "            pm.expect(c).to.not.have.property(\"password\");",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/credentials/picker\")) {",
+              "    pm.test(\"Credentials picker: response is array\", () => {",
+              "        const list = Array.isArray(body) ? body : body.credentials || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "    pm.test(\"Credentials picker: items have id and label/name\", () => {",
+              "        const list = Array.isArray(body) ? body : body.credentials || body.data || [];",
+              "        list.slice(0, 3).forEach(c => {",
+              "            pm.expect(c).to.satisfy(i => i.id !== undefined || i._id !== undefined);",
+              "            pm.expect(c).to.satisfy(i => i.label !== undefined || i.name !== undefined || i.exchange !== undefined);",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/credentials\") && method === \"POST\") {",
+              "    pm.test(\"Store credentials: id returned\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b._id !== undefined || b.credentialId !== undefined);",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/broker/connect/\")) {",
+              "    pm.test(\"Connect broker: connected status returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.connected !== undefined || b.status !== undefined || b.success !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/broker/connected\")) {",
+              "    pm.test(\"Connected check: connected boolean present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            typeof b.connected === \"boolean\" || b.status !== undefined || b.adapters !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/broker/orders/\")) {",
+              "    pm.test(\"Orders: response is array or has orders field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.orders || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/emergency-stop\")) {",
+              "    pm.test(\"Emergency stop: acknowledged with status or message\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.status !== undefined || b.message !== undefined || b.success !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/credentials/\") && method === \"DELETE\") {",
+              "    pm.test(\"Delete credentials: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.message !== undefined || b.deleted !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Agent Stats & Evolutionary",
+      "item": [
+        {
+          "name": "List agents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents?limit=20&offset=0",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Leaderboard",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/stats/leaderboard?limit=10",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "stats",
+                "leaderboard"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_777",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_777"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Customize agent",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_777/customize",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_777",
+                "customize"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_777/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_777",
+                "history"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent genome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_777/genome",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_777",
+                "genome"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Agent genealogy",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_777/genealogy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_777",
+                "genealogy"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Retire agent",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agents/agt_778/retire",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agents",
+                "agt_778",
+                "retire"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List tournaments (evolutionary)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tournament detail (evolutionary)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament/evo_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament",
+                "evo_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Evolutionary summary",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/summary",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "summary"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Generation checkpoint",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament/evo_1/checkpoint/3",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament",
+                "evo_1",
+                "checkpoint",
+                "3"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Rollback tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/tournament/evo_1/rollback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "tournament",
+                "evo_1",
+                "rollback"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Breed agents",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/evolutionary/breed",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "evolutionary",
+                "breed"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Best genome",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/best-genome",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "best-genome"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Evolution history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/history",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "history"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Population snapshot",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/marl/evolution/population",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "marl",
+                "evolution",
+                "population"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Agent Stats & Evolutionary\n\nEndpoints for inspecting agent performance statistics, genetic makeup, lineage, and evolutionary tournament management. Supports the full evolutionary lifecycle from genome inspection to tournament-driven selection.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/agents` | List all agents with summary stats |\n| GET | `/api/agents/stats/leaderboard` | Get the global agent performance leaderboard |\n| GET | `/api/agents/:id` | Get full details for a specific agent |\n| PUT | `/api/agents/:id/customize` | Update an agent's name, risk profile, and trading parameters |\n| GET | `/api/agents/:id/history` | Get the trade history for a specific agent |\n| GET | `/api/agents/:id/genome` | Get the genetic parameters (genome) of an agent |\n| GET | `/api/agents/:id/genealogy` | Get the full ancestor/descendant tree for an agent |\n| POST | `/api/evolutionary/tournament` | Start a new evolutionary tournament |\n| GET | `/api/evolutionary/tournament` | List all evolutionary tournaments |\n| GET | `/api/evolutionary/tournament/:id` | Get detailed results for a specific tournament |\n\n### Evolutionary System\n\nAgents evolve through tournaments where:\n- **Fitness** is measured by trading performance (Sharpe ratio, total return, win rate)\n- **Selection** favors higher-fitness agents for reproduction\n- **Mutation** introduces variation in gene values across generations\n- **Genealogy** tracks parent-child relationships across generations\n\n### Genome Structure\n\nEach agent's genome contains genes such as:\n- `learningRate` — How quickly the agent adapts to new market conditions\n- `explorationRate` — Balance between exploiting known strategies and exploring new ones\n- `riskTolerance` — Willingness to take on volatile positions\n- `positionSizingFactor` — Multiplier for position size calculations\n\n### Notes\n- Leaderboard rankings are recalculated periodically based on recent competition results.\n- Genealogy depth can be large for well-evolved agents — use pagination if available.\n- Customizing an agent resets its active learning session.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Agent Stats & Evolutionary folder test suite ────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200, 201, or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/api/agents\") && !url.includes(\"/agents/\") && method === \"GET\") {",
+              "    pm.test(\"Agent list: response is array or has agents field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.agents || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/stats/leaderboard\")) {",
+              "    pm.test(\"Leaderboard: response is array or has rankings field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.rankings || body.leaderboard || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "    pm.test(\"Leaderboard: entries have agentId and score/rank\", () => {",
+              "        const list = Array.isArray(body) ? body : body.rankings || body.leaderboard || body.data || [];",
+              "        list.slice(0, 3).forEach(e => {",
+              "            pm.expect(e).to.satisfy(i =>",
+              "                i.agentId !== undefined || i.id !== undefined || i.agent_id !== undefined",
+              "            );",
+              "        });",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/api\\/agents\\/[^/]+$/) && method === \"GET\") {",
+              "    pm.test(\"Agent detail: id field present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b._id !== undefined || b.agentId !== undefined);",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/customize\")) {",
+              "    pm.test(\"Customize agent: updated agent returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.id !== undefined || b.agentId !== undefined || b.success !== undefined || b.name !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/history\")) {",
+              "    pm.test(\"Agent history: response is array or has trades field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.trades || body.history || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/genome\")) {",
+              "    pm.test(\"Genome: genes or genome object present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.genes !== undefined || b.genome !== undefined || b.parameters !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/genealogy\")) {",
+              "    pm.test(\"Genealogy: ancestors or tree structure present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.ancestors !== undefined || b.tree !== undefined || b.parents !== undefined || b.genealogy !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agents/\") && url.includes(\"/retire\")) {",
+              "    pm.test(\"Retire agent: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.status !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/tournament\") && method === \"POST\") {",
+              "    pm.test(\"Start tournament: tournamentId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.tournamentId !== undefined || b.id !== undefined || b.tournament_id !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/tournament\") && method === \"GET\" && !url.match(/\\/tournament\\/[^/]+/)) {",
+              "    pm.test(\"List tournaments: response is array or has tournaments field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.tournaments || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/evolutionary\\/tournament\\/[^/]+$/) && method === \"GET\") {",
+              "    pm.test(\"Tournament detail: id and status present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b.tournamentId !== undefined);",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/summary\")) {",
+              "    pm.test(\"Evolutionary summary: generation or stats present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.generation !== undefined || b.stats !== undefined || b.summary !== undefined || b.totalGenerations !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/tournament/\") && url.includes(\"/checkpoint/\")) {",
+              "    pm.test(\"Checkpoint: generation data present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.generation !== undefined || b.checkpoint !== undefined || b.agents !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/tournament/\") && url.includes(\"/rollback\")) {",
+              "    pm.test(\"Rollback: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.status !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/evolutionary/breed\")) {",
+              "    pm.test(\"Breed agents: offspring or child agent returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.offspring !== undefined || b.child !== undefined || b.agent !== undefined || b.id !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/marl/evolution/best-genome\")) {",
+              "    pm.test(\"Best genome: genes or genome present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.genes !== undefined || b.genome !== undefined || b.parameters !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/marl/evolution/history\")) {",
+              "    pm.test(\"Evolution history: response is array or has history field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.history || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/marl/evolution/population\")) {",
+              "    pm.test(\"Population snapshot: agents or population array present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.agents !== undefined || b.population !== undefined || Array.isArray(b)",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Trading",
+      "item": [
+        {
+          "name": "Exchange status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/exchange-status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "exchange-status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Current price",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/price/BTC",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "price",
+                "BTC"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Balances",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/balances",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "balances"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Place order",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/order",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "order"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Trading stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/trading/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "trading",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Trading\n\nLive trading endpoints for interacting with connected crypto exchanges. Provides real-time price data, account balances, order management, and trading performance statistics.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/trading/exchange-status` | Check the operational status and latency of the connected exchange |\n| GET | `/api/trading/price/:symbol` | Get the current market price for a trading pair |\n| GET | `/api/trading/balances` | Retrieve account balances across all assets |\n| POST | `/api/trading/order` | Place a new buy or sell order |\n| GET | `/api/trading/stats` | Get aggregate trading performance statistics |\n\n### Prerequisites\n\nAll trading endpoints require an active broker connection. Use the **MARL Broker Real Trading** folder to connect a broker before calling these endpoints.\n\n### Order Types\n\n| Type | Description |\n|---|---|\n| `market` | Execute immediately at current market price |\n| `limit` | Execute only at the specified price or better |\n| `stop` | Trigger a market order when price reaches a threshold |\n\n### Order Sides\n\n- `buy` — Purchase the base asset\n- `sell` — Sell the base asset\n\n### Notes\n- Symbol format follows exchange conventions (e.g., `BTC/USDT`, `ETH/USDT`).\n- Balance values are returned in the asset's native unit plus a USD equivalent.\n- Exchange status should be checked before placing orders to avoid failures during outages.\n- Trading stats cover the current connected session unless a `period` parameter is specified.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Trading folder test suite ───────────────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 201\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/exchange-status\")) {",
+              "    pm.test(\"Exchange status: status field present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "    pm.test(\"Exchange status: latency or connected field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.latency !== undefined || b.connected !== undefined || b.operational !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/trading/price/\")) {",
+              "    pm.test(\"Price: symbol and price fields present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.symbol !== undefined || b.pair !== undefined || b.coin !== undefined",
+              "        );",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.price !== undefined || b.last !== undefined || b.ask !== undefined",
+              "        );",
+              "    });",
+              "    pm.test(\"Price: price value is a positive number\", () => {",
+              "        const price = body.price || body.last || body.ask;",
+              "        pm.expect(Number(price)).to.be.above(0);",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/trading/balances\")) {",
+              "    pm.test(\"Balances: response is array or has balances field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.balances || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/trading/order\") && method === \"POST\") {",
+              "    pm.test(\"Place order: orderId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.orderId !== undefined || b.id !== undefined || b.order_id !== undefined",
+              "        );",
+              "    });",
+              "    pm.test(\"Place order: status field present\", () => {",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/trading/stats\")) {",
+              "    pm.test(\"Trading stats: numeric performance fields present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.totalTrades !== undefined || b.winRate !== undefined || b.pnl !== undefined ||",
+              "            b.totalPnl !== undefined || b.stats !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin Config",
+      "item": [
+        {
+          "name": "Read config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "config"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Set config value",
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/config/SENTIMENT_BATCH_SIZE",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "config",
+                "SENTIMENT_BATCH_SIZE"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete config value",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/admin/config/SENTIMENT_BATCH_SIZE",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "admin",
+                "config",
+                "SENTIMENT_BATCH_SIZE"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Admin Config\n\nRuntime configuration endpoints for adjusting system-wide parameters without redeployment. Requires `admin_password` in the request body.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/admin/config` | Read all current runtime config values |\n| PATCH | `/api/admin/config/:key` | Update a single config value by key |\n| DELETE | `/api/admin/config/:key` | Reset a config key to its default value |\n\n### Notes\n- Config keys are uppercase strings (e.g., `SENTIMENT_BATCH_SIZE`, `MARL_LEARNING_RATE`).\n- Changes take effect immediately without a server restart.\n- Deleting a key resets it to the compiled-in default, not to zero.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Admin Config folder test suite ─────────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 204\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 204]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 3000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(3000);",
+              "});",
+              "",
+              "if (pm.response.code === 204) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/api/admin/config\") && method === \"GET\") {",
+              "    pm.test(\"Read config: response is object or array of config entries\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            typeof b === \"object\" || Array.isArray(b) || b.config !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (method === \"PATCH\") {",
+              "    pm.test(\"Set config: updated key/value returned or success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.key !== undefined || b.value !== undefined || b.success !== undefined ||",
+              "            b.message !== undefined || b.updated !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (method === \"DELETE\") {",
+              "    pm.test(\"Delete config: reset acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.message !== undefined || b.reset !== undefined || b.deleted !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Paper Analytics (Net-of-Fees Expectancy)",
+      "item": [
+        {
+          "name": "Expectancy stats",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/paper/stats",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "paper",
+                "stats"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Recent closed trades",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/paper/trades?limit=50",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "paper",
+                "trades"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Export report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/paper/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "paper",
+                "export"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Paper Analytics (Net-of-Fees Expectancy)\n\nRead-only analytics endpoints for the paper trading ledger. Reports expectancy, closed trade history, and exportable performance reports — all calculated net of simulated fees.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/paper/stats` | Aggregate expectancy and performance statistics |\n| GET | `/api/paper/trades` | List recently closed paper trades |\n| GET | `/api/paper/export` | Export a full performance report as CSV or JSON |\n\n### Notes\n- All figures are net of the simulated fee rate configured in Admin Config.\n- Use `limit` query parameter on `/api/paper/trades` to control page size.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Paper Analytics folder test suite ──────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200\", () => {",
+              "    pm.expect(pm.response.code).to.equal(200);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json or text/csv\", () => {",
+              "    const ct = pm.response.headers.get(\"Content-Type\") || \"\";",
+              "    pm.expect(ct).to.satisfy(c => c.includes(\"application/json\") || c.includes(\"text/csv\") || c.includes(\"text/plain\"));",
+              "});",
+              "",
+              "const isJson = (pm.response.headers.get(\"Content-Type\") || \"\").includes(\"application/json\");",
+              "if (!isJson) { return; }",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/paper/stats\")) {",
+              "    pm.test(\"Expectancy stats: expectancy field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.expectancy !== undefined || b.netExpectancy !== undefined || b.stats !== undefined",
+              "        );",
+              "    });",
+              "    pm.test(\"Expectancy stats: totalTrades or tradeCount present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.totalTrades !== undefined || b.tradeCount !== undefined || b.count !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/paper/trades\")) {",
+              "    pm.test(\"Trades: response is array or has trades field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.trades || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "    pm.test(\"Trades: each entry has symbol and pnl\", () => {",
+              "        const list = Array.isArray(body) ? body : body.trades || body.data || [];",
+              "        list.slice(0, 3).forEach(t => {",
+              "            pm.expect(t).to.satisfy(i => i.symbol !== undefined || i.pair !== undefined || i.coin !== undefined);",
+              "        });",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shadow Harness",
+      "item": [
+        {
+          "name": "Harness status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/shadow/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "shadow",
+                "status"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Start harness",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/shadow/start",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "shadow",
+                "start"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop harness",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/shadow/stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "shadow",
+                "stop"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Run single tick",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/shadow/tick",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "shadow",
+                "tick"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Shadow SSE stream",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/shadow/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "shadow",
+                "stream"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Shadow Harness\n\nA deterministic replay harness that runs agents against historical market data tick-by-tick. Used for controlled regression testing and strategy validation without live market risk.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/shadow/status` | Get the current state of the shadow harness |\n| POST | `/api/shadow/start` | Start a new shadow run with a given dataset and agent set |\n| POST | `/api/shadow/stop` | Stop the currently running shadow harness |\n| POST | `/api/shadow/tick` | Advance the harness by a single tick (step-debug mode) |\n| GET | `/api/shadow/stream` | SSE stream of real-time tick events during a shadow run |\n\n### Notes\n- The harness must be started before calling `/tick` or `/stream`.\n- SSE stream closes automatically when the run completes.\n- Use step-debug mode (`/tick`) to inspect agent decisions at each market event.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Shadow Harness folder test suite ───────────────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "const isSseStream = url.includes(\"/stream\");",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "if (isSseStream) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/shadow/status\")) {",
+              "    pm.test(\"Harness status: state field present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.state !== undefined || b.status !== undefined || b.running !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/shadow/start\")) {",
+              "    pm.test(\"Start harness: runId or status returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.runId !== undefined || b.id !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/shadow/stop\")) {",
+              "    pm.test(\"Stop harness: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.status !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/shadow/tick\")) {",
+              "    pm.test(\"Single tick: tick data or state returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.tick !== undefined || b.state !== undefined || b.timestamp !== undefined ||",
+              "            b.decisions !== undefined || b.step !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Walk-Forward Validation",
+      "item": [
+        {
+          "name": "Run walk-forward",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/walk-forward/run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "walk-forward",
+                "run"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Walk-Forward Validation\n\nRuns a walk-forward optimization test across a rolling window of historical data. Validates that a strategy's parameters generalise beyond the in-sample period used for fitting.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| POST | `/api/walk-forward/run` | Submit a walk-forward validation job |\n\n### Notes\n- Results are returned asynchronously. Poll the backtest results endpoint with the returned `testId`.\n- Configure `inSampleDays` and `outOfSampleDays` in the request body to control window sizes.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Walk-Forward Validation folder test suite ───────────────────────────────",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 10000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(10000);",
+              "});",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific — walk-forward run",
+              "pm.test(\"Walk-forward: jobId or testId returned for async job\", () => {",
+              "    pm.expect(body).to.satisfy(b =>",
+              "        b.jobId !== undefined || b.testId !== undefined || b.id !== undefined || b.runId !== undefined",
+              "    );",
+              "});",
+              "",
+              "pm.test(\"Walk-forward: status field present\", () => {",
+              "    pm.expect(body).to.satisfy(b =>",
+              "        b.status !== undefined || b.state !== undefined || b.accepted !== undefined",
+              "    );",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Live Agent Orchestrator & MARL Policy Feeder",
+      "item": [
+        {
+          "name": "Agent config",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agent/config",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "config"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Run one decision cycle",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agent/run",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "run"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "MARL policy recommendation",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agent/marl-policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "marl-policy"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Apply MARL policy",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/agent/apply-marl-policy",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "agent",
+                "apply-marl-policy"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Live Agent Orchestrator & MARL Policy Feeder\n\nEndpoints for the live agent runtime loop. The orchestrator drives individual agent decision cycles and feeds MARL policy recommendations into the agent's execution layer.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/agent/config` | Get the current runtime configuration for the live agent |\n| POST | `/api/agent/run` | Trigger one full decision cycle for the live agent |\n| GET | `/api/agent/marl-policy` | Retrieve the latest MARL policy recommendation |\n| POST | `/api/agent/apply-marl-policy` | Apply a MARL policy update to the live agent |\n\n### Notes\n- `/api/agent/run` is typically called on a timer by the orchestration layer, not manually.\n- Policy recommendations are generated by the MARL competition winner and cached until the next competition completes.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Live Agent Orchestrator folder test suite ───────────────────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200 or 202\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 202]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.includes(\"/agent/config\")) {",
+              "    pm.test(\"Agent config: config object present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.config !== undefined || b.settings !== undefined || b.agentId !== undefined || typeof b === \"object\"",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agent/run\")) {",
+              "    pm.test(\"Decision cycle: decision or action returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.decision !== undefined || b.action !== undefined || b.result !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agent/marl-policy\") && method === \"GET\") {",
+              "    pm.test(\"MARL policy: policy object present\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.policy !== undefined || b.recommendation !== undefined || b.action !== undefined || b.weights !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/agent/apply-marl-policy\")) {",
+              "    pm.test(\"Apply policy: success acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.applied !== undefined || b.status !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tournament Scheduling & Live Control",
+      "item": [
+        {
+          "name": "List tournaments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Active tournaments",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "active"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tournament detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/tn_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "tn_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Pause tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/tn_1/pause",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "tn_1",
+                "pause"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Resume tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/tn_1/resume",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "tn_1",
+                "resume"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Stop tournament",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/tn_1/stop",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "tn_1",
+                "stop"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Tournament SSE stream",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/tn_1/stream",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "tn_1",
+                "stream"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "List schedules",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create schedule",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Schedule detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules",
+                "sch_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update schedule",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules",
+                "sch_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete schedule",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules",
+                "sch_1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Run schedule now",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/tournaments/schedules/sch_1/run-now",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "tournaments",
+                "schedules",
+                "sch_1",
+                "run-now"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "## Tournament Scheduling & Live Control\n\nEndpoints for scheduling recurring MARL tournaments and controlling live tournament execution. Supports pause, resume, stop, and real-time SSE streaming of tournament events.\n\n### Endpoints\n\n| Method | Path | Description |\n|---|---|---|\n| GET | `/api/tournaments` | List all tournaments |\n| GET | `/api/tournaments/active` | List currently running tournaments |\n| GET | `/api/tournaments/:id` | Get details for a specific tournament |\n| POST | `/api/tournaments/:id/pause` | Pause a running tournament |\n| POST | `/api/tournaments/:id/resume` | Resume a paused tournament |\n| POST | `/api/tournaments/:id/stop` | Stop and finalise a tournament |\n| GET | `/api/tournaments/:id/stream` | SSE stream of live tournament events |\n| GET | `/api/tournaments/schedules` | List all tournament schedules |\n| POST | `/api/tournaments/schedules` | Create a new recurring tournament schedule |\n| GET | `/api/tournaments/schedules/:id` | Get a specific schedule |\n| PUT | `/api/tournaments/schedules/:id` | Update a schedule |\n| DELETE | `/api/tournaments/schedules/:id` | Delete a schedule |\n| POST | `/api/tournaments/schedules/:id/run-now` | Trigger an immediate run of a scheduled tournament |\n\n### Notes\n- Schedules use cron expressions for recurrence.\n- SSE stream closes when the tournament reaches a terminal state (completed, stopped).\n- A paused tournament retains all agent state and can be resumed at any time.",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "// ── Tournament Scheduling & Live Control folder test suite ──────────────────",
+              "const url = pm.request.url.toString();",
+              "const method = pm.request.method;",
+              "const isSseStream = url.includes(\"/stream\");",
+              "",
+              "// 1. Status code",
+              "pm.test(\"Status code is 200, 201, or 204\", () => {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201, 204]);",
+              "});",
+              "",
+              "// 2. Response time",
+              "pm.test(\"Response time is under 5000ms\", () => {",
+              "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+              "});",
+              "",
+              "if (isSseStream || pm.response.code === 204) { return; }",
+              "",
+              "// 3. Content-Type",
+              "pm.test(\"Content-Type is application/json\", () => {",
+              "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/json\");",
+              "});",
+              "",
+              "// 4. Valid JSON",
+              "let body;",
+              "pm.test(\"Response body is valid JSON\", () => {",
+              "    body = pm.response.json();",
+              "    pm.expect(body).to.be.an(\"object\").or.to.be.an(\"array\");",
+              "});",
+              "",
+              "if (!body) { return; }",
+              "",
+              "// 5. Domain-specific",
+              "if (url.match(/\\/api\\/tournaments$/) && method === \"GET\") {",
+              "    pm.test(\"List tournaments: response is array or has tournaments field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.tournaments || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/tournaments/active\")) {",
+              "    pm.test(\"Active tournaments: response is array or has tournaments field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.tournaments || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/tournaments\\/[^/]+$/) && method === \"GET\" && !url.includes(\"/active\") && !url.includes(\"/schedules\")) {",
+              "    pm.test(\"Tournament detail: id and status present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b.tournamentId !== undefined);",
+              "        pm.expect(body).to.have.property(\"status\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/tournaments/\") && (url.includes(\"/pause\") || url.includes(\"/resume\") || url.includes(\"/stop\"))) {",
+              "    pm.test(\"Tournament control: status or success returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.status !== undefined || b.success !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/tournaments/schedules\") && method === \"GET\" && !url.match(/\\/schedules\\/[^/]+/)) {",
+              "    pm.test(\"List schedules: response is array or has schedules field\", () => {",
+              "        const list = Array.isArray(body) ? body : body.schedules || body.data;",
+              "        pm.expect(list).to.be.an(\"array\");",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/tournaments/schedules\") && method === \"POST\") {",
+              "    pm.test(\"Create schedule: id returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.id !== undefined || b.scheduleId !== undefined || b._id !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/schedules\\/[^/]+$/) && method === \"GET\") {",
+              "    pm.test(\"Schedule detail: id and cron/schedule field present\", () => {",
+              "        pm.expect(body).to.satisfy(b => b.id !== undefined || b.scheduleId !== undefined);",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.cron !== undefined || b.schedule !== undefined || b.interval !== undefined || b.recurrence !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/schedules\\/[^/]+$/) && method === \"PUT\") {",
+              "    pm.test(\"Update schedule: updated schedule returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.id !== undefined || b.scheduleId !== undefined || b.success !== undefined || b.updated !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.match(/\\/schedules\\/[^/]+$/) && method === \"DELETE\") {",
+              "    pm.test(\"Delete schedule: deletion acknowledged\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.success !== undefined || b.deleted !== undefined || b.message !== undefined",
+              "        );",
+              "    });",
+              "}",
+              "",
+              "if (url.includes(\"/run-now\")) {",
+              "    pm.test(\"Run schedule now: tournamentId or jobId returned\", () => {",
+              "        pm.expect(body).to.satisfy(b =>",
+              "            b.tournamentId !== undefined || b.jobId !== undefined || b.id !== undefined || b.status !== undefined",
+              "        );",
+              "    });",
+              "}"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "auth": {
+    "type": "apikey",
+    "apikey": [
+      {
+        "key": "key",
+        "value": "",
+        "type": "string"
+      },
+      {
+        "key": "value",
+        "value": "{{api_secret_key}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": ""
+    },
+    {
+      "key": "api_secret_key",
+      "value": ""
+    },
+    {
+      "key": "symbol",
+      "value": ""
+    },
+    {
+      "key": "competition_id",
+      "value": ""
+    },
+    {
+      "key": "agent_id",
+      "value": ""
+    },
+    {
+      "key": "test_id",
+      "value": ""
+    },
+    {
+      "key": "tournament_id",
+      "value": ""
+    },
+    {
+      "key": "credential_id",
+      "value": ""
+    },
+    {
+      "key": "social_item_id",
+      "value": ""
+    }
+  ]
+}

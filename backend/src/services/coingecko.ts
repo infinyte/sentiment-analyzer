@@ -9,7 +9,7 @@ interface CoinGeckoMarketCoin {
   market_cap?: number;
   total_volume?: number;
   price_change_percentage_24h?: number;
-  price_change_percentage_7d?: number;
+  price_change_percentage_7d_in_currency?: number;
   high_24h?: number;
   low_24h?: number;
   market_cap_rank?: number;
@@ -23,7 +23,7 @@ export class CoinGeckoService {
   async getTopCoins(limit: number = 50): Promise<Coin[]> {
     try {
       const response = await fetch(
-        `${this.apiUrl}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${limit}&sparkline=false`,
+        `${this.apiUrl}/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=${limit}&sparkline=false&price_change_percentage=24h,7d`,
         { headers: { Accept: 'application/json' } }
       );
 
@@ -47,7 +47,7 @@ export class CoinGeckoService {
           market_cap_usd: coin.market_cap || 0,
           volume_24h_usd: coin.total_volume || 0,
           price_change_24h_percent: coin.price_change_percentage_24h || 0,
-          price_change_7d_percent: coin.price_change_percentage_7d || 0,
+          price_change_7d_percent: coin.price_change_percentage_7d_in_currency ?? 0,
           volatility_24h: volatility24h,
           volatility_7d: 0,
           sentiment_score: 'NEUTRAL' as const,
