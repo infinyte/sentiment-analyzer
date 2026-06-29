@@ -1,15 +1,14 @@
 # API Endpoints Reference
 
-Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer platform, organized by feature area. Each endpoint includes method, path, authentication requirements, rate limiting, and coverage status (mapped to [TASKS.md](TASKS.md) for UI implementation).
+Complete inventory of the ~95 HTTP API endpoints across the sentiment-analyzer platform, organized by feature area. Each endpoint includes method, path, authentication requirements, rate limiting, and coverage status (mapped to [TASKS.md](TASKS.md) for UI implementation).
 
-**Generated**: From backend source code across `index.ts`, `routes/marl-competition.ts`, `routes/evolutionary.ts`, `routes/agent-stats.ts`, `routes/social-media.ts`, `routes/marl-real-trading.ts`, and `routes/trading.ts`.
+**Generated**: From backend source code across `app.ts`, `routes/marl-competition.ts`, `routes/evolutionary.ts`, `routes/agent-stats.ts`, `routes/social-media.ts`, `routes/marl-real-trading.ts`, `routes/trading.ts`, `routes/paper-analytics.ts`, `routes/agent-orchestrator.ts`, `routes/shadow-harness.ts`, `routes/walk-forward.ts`, `routes/tournaments.ts`, `routes/tournament-schedules.ts`, and `routes/admin-config.ts`.
 
-**Total Endpoints**: 64  
+**Total Endpoints**: ~95 (was 64 before the Phase 3–7 live-agent pipeline, tournament scheduling, and admin-config routes were added)  
+**Live Agent Pipeline (Phases 3–7)**: orchestrator, shadow harness, walk-forward, paper analytics, MARL policy feeder — see sections 12–16 below  
 **Phase 1 Coverage**: 6 tasks covering 14 endpoints  
 **Phase 2 Coverage**: 5 tasks covering 11 endpoints  
-**Phase 3 Coverage**: 3 tasks covering 7 endpoints  
-**Already Covered**: 39 endpoints with existing UI  
-**Gaps Remaining**: 3 endpoints (intentionally internal/utility)
+**Phase 3 Coverage**: 3 tasks covering 7 endpoints
 
 ---
 
@@ -26,8 +25,14 @@ Complete inventory of all 64 HTTP API endpoints across the sentiment-analyzer pl
 9. [Trading (Paper/Sandbox/Live)](#trading-papersandboxlive) (5 endpoints)
 10. [Backtesting](#backtesting) (3 endpoints)
 11. [Rankings & Analysis](#rankings--analysis) (1 endpoint)
-12. [Authentication & Rate Limiting](#authentication--rate-limiting)
-13. [Technical Notes](#technical-notes)
+12. [Live Agent Orchestrator & MARL Policy Feeder](#live-agent-orchestrator--marl-policy-feeder) (4 endpoints)
+13. [Shadow Harness](#shadow-harness) (5 endpoints)
+14. [Walk-Forward Validation](#walk-forward-validation) (1 endpoint)
+15. [Paper Analytics (Net-of-Fees Expectancy)](#paper-analytics-net-of-fees-expectancy) (3 endpoints)
+16. [Tournament Scheduling & Live Control](#tournament-scheduling--live-control) (13 endpoints)
+17. [Admin Config](#admin-config) (3 endpoints)
+18. [Authentication & Rate Limiting](#authentication--rate-limiting)
+19. [Technical Notes](#technical-notes)
 
 ---
 
@@ -216,6 +221,89 @@ SELL orders bypass kill switch. Emergency stop (broker endpoint) cancels all ord
 
 ---
 
+## Live Agent Orchestrator & MARL Policy Feeder
+
+Phase 3 single-cycle execution bridge + Phase 7 research feeder. Mounted only when a shared trading exchange is available; the MARL-policy endpoints additionally require the DB and 404 until a tournament has produced an agent. Routes: `routes/agent-orchestrator.ts`.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | GET | `/api/agent/config` | Current live decision-policy params (`minStrength`, `tradeFractionOfCapital`) + exchange mode | None | None |
+| ✅ Covered | POST | `/api/agent/run` | Run one decision cycle. Body `{ symbols?, signals?, dryRun? }` → `OrchestrationReport` | None | None |
+| ✅ Covered | GET | `/api/agent/marl-policy` | Recommended policy params mapped from best evolved genome + provenance | None | None |
+| ✅ Covered | POST | `/api/agent/apply-marl-policy` | Apply MARL-fed params to the live orchestrator | None | None |
+
+---
+
+## Shadow Harness
+
+Phase 4 continuous runner + Phase 6 SSE live feed. Routes: `routes/shadow-harness.ts`. Pair with `SHADOW_MODE=true` for the REALISTIC_PAPER exchange.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | GET | `/api/shadow/status` | Harness state + recent cycle summaries (newest first) | None | None |
+| ✅ Covered | POST | `/api/shadow/start` | Start loop. Body `{ symbols[], intervalMs?, dryRun?, maxHistory? }` | None | None |
+| ✅ Covered | POST | `/api/shadow/stop` | Stop loop | None | None |
+| ✅ Covered | POST | `/api/shadow/tick` | Run a single cycle now. Body `{ symbols?, dryRun? }` → `OrchestrationReport` | None | None |
+| ✅ Covered | GET | `/api/shadow/stream` | SSE feed: initial `status`, then one `cycle` per completed cycle, with heartbeats | None | None |
+
+---
+
+## Walk-Forward Validation
+
+Phase 5 overfitting guard. Pure compute, mounted unconditionally. Route: `routes/walk-forward.ts`.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | POST | `/api/walk-forward/run` | Roll IS/OOS windows. Body `{ bars[] \| prices[], candidates[]?, inSampleSize?, outOfSampleSize?, anchored?, objective? }` → per-fold metrics, aggregate OOS expectancy, walk-forward efficiency | None | None |
+
+---
+
+## Paper Analytics (Net-of-Fees Expectancy)
+
+Shares the trading router's exchange instance, so orders placed via `/api/trading/order` are reflected. Mounted only when a shared trading exchange is available. Routes: `routes/paper-analytics.ts`.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | GET | `/api/paper/stats` | `ExpectancyReport`: win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, unrealized P&L | None | None |
+| ✅ Covered | GET | `/api/paper/trades` | Most recent reconstructed closed trades. Params: `limit` | None | None |
+| ✅ Covered | GET | `/api/paper/export` | Write report + closed trades to a timestamped JSON file under `<cwd>/data` | None | None |
+
+---
+
+## Tournament Scheduling & Live Control
+
+Tournament lifecycle control and cron scheduling. Routes: `routes/tournaments.ts`, `routes/tournament-schedules.ts`. Surfaced in the "Tournaments" tab.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | GET | `/api/tournaments` | List all tournaments | None | None |
+| ✅ Covered | GET | `/api/tournaments/active` | List currently running tournaments | None | None |
+| ✅ Covered | GET | `/api/tournaments/:id` | Single tournament detail | None | None |
+| ✅ Covered | GET | `/api/tournaments/:id/stream` | SSE feed of tournament progress | None | None |
+| ✅ Covered | POST | `/api/tournaments/:id/pause` | Pause a running tournament | None | None |
+| ✅ Covered | POST | `/api/tournaments/:id/resume` | Resume a paused tournament | None | None |
+| ✅ Covered | POST | `/api/tournaments/:id/stop` | Stop a tournament | None | None |
+| ✅ Covered | POST | `/api/tournaments/schedules` | Create a cron-scheduled tournament | None | None |
+| ✅ Covered | GET | `/api/tournaments/schedules` | List schedules | None | None |
+| ✅ Covered | GET | `/api/tournaments/schedules/:id` | Single schedule | None | None |
+| ✅ Covered | PUT | `/api/tournaments/schedules/:id` | Update a schedule | None | None |
+| ✅ Covered | DELETE | `/api/tournaments/schedules/:id` | Delete a schedule | None | None |
+| ✅ Covered | POST | `/api/tournaments/schedules/:id/run-now` | Trigger a scheduled tournament immediately | None | None |
+
+---
+
+## Admin Config
+
+Password-gated runtime `app_config` editor. Mounted only when the DB is healthy. Route: `routes/admin-config.ts`. Surfaced in the "Admin" tab.
+
+| Status | Method | Path | Description | Auth | Rate Limit |
+|--------|--------|------|-------------|------|-----------|
+| ✅ Covered | GET | `/api/admin/config` | Read runtime config values | `CONFIG_ADMIN_PASSWORD` | None |
+| ✅ Covered | PATCH | `/api/admin/config/:key` | Set a runtime config value | `CONFIG_ADMIN_PASSWORD` | None |
+| ✅ Covered | DELETE | `/api/admin/config/:key` | Remove a runtime config value | `CONFIG_ADMIN_PASSWORD` | None |
+
+---
+
 ## Authentication & Rate Limiting
 
 ### Admin Endpoints (Require x-api-key)
@@ -226,6 +314,8 @@ These endpoints require the `x-api-key` header to match the `API_SECRET_KEY` env
 - DELETE `/api/marl/agents/:agentId/learning` — Reset agent learning state
 - All `/api/marl/broker/*` endpoints — Broker credential and order management
 - POST `/api/marl/broker/emergency-stop` — Emergency stop (destructive action)
+
+The `/api/admin/config*` endpoints use a separate gate — the `CONFIG_ADMIN_PASSWORD` environment variable — rather than `API_SECRET_KEY`.
 
 ### Rate Limiting
 
@@ -352,6 +442,6 @@ Use this list when implementing Phase 1-3 tasks to verify all mapped endpoints a
 
 ---
 
-**Last Updated**: [Date when this file was created]  
+**Last Updated**: 2026-06-29  
 **API Version**: v1 (current production)  
-**Total Endpoints Documented**: 64
+**Total Endpoints Documented**: ~95

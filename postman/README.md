@@ -423,10 +423,31 @@ To add new tests:
 - **Postman Docs:** https://learning.postman.com/docs/getting-started/overview/
 - **API Spec:** See `QUICK_START.md` → API Endpoints section
 - **Backend Code:** `backend/src/index.ts`
-- **Environment Setup:** `backend/.env.example`
+- **Environment Setup:** `backend/backend.env.template`
 
 ---
 
 **Last Updated:** 2026-03-17  
 **Version:** 1.0  
 **Test Coverage:** 40+ test cases across 8 functional areas
+
+---
+
+## Complete collection (every endpoint, with example responses)
+
+`sentiment-analyzer-complete.postman_collection.json` covers **every backend endpoint (~95)**, each with an example request **and** a saved example response, organized into 19 folders by feature area (Coins, Sentiment, MARL Competition, Evolutionary Tournaments, Live Agent Orchestrator, Shadow Harness, Walk-Forward, Paper Analytics, Tournament Scheduling, Admin Config, and more).
+
+### Setup
+
+1. Import `sentiment-analyzer-complete.postman_collection.json`.
+2. Import `sentiment-analyzer-complete.postman_environment.json` and select it, or set the collection variables directly.
+3. Configure variables:
+   - `base_url` — API base (default `http://localhost:3000`).
+   - `api_key` — value of `API_SECRET_KEY`, sent as the `x-api-key` header on protected endpoints (refresh, learning reset, broker routes).
+   - `admin_password` — value of `CONFIG_ADMIN_PASSWORD`, sent as `Authorization: Bearer <password>` on `/api/admin/config` endpoints.
+
+### Notes
+
+- Path parameters use illustrative example values (e.g. `comp_123`, `agt_777`, `BTC`, `test_123`); replace them with real ids from your environment.
+- SSE endpoints (`/api/shadow/stream`, `/api/tournaments/:id/stream`, `/api/marl/competition/:id/stream`) return `text/event-stream`; the saved example documents the event shape rather than a single JSON body.
+- Example responses are representative of the documented response shapes; exact values will vary at runtime.
