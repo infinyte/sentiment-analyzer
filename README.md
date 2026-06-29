@@ -1,6 +1,10 @@
 # Sentiment Analyzer
 
-Real-time cryptocurrency sentiment analysis platform. Fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path now includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection. Results are displayed through an interactive React dashboard with Sentiment Lab tools, a global health indicator, backtesting, MARL tournament tooling, social media intelligence, and agent-management views backed by the evolutionary system.
+Real-time cryptocurrency sentiment analysis and autonomous trading-research platform. It fetches live market data from CoinGecko, aggregates news and social signals, and uses Claude AI plus local NLP scoring heuristics to generate Bull/Neutral/Bear sentiment for top coins. The social scoring path includes optional FinBERT inference, sarcasm detection, ABSA-ready context windows, and language detection.
+
+On top of the sentiment layer sits a full trading-research stack: a multi-agent reinforcement-learning (MARL) competition engine, an evolutionary system that breeds and selects trading agents, a safety-guarded exchange layer (Crypto.com, Binance.US, Coinbase, Alpaca, plus zero-risk paper and fee-realistic paper exchanges), and a live agent pipeline. The live pipeline runs evolved/sentiment-driven agents through a single-cycle **orchestrator** (Phase 3), a continuous **shadow harness** (Phase 4) with an SSE live feed (Phase 6), **walk-forward validation** (Phase 5) to guard against overfitting, **net-of-fees expectancy analytics** to measure real edge, and a **MARL policy feeder** (Phase 7) that maps the best evolved genome onto the live decision policy.
+
+Everything is surfaced through an interactive React dashboard with Sentiment Lab tools, a global health indicator, backtesting, MARL tournament tooling, tournament scheduling/control, social media intelligence, a Shadow Live view, and agent-management views backed by the evolutionary system.
 
 ## Quick Start
 
@@ -8,7 +12,7 @@ Real-time cryptocurrency sentiment analysis platform. Fetches live market data f
 # Backend (localhost:3000)
 cd backend
 npm install
-cp .env.example .env   # add your API keys
+cp backend.env.template .env   # add your API keys
 npm run dev
 
 # Frontend (localhost:5173) — separate terminal
@@ -71,9 +75,32 @@ All other app settings can be managed at runtime in the Admin tab and are persis
 | `TOURNAMENT_WORKER_CONCURRENCY` | No | Number of parallel tournament jobs the tournament worker processes at a time (default: `2`) |
 | `SCRAPER_WORKER_CONCURRENCY` | No | Number of parallel scraper jobs the scraper worker processes at a time (default: `1`) |
 
+### Trading & Exchange Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TRADING_MODE` | No | `paper` (default), `realistic_paper`, `sandbox`, or `live`. Selects how `/api/trading/*` and the live agent pipeline settle orders |
+| `SHADOW_MODE` | No | `true` upgrades the default `paper` mode to `realistic_paper` for the shadow harness; ignored for explicit SANDBOX/LIVE |
+| `REALISTIC_PAPER_FEE_PRESET` | No | Fee preset for REALISTIC_PAPER: `binance-us` (default), `crypto-com`, `coinbase`, or `alpaca` |
+| `REALISTIC_PAPER_SLIPPAGE_BUY_PCT` / `REALISTIC_PAPER_SLIPPAGE_SELL_PCT` | No | Per-side slippage fractions (default `0.001` = 0.1% each way) |
+| `TRADING_INITIAL_CAPITAL` | No | Starting USDT balance for the paper/realistic-paper exchange |
+| `TRADING_MAX_LOSS_PERCENT` | No | Kill-switch threshold for `TradingService` |
+| `TRADING_MAX_OPEN_POSITIONS` | No | Max simultaneous open positions guard |
+| `TRADING_MAX_POSITION_PERCENT` | No | Max position size as a % of capital guard |
+| `REQUIRE_MANUAL_APPROVAL` | No | When `true`, orders require manual approval before placement |
+| `CLAUDE_MODEL` | No | Claude model id used by the sentiment and GA-orchestrator calls |
+| `CRYPTO_COM_API_KEY` / `CRYPTO_COM_API_SECRET` | No | Crypto.com credentials (required when `TRADING_PROVIDER=crypto-com` in SANDBOX/LIVE) |
+| `BINANCE_SANDBOX_API_KEY` / `BINANCE_SANDBOX_API_SECRET` / `BINANCE_LIVE_API_KEY` / `BINANCE_LIVE_API_SECRET` | No | Binance.US credentials |
+| `COINBASE_API_KEY` / `COINBASE_API_SECRET` / `COINBASE_TRADING_PAIR` | No | Coinbase Advanced Trade credentials and default product (e.g. `BTC-USD`) |
+| `ALPACA_API_KEY` / `ALPACA_API_SECRET` | No | Alpaca credentials (broker integration + `TRADING_PROVIDER=alpaca`) |
+| `ONCHAIN_API_URL` / `ONCHAIN_API_KEY` | No | On-chain metrics provider |
+| `LUNARCRUSH_API_KEY` | No | LunarCrush social metrics |
+
+> A full annotated list of every variable lives in `backend/backend.env.template` (and `frontend/frontend.env.template` for the dashboard).
+
 ## Architecture
 
-Backend bootstrap lives in `backend/src/index.ts` (routes + cron) with services split into `backend/src/services/`. The frontend is a multi-file React app rooted at `frontend/src/App.tsx` with components, hooks, and types separated under `frontend/src/`.
+The backend entry point `backend/src/index.ts` is intentionally thin: it imports the configured Express app from `backend/src/app.ts` and calls `startRuntime()` from `backend/src/lifecycle.ts` (which owns the HTTP server, cron schedulers, and graceful shutdown). Services are wired through a tsyringe dependency-injection container in `backend/src/container.ts`, and data access goes through a repository layer (`backend/src/repositories/`) with SQLite adapters, so routes and services depend on interfaces rather than concrete stores. Application services live under `backend/src/services/`. The frontend is a multi-file React app rooted at `frontend/src/App.tsx` with components, hooks, and types separated under `frontend/src/`.
 
 ## Frontend Surface
 
@@ -85,7 +112,9 @@ Current top-level tabs:
 - Social Intel
 - Backtesting
 - Trading
+- Shadow Live
 - Admin
+- Tournaments (shows a live active-tournament count badge)
 
 Current user-facing Phase 1 controls:
 
@@ -117,6 +146,13 @@ Express Backend (port 3000)
     ├── CryptoComExchange / BinanceUSExchange → ExchangeInterface adapters; CryptoComClient (HMAC-SHA256 REST v2)
     ├── TradingService             → 4 safety guards: kill switch, max positions, position size cap, $1 min notional
     ├── EvolutionaryOrchestrator   → multi-generation loop: MARL → fitness → selection → crossover → mutation
+    ├── RealisticPaperExchange     → paper trading with provider fee presets + side-specific slippage; charges commission per fill
+    ├── TradingAgentOrchestrator   → Phase 3: signal → decision policy → safety-guarded TradingService → shared exchange (one cycle)
+    ├── ShadowHarness              → Phase 4: interval-drives the orchestrator; Phase 6 SSE live feed at /api/shadow/stream
+    ├── ExpectancyAnalytics        → net-of-fees expectancy from FIFO round-trip reconstruction of order history (/api/paper/*)
+    ├── WalkForwardValidator       → Phase 5: rolling IS/OOS windows; optimize policy on IS, score net-of-fees on OOS
+    ├── MarlPolicyFeeder           → Phase 7: maps best evolved genome onto the live decision policy (PolicyParams)
+    ├── TournamentScheduler        → cron-scheduled tournaments + pause/resume/stop live control with SSE streams
     ├── SocialStore (SQLite)       → social_media_items (+ language, sarcasm_flagged), trending_topics, trending_topic_history, source_metadata
     ├── Cache + SQLite             → 5-min coins TTL, 24-hr sentiment TTL, persisted sentiment/backtests
     │
@@ -195,6 +231,14 @@ Scraper Worker Process (npm run worker:scraper)
 | GET | `/api/marl/broker/credentials/picker` | Unauthenticated — returns `id`, `label`, `provider`, `mode` for UI dropdowns |
 | GET | `/api/marl/broker/orders/:competitionId` | Order audit trail for a competition. Query: `?agentId=` |
 | POST | `/api/marl/broker/emergency-stop` | Cancel all open orders for a competition |
+| GET | `/api/marl/competition/:id/equity-curves` | Per-agent equity curves for a competition |
+| GET | `/api/marl/competition/:id/stream` | Server-Sent Events feed of live competition progress |
+| GET | `/api/marl/competition/:id/trade-log` | Full trade log for a competition |
+| POST | `/api/marl/agents/:agentId/pretrain` | Pre-train an agent on synthetic-market episodes. Body: `{ episodes, stepsPerEpisode, riskProfile, regimes }` |
+| POST | `/api/marl/agents/:agentId/algorithm` | Set/override an agent's learning algorithm |
+| GET | `/api/marl/evolution/best-genome` | Best evolved genome across persisted tournaments |
+| GET | `/api/marl/evolution/history` | Evolutionary tournament history |
+| GET | `/api/marl/evolution/population` | Current evolved population snapshot |
 
 ### Agent Identity & Stats
 
@@ -204,6 +248,7 @@ Scraper Worker Process (npm run worker:scraper)
 | GET | `/api/agents/stats/leaderboard` | Top agents by win rate |
 | GET | `/api/agents/:id` | Single agent with stats |
 | PUT | `/api/agents/:id/customize` | Update agent cosmetics (name, emoji, color, bio) |
+| POST | `/api/agents/:id/retire` | Retire an agent (cull from the active pool) |
 | GET | `/api/agents/:id/history` | Competition history for an agent |
 | GET | `/api/agents/:id/genome` | Agent genome (evolutionary parameters) |
 | GET | `/api/agents/:id/genealogy` | Ancestry chain |
@@ -216,6 +261,9 @@ Scraper Worker Process (npm run worker:scraper)
 | GET | `/api/evolutionary/tournament` | List all tournaments (lightweight) |
 | GET | `/api/evolutionary/tournament/:id` | Full tournament status + generation history |
 | GET | `/api/evolutionary/summary` | Dashboard summary of recent tournaments and latest generation fitness timeline |
+| GET | `/api/evolutionary/tournament/:id/checkpoint/:generation` | Population snapshot + per-agent fitness for one generation |
+| POST | `/api/evolutionary/tournament/:id/rollback` | Roll a tournament back to a prior generation checkpoint |
+| POST | `/api/evolutionary/breed` | Breed two parent agents into a mutated offspring |
 
 ### Trading Service
 
@@ -226,6 +274,65 @@ Scraper Worker Process (npm run worker:scraper)
 | GET | `/api/trading/balances` | All non-zero balances from the exchange |
 | POST | `/api/trading/order` | Place an order through `TradingService` safety guards |
 | GET | `/api/trading/stats` | Capital, PnL, trade counts, and max loss threshold |
+
+### Live Agent Orchestrator & MARL Policy Feeder (Phase 3 / Phase 7)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/agent/config` | Current live decision-policy parameters (`minStrength`, `tradeFractionOfCapital`) and exchange mode |
+| POST | `/api/agent/run` | Run one decision cycle. Body: `{ symbols?, signals?, dryRun? }` -> `OrchestrationReport` (per-symbol decisions + portfolio snapshot) |
+| GET | `/api/agent/marl-policy` | Recommended policy params mapped from the best evolved genome, with provenance (404 until a tournament has produced an agent) |
+| POST | `/api/agent/apply-marl-policy` | Apply the MARL-fed params to the live orchestrator |
+
+### Shadow Harness (Phase 4 / SSE Phase 6)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/shadow/status` | Harness state plus recent cycle summaries (newest first) |
+| POST | `/api/shadow/start` | Start the continuous loop. Body: `{ symbols[], intervalMs?, dryRun?, maxHistory? }` |
+| POST | `/api/shadow/stop` | Stop the loop |
+| POST | `/api/shadow/tick` | Run a single cycle now. Body: `{ symbols?, dryRun? }` -> `OrchestrationReport` |
+| GET | `/api/shadow/stream` | Server-Sent Events feed -- an initial `status` event, then one `cycle` event per completed cycle, with heartbeats |
+
+### Walk-Forward Validation (Phase 5)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/walk-forward/run` | Roll IS/OOS windows over a price/signal series. Body: `{ bars[] \| prices[], candidates[]?, inSampleSize?, outOfSampleSize?, anchored?, objective? }` -> per-fold IS/OOS metrics, aggregate OOS expectancy, and walk-forward efficiency |
+
+### Paper Analytics -- Net-of-Fees Expectancy
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/paper/stats` | `ExpectancyReport`: win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, unrealized P&L |
+| GET | `/api/paper/trades` | Most recent reconstructed closed trades. Params: `limit` |
+| GET | `/api/paper/export` | Write report + closed trades to a timestamped JSON file under `<cwd>/data` |
+
+### Tournament Scheduling & Live Control
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tournaments` | List all tournaments |
+| GET | `/api/tournaments/active` | List currently running tournaments |
+| GET | `/api/tournaments/:id` | Single tournament detail |
+| GET | `/api/tournaments/:id/stream` | Server-Sent Events feed of tournament progress |
+| POST | `/api/tournaments/:id/pause` | Pause a running tournament |
+| POST | `/api/tournaments/:id/resume` | Resume a paused tournament |
+| POST | `/api/tournaments/:id/stop` | Stop a tournament |
+| POST | `/api/tournaments/schedules` | Create a cron-scheduled tournament |
+| GET | `/api/tournaments/schedules` | List schedules |
+| GET | `/api/tournaments/schedules/:id` | Single schedule |
+| PUT | `/api/tournaments/schedules/:id` | Update a schedule |
+| DELETE | `/api/tournaments/schedules/:id` | Delete a schedule |
+| POST | `/api/tournaments/schedules/:id/run-now` | Trigger a scheduled tournament immediately |
+
+### Admin Config (password-gated)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/admin/config` | Read runtime `app_config` values (requires `CONFIG_ADMIN_PASSWORD`) |
+| PATCH | `/api/admin/config/:key` | Set a runtime config value |
+| DELETE | `/api/admin/config/:key` | Remove a runtime config value |
 
 **Tournament Modes:**
 - `SINGLE` — one-shot tournament; all agents compete simultaneously on a shared order book
@@ -369,7 +476,7 @@ curl -s http://localhost:3000/api/info/modes | jq .
 
 ## Tech Stack
 
-**Backend:** Node.js 20, Express, TypeScript (strict), Winston structured logging, node-cron, Helmet, CORS, better-sqlite3, BullMQ + ioredis (optional background worker queues)
+**Backend:** Node.js 20, Express, TypeScript (strict), tsyringe dependency injection, a repository layer over better-sqlite3, Winston structured logging, node-cron, Helmet, CORS, Server-Sent Events for live feeds, BullMQ + ioredis (optional background worker queues), `@modelcontextprotocol/sdk` (GA MCP servers)
 
 **Frontend:** React 18, TypeScript, Vite, Chart.js / react-chartjs-2
 
@@ -383,17 +490,36 @@ curl -s http://localhost:3000/api/info/modes | jq .
 sentiment-analyzer/
 ├── backend/
 │   ├── src/
-│   │   ├── index.ts                          # Routes, cron jobs, server setup
+│   │   ├── index.ts                          # Thin entry point — imports app, calls startRuntime()
+│   │   ├── app.ts                            # Express app, core routes, route registration
+│   │   ├── container.ts                      # tsyringe DI container — wires all services
+│   │   ├── lifecycle.ts                      # HTTP server, cron schedulers, graceful shutdown
+│   │   ├── logger.ts                         # Winston logger setup
 │   │   ├── types.ts                          # Shared Coin / Sentiment interfaces
-│   │   ├── storage.ts                        # SQLite persistence layer
+│   │   ├── storage.ts                        # SQLite persistence layer (StorageService singleton)
+│   │   ├── repositories/                     # Repository layer (interfaces + SQLite adapters)
+│   │   │   ├── factory.ts                     # createRepositories({ driver, db })
+│   │   │   ├── interfaces/                    # agent / backtest / broker / sentiment / social / tournament
+│   │   │   └── adapters/sqlite/               # SQLite-backed repository implementations
 │   │   ├── database/
-│   │   │   └── sqlite-social-store.ts        # Social media SQLite store (4 tables)
+│   │   │   ├── sqlite-social-store.ts        # Social media SQLite store (4 tables)
+│   │   │   └── migrations/                   # e.g. 003-agent-identity.ts
+│   │   ├── mcp/
+│   │   │   ├── mcp-genetic-ops.ts            # GA operations MCP server (stdio)
+│   │   │   └── mcp-agent-manager.ts          # Agent pool management MCP server (stdio)
 │   │   ├── routes/
 │   │   │   ├── marl-competition.ts           # MARL competition API routes (Phase 2)
 │   │   │   ├── marl-real-trading.ts          # Broker credentials + emergency stop
 │   │   │   ├── agent-stats.ts                # Agent identity, leaderboard, cosmetics
 │   │   │   ├── evolutionary.ts               # Evolutionary tournament routes
 │   │   │   ├── trading.ts                    # TradingService REST wrapper
+│   │   │   ├── paper-analytics.ts            # Net-of-fees expectancy (/api/paper/*)
+│   │   │   ├── agent-orchestrator.ts         # Live orchestrator + MARL policy feeder (Phase 3/7)
+│   │   │   ├── shadow-harness.ts             # Shadow harness control + SSE stream (Phase 4/6)
+│   │   │   ├── walk-forward.ts               # Walk-forward validation (Phase 5)
+│   │   │   ├── tournaments.ts                # Tournament list + live pause/resume/stop + SSE
+│   │   │   ├── tournament-schedules.ts       # Cron-scheduled tournament CRUD + run-now
+│   │   │   ├── admin-config.ts               # Password-gated runtime app_config editor
 │   │   │   └── social-media.ts               # Phase 3 social media API routes
 │   │   ├── queues/
 │   │   │   ├── connection.ts                 # IORedis connection options + isQueueAvailable()
@@ -418,23 +544,45 @@ sentiment-analyzer/
 │   │       ├── marl-competition-engine.ts    # Multi-agent competition engine (Phase 2)
 │   │       ├── exchange/                     # Exchange adapter framework
 │   │       │   ├── exchange-interface.ts      # Shared Order/Balance/PlaceOrderParams types
-│   │       │   ├── exchange-factory.ts        # Routes PAPER→PaperExchange, SANDBOX/LIVE→provider
-│   │       │   ├── paper-exchange.ts          # In-memory paper trading (no real orders)
+│   │       │   ├── exchange-factory.ts        # Routes PAPER→PaperExchange, REALISTIC_PAPER→RealisticPaperExchange, SANDBOX/LIVE→provider
+│   │       │   ├── paper-exchange.ts          # In-memory paper trading, zero fees/slippage (no real orders)
+│   │       │   ├── realistic-paper-exchange.ts # Paper trading WITH fee presets + side-specific slippage + per-fill commission
 │   │       │   ├── crypto-com-client.ts       # Crypto.com REST v2 client (HMAC-SHA256)
 │   │       │   ├── crypto-com-exchange.ts     # ExchangeInterface adapter for Crypto.com
 │   │       │   ├── binance-us-exchange.ts     # ExchangeInterface adapter for Binance.US
+│   │       │   ├── coinbase-client.ts         # Coinbase Advanced Trade API v3 client
+│   │       │   ├── coinbase-exchange.ts       # ExchangeInterface adapter for Coinbase
+│   │       │   ├── alpaca-client.ts           # Alpaca REST client
+│   │       │   ├── alpaca-exchange.ts         # ExchangeInterface adapter for Alpaca
 │   │       │   ├── trading-service.ts         # 4-guard safety layer over ExchangeInterface
 │   │       │   ├── exchange-adapter.ts        # Abstract base + AccountMode types (MARL)
 │   │       │   ├── exchange-registry.ts       # Process-lifetime adapter singleton
 │   │       │   ├── risk-manager.ts            # Kill switch + daily-loss + order size guard
 │   │       │   └── adapters/                  # coinbase-adapter.ts, binance-adapter.ts
+│   │       ├── agent/                         # Live agent pipeline
+│   │       │   ├── trading-orchestrator.ts    # Phase 3: signal → policy → safety-guarded TradingService → shared exchange
+│   │       │   ├── shadow-harness.ts          # Phase 4: interval-drives the orchestrator + Phase 6 SSE feed
+│   │       │   └── marl-policy-feeder.ts      # Phase 7: maps best evolved genome onto live PolicyParams
+│   │       ├── analytics/
+│   │       │   ├── expectancy.ts              # Net-of-fees expectancy (FIFO round-trip reconstruction)
+│   │       │   └── walk-forward.ts            # Phase 5: rolling IS/OOS walk-forward validation
+│   │       ├── pre-trainer.ts                 # Bootstraps agent learning on synthetic episodes
+│   │       ├── synthetic-market-generator.ts  # 5-regime synthetic OHLCV series for pre-training
+│   │       ├── tournament-scheduler.ts        # Cron-scheduled tournament runner
+│   │       ├── tournament-service.ts          # Tournament lifecycle + live control
 │   │       ├── evolutionary/                 # Genetic algorithm pipeline
 │   │       │   ├── evolutionary-orchestrator.ts  # Multi-generation tournament loop
 │   │       │   ├── fitness-calculator.ts         # 0–100 composite fitness
 │   │       │   ├── selection-algorithm.ts        # Survival partitioning
 │   │       │   ├── genetic-crossover.ts          # UNIFORM / BLENDED crossover
 │   │       │   ├── mutation-engine.ts            # LIGHT / MEDIUM / HEAVY mutation
-│   │       │   ├── genome-manager.ts             # SQLite-backed genome CRUD
+│   │       │   ├── agent-genome.ts               # Genome model + SQLite-backed GenomeManager
+│   │       │   ├── architecture-params.ts        # Model-architecture gene definitions
+│   │       │   ├── claude-ga-orchestrator.ts     # Claude-driven per-generation directives (with heuristic fallback)
+│   │       │   ├── adversarial-trainer.ts        # Adversary agents that stress-test sentiment agents
+│   │       │   ├── ga-event-bus.ts               # GA lifecycle event bus
+│   │       │   ├── ga-directive-types.ts         # GenerationDirective types
+│   │       │   ├── generation-result-store.ts    # Per-generation checkpoint persistence
 │   │       │   ├── agent-cosmetics-manager.ts    # Name / emoji / color / bio
 │   │       │   └── agent-statistics-manager.ts  # Win-rate, PnL, history
 │   │       ├── risk/
@@ -452,18 +600,21 @@ sentiment-analyzer/
 │   │   ├── main.tsx              # React entry point
 │   │   ├── components/
 │   │   │   ├── AgentManagementDashboard.tsx # Agent registry, breeding controls, lineage + generation trends
+│   │   │   ├── AgentAvatar.tsx              # Deterministic cartoon agent avatar (original art)
 │   │   │   ├── MarlCompetitionViewer.tsx   # MARL tournament UI
-│   │   │   └── SocialDashboard.tsx         # Social Intel tab
+│   │   │   ├── SocialDashboard.tsx         # Social Intel tab
+│   │   │   ├── ShadowHarnessDashboard.tsx  # "Shadow Live" tab — controls + SSE cycle feed + expectancy
+│   │   │   ├── TournamentMonitor.tsx       # Tournaments tab — live table + pause/resume/stop
+│   │   │   └── ConfigEditor.tsx            # Admin tab — runtime app_config editor
 │   │   ├── hooks/
 │   │   │   ├── useMarlCompetition.ts       # MARL polling + state
-│   │   │   └── useSocialMedia.ts           # Social media hooks
-│   │   └── types/                          # marl.ts, social-media.ts
+│   │   │   ├── useSocialMedia.ts           # Social media hooks
+│   │   │   └── useTournamentScheduler.ts   # Tournament schedule state
+│   │   └── types/                          # marl.ts, social-media.ts, tournament.ts, tournament-schedule.ts
 │   ├── vite.config.ts        # Proxies /api to localhost:3000
 │   └── package.json
 ├── docs/
 │   ├── MARL/                 # MARL architecture, game theory, integration docs
-│   ├── phase1/               # Phase 1 architecture & integration docs
-│   ├── phase2/               # Phase 2 sentiment enhancement planning docs
 │   ├── DEPLOYMENT_GUIDE.md   # Deployment reference
 │   ├── TESTING_STRATEGY.md   # Testing strategy and backlog
 │   ├── API_ENDPOINTS.md      # Complete API endpoint inventory
@@ -557,3 +708,37 @@ A full social media intelligence layer sits alongside the existing sentiment pip
 - **Frontend Social Intel tab** — `SocialDashboard` component with trending topics ranked table (rank, direction badge, score bar, velocity), clickable per-symbol trend score panel (composite/sentiment/engagement signals, BULL/NEUTRAL/BEAR distribution, acceleration indicator), social items feed with coin/source/sort filters, and source health table showing per-platform item counts and error rates
 
 For Phase 3 API endpoints see the [Phase 3 — Social Media Intelligence](#phase-3--social-media-intelligence) table above.
+
+---
+
+## Phase 4–7: Live Agent Pipeline — Complete ✅
+
+A live agent pipeline turns the research stack (sentiment + MARL + evolution) into a measurable, overfitting-guarded track record without risking real capital. Each phase is intentionally small, in-memory, and free of new schema or dependencies.
+
+### Phase 3 — Trading Agent Orchestrator
+
+`TradingAgentOrchestrator` (`backend/src/services/agent/trading-orchestrator.ts`) is the bridge between *signals* and *execution*. The older `trading-agent.ts` settles against its own in-memory cash book and never reaches a real `ExchangeInterface`; the orchestrator closes that gap. For each symbol it takes a directional `AgentSignal` (direction + 0–1 strength), applies a transparent, asymmetric policy — a BUY needs `strength ≥ minStrength` (default 0.3) and no existing position; a SELL closes the full position regardless of strength; it never shorts — and routes the resulting order through the safety-guarded `TradingService` onto the **shared** (realistic) paper exchange. Because it shares that exchange, the net-of-fees expectancy analytics measure its own trades. Signal sources are pluggable: `StaticSignalSource` (explicit signals / HOLD-everything default) and `SentimentSignalSource` (cached sentiment → BUY/SELL/HOLD). It is stateless — exchange balances are the only source of truth.
+
+### Phase 4 — Continuous Shadow Harness
+
+`ShadowHarness` (`backend/src/services/agent/shadow-harness.ts`) drives the orchestrator on a fixed `setInterval` so a track record builds up over time with no human in the loop. It is process-lifetime, in-memory only (a bounded ring buffer of cycle summaries): the timer is `unref()`d so it never keeps the process alive; an overlap guard skips a tick if the previous cycle is still running; per-cycle errors are recorded and the loop continues. Pair it with `SHADOW_MODE=true` so the shared exchange runs as `RealisticPaperExchange` and the measured edge is net of fees and slippage.
+
+### Phase 5 — Walk-Forward Validation
+
+`walk-forward.ts` (`backend/src/services/analytics/walk-forward.ts`) guards the decision policy against overfitting. It rolls sequential in-sample (IS) and out-of-sample (OOS) windows: optimize `PolicyParams` (`minStrength`, `tradeFractionOfCapital`) on the IS window, then score them on the immediately following OOS window the optimizer never saw, then roll forward and repeat. What makes it honest is that it replays the **same** policy the live agent uses (`resolvePolicyAction`) and scores with the **same** net-of-fees expectancy (`expectancy.ts`) and realistic fill math. It reports per-fold IS/OOS metrics, an aggregate OOS expectancy report, and **walk-forward efficiency** = mean(OOS objective) / mean(IS objective). Supports rolling and `anchored` (growing IS) folds and `netPnl` / `expectancy` / `profitFactor` / `sharpe` objectives.
+
+### Phase 6 — SSE Live UI
+
+`GET /api/shadow/stream` is a Server-Sent Events feed (`harness.onCycle(...)` → `streamShadowEvents`): an initial `status` event, then one `cycle` event per completed cycle, with heartbeats and disconnect cleanup. The frontend **Shadow Live** tab (`ShadowHarnessDashboard.tsx`) consumes it via `EventSource`, with start/stop/tick controls and the net-of-fees expectancy snapshot from `/api/paper/stats`. SSE (not WebSockets) is used per the project's infrastructure constraint.
+
+### Phase 7 — MARL Research Feeder
+
+`MarlPolicyFeeder` (`backend/src/services/agent/marl-policy-feeder.ts`) closes the loop from evolution back to the live agent. It reads the best evolved agent (via an injected provider — the app wires the agents-repo leaderboard `getTopAgents(1)` + `loadGenome`) and maps its genome onto live `PolicyParams`: `entryThreshold` → `minStrength`, `positionSizePct` → `tradeFractionOfCapital` (clamped to safety rails). So evolution does the research and its winner tunes production, and Phase 5 walk-forward can validate the fed parameters before they are trusted. `GET /api/agent/marl-policy` returns the recommended params with provenance; `POST /api/agent/apply-marl-policy` applies them to the live orchestrator. Both 404 gracefully until a tournament has produced an agent.
+
+### Net-of-Fees Expectancy Analytics
+
+`expectancy.ts` (`backend/src/services/analytics/expectancy.ts`) is a stateless service that turns the flat stream of exchange fills into per-closed-trade metrics by FIFO-matching SELL fills against prior BUY fills per symbol, pro-rating each fill's commission. It surfaces win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, and unrealized P&L at `/api/paper/*`. It is most meaningful in REALISTIC_PAPER / shadow mode where commissions are non-zero; in plain PAPER mode net equals gross.
+
+### GA MCP Servers
+
+Two standalone stdio MCP servers expose the evolutionary GA operations to Claude Code and other MCP clients: `mcp-genetic-ops` (`mutate_agent`, `crossover_agents`, `evaluate_fitness`, `select_population`, `get_generation_summary`) and `mcp-agent-manager` (`register_agent`, `get_agent_health`, `assign_task`, `collect_results`, `get_pool_status`). See [`docs/GA_MCP_USAGE_EXAMPLES.md`](./docs/GA_MCP_USAGE_EXAMPLES.md) for a worked one-generation cycle, and [`CLAUDE.md`](./CLAUDE.md) for the full tool schemas.

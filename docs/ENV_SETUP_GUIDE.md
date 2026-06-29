@@ -89,7 +89,11 @@ The backend now supports DB-backed runtime configuration via the `app_config` ta
 
 | Variable | Required | Default | Example | Description |
 |---|---|---|---|---|
-| `TRADING_MODE` | No | `paper` | `sandbox` | `paper` — fully simulated, no API calls. `sandbox` — real exchange API with test funds. `live` — real money. ⚠️ Start with `paper`. |
+| `TRADING_MODE` | No | `paper` | `realistic_paper` | `paper` — fully simulated, zero fees/slippage. `realistic_paper` — simulated WITH provider fee presets + slippage (per-fill commission). `sandbox` — real exchange API with test funds. `live` — real money. ⚠️ Start with `paper`. |
+| `SHADOW_MODE` | No | unset | `true` | When `true`, upgrades the default `paper` mode to `realistic_paper` for the shadow harness so its track record is measured net of fees/slippage. Ignored for explicit `sandbox`/`live`. |
+| `REALISTIC_PAPER_FEE_PRESET` | No | `binance-us` | `crypto-com` | Fee preset used by `realistic_paper`: `binance-us` (default), `crypto-com`, `coinbase`, or `alpaca`. |
+| `REALISTIC_PAPER_SLIPPAGE_BUY_PCT` | No | `0.001` | `0.0015` | Per-side BUY slippage fraction (0.001 = 0.1%) applied by the realistic paper exchange. |
+| `REALISTIC_PAPER_SLIPPAGE_SELL_PCT` | No | `0.001` | `0.0015` | Per-side SELL slippage fraction (0.001 = 0.1%) applied by the realistic paper exchange. |
 | `TRADING_PROVIDER` | No | `crypto-com` | `alpaca` | Which exchange to use for `sandbox`/`live` modes. `crypto-com` (default), `binance-us`, `coinbase`, or `alpaca`. Ignored when `TRADING_MODE=paper`. |
 
 ---

@@ -6,9 +6,26 @@ This roadmap outlines the planned development path for Sentiment Analyzer. Timel
 
 ## 📊 Current Status
 
-**Phase:** Phase 3 Complete + Phase 5 Exchange Layer (foundation complete) / Phase 4 Planned
+**Status:** Sentiment + MARL + Evolution complete; the **Live Agent Pipeline (engineering Phases 3–7)** has since shipped — single-cycle orchestrator, continuous shadow harness, walk-forward validation, SSE live UI, net-of-fees expectancy analytics, and a MARL policy feeder. Exchange layer covers Crypto.com, Binance.US, Coinbase, and Alpaca plus paper and fee-realistic paper exchanges.
 **Latest Release:** v3.1.0
-**Last Updated:** March 2026
+**Last Updated:** June 2026
+
+> ⚠️ **Two numbering schemes.** The product-roadmap phases below (Phase 4 Enhanced Analytics, Phase 5 Exchange Integration, etc.) are aspirational product tracks and are **not** the same as the engineering "Phase 3–7" labels used in the codebase and README for the live-agent pipeline. The engineering pipeline is summarized in the milestone section immediately below; the product tracks follow it.
+
+---
+
+## ✅ Latest Milestone: Live Agent Pipeline (engineering Phases 3–7) — Complete
+
+Turns the research stack (sentiment + MARL + evolution) into a measurable, overfitting-guarded paper track record. See the README "Phase 4–7: Live Agent Pipeline" section and `CLAUDE.md` for full detail.
+
+- [x] **Phase 3 — Trading Agent Orchestrator** (`services/agent/trading-orchestrator.ts`): single decision cycle, transparent asymmetric policy, routes through safety-guarded `TradingService` onto the shared exchange; pluggable Static/Sentiment signal sources
+- [x] **Phase 4 — Shadow Harness** (`services/agent/shadow-harness.ts`): interval-driven continuous runner, overlap-guarded, in-memory cycle history; pair with `SHADOW_MODE=true`
+- [x] **Phase 5 — Walk-Forward Validation** (`services/analytics/walk-forward.ts`): rolling IS/OOS windows, same policy + net-of-fees scoring as production, reports walk-forward efficiency
+- [x] **Phase 6 — SSE Live UI**: `GET /api/shadow/stream` consumed by the `ShadowHarnessDashboard` "Shadow Live" tab
+- [x] **Phase 7 — MARL Policy Feeder** (`services/agent/marl-policy-feeder.ts`): maps the best evolved genome onto live `PolicyParams`
+- [x] **Net-of-fees expectancy analytics** (`services/analytics/expectancy.ts`, `/api/paper/*`) and the **RealisticPaperExchange** with provider fee presets + slippage
+- [x] **Tournament scheduling & live control** (`/api/tournaments/*` + schedules) with SSE streams
+- [x] **DI container (tsyringe) + repository layer** refactor; two **GA MCP servers** (genetic-ops, agent-manager)
 
 ---
 
@@ -47,7 +64,7 @@ Core sentiment analysis platform with advanced trading intelligence.
 **Documentation:**
 - [x] Architecture documentation (`SENTIMENT_ANALYZER_ARCHITECTURE.md`)
 - [x] API endpoint specifications + cURL examples
-- [x] Phase 1 detailed docs in `docs/phase1/`
+- [x] Phase 1 detailed design docs (archived, then removed after completion)
 - [x] Azure deployment guide
 - [x] Contributing and testing guidelines
 
@@ -123,7 +140,7 @@ Competitive multi-agent trading where AI agents compete for trading opportunitie
 - [x] Equity evolution chart (multi-agent Chart.js line chart)
 - [x] Agent head-to-head comparison form and results
 
-See [`docs/phase2/`](./docs/phase2/) for full specification and game theory analysis.
+See [`docs/MARL/`](./MARL/) for the full MARL specification and game theory analysis.
 
 ---
 
@@ -606,5 +623,5 @@ May require:
 **Questions about the roadmap?**
 Open an issue or join the discussion forum!
 
-**Last Updated:** March 2026
-**Next Review:** June 2026
+**Last Updated:** June 2026
+**Next Review:** September 2026

@@ -7,7 +7,6 @@ const authoritativeDocs = [
   'README.md',
   'CLAUDE.md',
   'docs/DEPLOYMENT_GUIDE.md',
-  'docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md',
   'docs/TESTING_STRATEGY.md',
   'postman/README.md',
   'docs/MARL/MARL_INTEGRATION_GUIDE.md',
@@ -94,10 +93,6 @@ function validateLiveDocs() {
   assertIncludes('README.md', '/api/trending');
 
   assertNotIncludes('README.md', 'trending_score (headline count)');
-  assertIncludes(
-    'docs/phase1/SENTIMENT_ANALYZER_ARCHITECTURE.md',
-    'Sets `trending_score` from weighted frequency, recency, and source diversity rather than raw headline count'
-  );
 
   assertIncludes('docs/TESTING_STRATEGY.md', 'Frontend Vitest + React Testing Library are configured');
   assertIncludes('docs/TESTING_STRATEGY.md', 'frontend/src/__tests__/App.test.tsx');

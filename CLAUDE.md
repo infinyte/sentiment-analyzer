@@ -49,9 +49,11 @@ node scripts/validate-docs.mjs   # Validate doc consistency (required by CI)
 
 ### Request Flow
 1. Vite dev proxy `/api/*` → `http://localhost:3000`
-2. `backend/src/index.ts` — Express bootstrap, service init, route registration
-3. Routes registered with `app.use(router)` — no prefix at registration, full path lives in the router
-4. DB-dependent routes use the pattern: `if (storage.isHealthy()) { app.use(createXRouter(storage.getDb())); }`
+2. `backend/src/index.ts` — thin entry point: imports the configured app from `app.ts` and calls `startRuntime()` from `lifecycle.ts`
+3. `backend/src/app.ts` — builds the Express app, core routes, and route registration; services are wired via the tsyringe DI container in `backend/src/container.ts`
+4. `backend/src/lifecycle.ts` — owns the HTTP server, cron schedulers, and graceful shutdown
+5. Routes registered with `app.use(router)` — no prefix at registration, full path lives in the router
+6. DB-dependent routes use the pattern: `if (storage.isHealthy()) { app.use(createXRouter(storage.getDb())); }`
 
 ### Database
 - Single SQLite file (`sentiment_analyzer.db`) managed by `StorageService` singleton in `backend/src/storage.ts`
@@ -315,11 +317,4 @@ Current high-value frontend coverage includes:
 - `TOURNAMENT_WORKER_CONCURRENCY` — concurrent tournament jobs in the worker process (default: `2`)
 - `SCRAPER_WORKER_CONCURRENCY` — concurrent scraper jobs in the worker process (default: `1`)
 
-## CI Pipeline
-GitHub Actions (`.github/workflows/ci.yml`) runs on push/PR to main:
-1. **Docs** — `node scripts/validate-docs.mjs`
-2. **Backend** — lint → type-check → test → build
-3. **Frontend** — lint → type-check → build
-
-Always run `npm run type-check` in `backend/` before committing backend changes.
-
+## CI P

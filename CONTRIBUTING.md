@@ -45,7 +45,7 @@ Use descriptive names:
 # Backend
 cd backend
 npm install
-cp .env.example .env
+cp backend.env.template .env
 # Edit .env with your API keys
 
 # Frontend
