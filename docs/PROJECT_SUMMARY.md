@@ -1,7 +1,7 @@
 SENTIMENT ANALYZER
 CURRENT PROJECT SUMMARY AND REMAINING WORK
 
-Date: March 23, 2026 (updated)
+Date: June 29, 2026 (updated)
 Repository: infinyte/sentiment-analyzer
 Branch: main
 
@@ -17,15 +17,19 @@ Implemented areas:
 - Advanced sentiment analysis modes and backtesting
 - Social-media ingestion, scoring, trending, and hourly refresh flows
 - MARL competition engine and tournament APIs
-- Real trading service with Crypto.com and Binance.US adapters
-- Evolutionary backend primitives and tournament orchestration
+- Real trading service with Crypto.com, Binance.US, Coinbase, and Alpaca adapters, plus zero-risk paper and fee-realistic paper exchanges
+- Evolutionary backend primitives, tournament orchestration, Claude-driven generation directives, and adversarial training
 - Agent identity, cosmetics, statistics, history, genome, and genealogy APIs
-- Frontend parity controls delivered for Phase 1: Sentiment Lab, sentiment refresh, health indicator, Backtesting tab, MARL info/equity reload, and social refresh/detail drill-in
+- Live agent pipeline (Phases 3–7): single-cycle trading orchestrator, continuous shadow harness with an SSE live feed, walk-forward validation, net-of-fees expectancy analytics, and a MARL policy feeder that maps the best evolved genome onto the live policy
+- Tournament scheduling and live pause/resume/stop control with SSE streams
+- DI container (tsyringe) + repository layer refactor of the backend bootstrap
+- Two GA MCP servers (genetic-ops, agent-manager) exposing evolutionary operations to MCP clients
+- Frontend surface across Dashboard/Sentiment Lab, Agents, MARL Competition, Social Intel, Backtesting, Trading, Shadow Live, Admin, and Tournaments tabs
 
 Primary remaining work:
-- Richer evolutionary frontend visualizations
-- Focused evolutionary documentation cleanup
-- General docs alignment so summary, README, and contributor docs describe the same current system
+- Deeper evolutionary analytics dashboards (population movement, fitness distribution)
+- Hardening the live pipeline toward real-capital readiness (the shadow/expectancy/walk-forward loop currently runs on paper)
+- Ongoing docs alignment so summary, README, and contributor docs describe the same current system
 
 ---
 
@@ -39,7 +43,7 @@ IMPLEMENTED CAPABILITIES
 Key backend files:
 - backend/src/services/sentiment-analyzer.ts
 - backend/src/services/backtesting-engine.ts
-- backend/src/index.ts
+- backend/src/app.ts (Express app + core routes; bootstrapped by index.ts → lifecycle.ts)
 
 2. Social-media intelligence
 - Multi-source scraping and ingestion
@@ -130,6 +134,27 @@ Key frontend files:
 - frontend/src/__tests__/SocialDashboard.test.tsx
 - frontend/src/__tests__/AgentManagementDashboard.test.tsx
 
+8. Live agent pipeline (Phases 3–7)
+- Phase 3: TradingAgentOrchestrator runs a single decision cycle (signal → transparent policy → safety-guarded TradingService → shared exchange); pluggable Static/Sentiment signal sources
+- Phase 4: ShadowHarness drives the orchestrator on a fixed interval (overlap-guarded, in-memory ring buffer) so a track record accrues with no human in the loop
+- Phase 5: walk-forward validation rolls IS/OOS windows, optimizing the policy on IS and scoring it net-of-fees on the unseen OOS window; reports walk-forward efficiency
+- Phase 6: SSE live feed (/api/shadow/stream) consumed by the Shadow Live tab
+- Phase 7: MarlPolicyFeeder maps the best evolved genome onto live PolicyParams (entryThreshold→minStrength, positionSizePct→tradeFraction)
+- Net-of-fees expectancy analytics (/api/paper/*) measure win rate, expectancy, profit factor, Sharpe/Sortino, drawdown, and fee drag from FIFO round-trip reconstruction
+
+Key backend files:
+- backend/src/services/agent/trading-orchestrator.ts
+- backend/src/services/agent/shadow-harness.ts
+- backend/src/services/agent/marl-policy-feeder.ts
+- backend/src/services/analytics/walk-forward.ts
+- backend/src/services/analytics/expectancy.ts
+- backend/src/services/exchange/realistic-paper-exchange.ts
+- backend/src/routes/agent-orchestrator.ts
+- backend/src/routes/shadow-harness.ts
+- backend/src/routes/walk-forward.ts
+- backend/src/routes/paper-analytics.ts
+- frontend/src/components/ShadowHarnessDashboard.tsx
+
 ---
 
 WHAT WAS PREVIOUSLY STALE
@@ -145,9 +170,9 @@ The earlier summary was no longer accurate in these areas:
 WHAT REMAINS GENUINELY UNFINISHED
 
 1. Evolutionary frontend visualizations
-- The frontend can fetch and display genealogy data, but it does not yet provide a proper genealogy tree visualization.
-- There is no dedicated evolution dashboard for generation-over-generation trends, population movement, or fitness distribution.
-- Competition-history and genome data are visible, but not yet turned into analytical visualizations.
+- Lineage is now navigable (interactive parent-agent exploration) and first-pass generation/tournament fitness trends are rendered, but there is still no full free-form genealogy tree explorer.
+- There is no dedicated standalone evolution workspace for generation-over-generation population movement or fitness-distribution analysis.
+- Competition-history and genome data are visible, but deeper analytical visualizations remain a gap.
 
 2. Focused evolutionary documentation
 - The backend and APIs are ahead of the docs.
@@ -167,59 +192,4 @@ Priority 1: Correct the docs
 - [x] Replace the stale project summary with a current-state document
 - [x] Update README.md to reflect the current frontend surface area and Phase 1 parity work clearly
 - [x] Update CLAUDE.md so contributor guidance matches current architecture and frontend capabilities
-- [ ] Add or expand a dedicated evolution-focused doc describing tournament lifecycle, stats tables, and UI/backend responsibilities
-
-Priority 2: Finish the evolutionary UI layer
-- [ ] Build a genealogy tree view for agent lineage
-- [ ] Add generation trend visualizations for win rate, PnL, and survival over time
-- [ ] Add a population or tournament dashboard for generation summaries and fitness distribution
-- [ ] Expose tournament history in the frontend in a form suitable for debugging and operator review
-
-Priority 3: Close the loop with tests
-- [ ] Add frontend tests for the new evolutionary visualizations once implemented
-- [ ] Add backend API coverage if new evolution-summary endpoints or richer tournament views are introduced
-
----
-
-RECOMMENDED EXECUTION ORDER
-
-1. Update README.md and CLAUDE.md
-2. Add a dedicated evolution overview doc
-3. Implement genealogy tree UI
-4. Implement generation trend and population summary UI
-5. Add tests for the new UI and any new API surface
-
-This order keeps documentation and implementation aligned while avoiding another stale planning document.
-
----
-
-VALIDATION STATUS
-
-Validated during recent repo work:
-- Backend type-check, build, and full Jest suite passing
-- Frontend type-check, build, and Vitest suite passing
-- Docs validator passing (`node scripts/validate-docs.mjs`)
-- New frontend coverage added for App, MARL viewer, and Social dashboard parity flows
-- Regression coverage added for MARL non-zero trade execution
-- Integration-style coverage added for evolutionary tournament persistence into agent statistics and competition history
-
-Note:
-- The repo may still emit the existing Jest force-exit/open-handles warning due to test-runner configuration. That warning is not the same as a failing test run.
-
----
-
-SOURCE OF TRUTH
-
-When this summary conflicts with older planning docs, treat the codebase and current tests as authoritative. In particular, use these files as the best high-level map of the current system:
-- README.md
-- CLAUDE.md
-- backend/src/routes/agent-stats.ts
-- backend/src/routes/evolutionary.ts
-- backend/src/services/evolutionary/
-- frontend/src/components/AgentManagementDashboard.tsx
-
----
-
-SHORT VERSION
-
-The project is no longer waiting on foundational evolutionary backend work. The real remaining work is mostly presentation and documentation: richer evolution dashboards, lineage visualization, and alignment of top-level docs with the system that already exists.
+- [x] Add a dedicated evolution-focused doc describing tourn

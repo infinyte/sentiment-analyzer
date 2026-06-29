@@ -1,0 +1,4049 @@
+{
+ "info": {
+  "_postman_id": "9659448f-3cd9-49f9-b46f-1542b251f56c",
+  "name": "Sentiment Analyzer \u2014 Complete API (with examples)",
+  "description": "Every backend endpoint (~95) with an example request and a saved example response. Set the `base_url` variable (default http://localhost:3000), `api_key` for x-api-key endpoints, and `admin_password` for /api/admin/config. Generated 2026-06-29.",
+  "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+ },
+ "item": [
+  {
+   "name": "Coins",
+   "description": "Top coins and per-coin detail.",
+   "item": [
+    {
+     "name": "List top coins",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/coins?limit=20&sort_by=market_cap",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "coins"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "20"
+        },
+        {
+         "key": "sort_by",
+         "value": "market_cap"
+        }
+       ]
+      },
+      "description": "Top coins with sentiment. Params: limit, sort_by."
+     },
+     "response": [
+      {
+       "name": "List top coins \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"count\": 2, \"coins\": [{\"symbol\": \"BTC\", \"name\": \"Bitcoin\", \"price_usd\": 65000, \"price_change_24h_percent\": 2.5, \"market_cap_usd\": 1300000000000.0, \"market_rank\": 1, \"sentiment\": {\"label\": \"BULL\", \"score\": 0.72, \"summary\": \"Strong momentum and positive news flow.\"}}, {\"symbol\": \"ETH\", \"name\": \"Ethereum\", \"price_usd\": 3200, \"price_change_24h_percent\": 1.1, \"market_cap_usd\": 380000000000.0, \"market_rank\": 2, \"sentiment\": {\"label\": \"NEUTRAL\", \"score\": 0.51, \"summary\": \"Mixed signals.\"}}]}"
+      }
+     ]
+    },
+    {
+     "name": "Coin detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/coins/BTC",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "coins",
+        "BTC"
+       ]
+      },
+      "description": "Detail view \u2014 price history, headlines, scored items, source breakdown, sentiment."
+     },
+     "response": [
+      {
+       "name": "Coin detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"symbol\": \"BTC\", \"name\": \"Bitcoin\", \"price_usd\": 65000, \"price_history\": [{\"t\": \"2026-06-22\", \"close\": 63010}, {\"t\": \"2026-06-23\", \"close\": 64200}], \"headlines\": [{\"title\": \"Bitcoin ETF inflows hit record\", \"source\": \"newsapi\", \"url\": \"https://example.com/a\"}], \"scored_items\": [{\"id\": \"itm_1\", \"source\": \"reddit\", \"composite\": 0.68}], \"source_breakdown\": {\"newsapi\": 3, \"reddit\": 5}, \"sentiment\": {\"label\": \"BULL\", \"score\": 0.72, \"summary\": \"Strong momentum.\"}}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Sentiment",
+   "description": "Multi-mode analysis and cached sentiment.",
+   "item": [
+    {
+     "name": "Analyze sentiment",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/sentiment/analyze",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "sentiment",
+        "analyze"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\"\n  ],\n  \"mode\": \"SMART\",\n  \"marketData\": {\n    \"BTC\": {\n      \"symbol\": \"BTC\",\n      \"price_usd\": 65000,\n      \"price_change_24h_percent\": 2.5,\n      \"price_change_7d_percent\": 8.0,\n      \"volatility_24h\": 4.2,\n      \"volatility_7d\": 12.0,\n      \"volume_24h_usd\": 30000000000.0,\n      \"market_cap_usd\": 1300000000000.0,\n      \"market_rank\": 1\n    }\n  }\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Run BASIC / ADVANCED / TRADING_SIGNALS / SMART analysis."
+     },
+     "response": [
+      {
+       "name": "Analyze sentiment \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"mode\": \"SMART\", \"results\": {\"BTC\": {\"label\": \"BULL\", \"score\": 0.74, \"confidence\": 0.81, \"signals\": {\"momentum\": 0.8, \"volatility\": 0.4}, \"summary\": \"Composite SMART score favours upside.\"}}}"
+      }
+     ]
+    },
+    {
+     "name": "Get cached sentiment",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/sentiment/BTC",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "sentiment",
+        "BTC"
+       ]
+      },
+      "description": "Cached sentiment object including scored_items, source_breakdown, collection_stats."
+     },
+     "response": [
+      {
+       "name": "Get cached sentiment \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"symbol\": \"BTC\", \"label\": \"BULL\", \"score\": 0.72, \"scored_items\": [{\"id\": \"itm_1\", \"composite\": 0.68}], \"source_breakdown\": {\"newsapi\": 3, \"reddit\": 5}, \"collection_stats\": {\"items\": 8, \"sources\": 2}, \"cached_at\": \"2026-06-29T08:00:00Z\"}"
+      }
+     ]
+    },
+    {
+     "name": "Force refresh sentiment",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/refresh-sentiment",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "refresh-sentiment"
+       ]
+      },
+      "description": "Force re-analysis. Requires x-api-key header."
+     },
+     "response": [
+      {
+       "name": "Force refresh sentiment \u2014 202 Accepted",
+       "status": "Accepted",
+       "code": 202,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"job_id\": \"job_abc123\", \"status\": \"processing\", \"coins_to_process\": 50}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Health & Info",
+   "description": "Service health and static documentation.",
+   "item": [
+    {
+     "name": "Health check",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/health",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "health"
+       ]
+      },
+      "description": "Service status \u2014 reports misconfigured if API keys are missing."
+     },
+     "response": [
+      {
+       "name": "Health check \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"status\": \"healthy\", \"services\": {\"coingecko\": \"ok\", \"newsapi\": \"ok\", \"claude_api\": \"misconfigured\", \"sqlite\": \"ok\"}, \"uptime_seconds\": 12345}"
+      }
+     ]
+    },
+    {
+     "name": "Modes documentation",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/info/modes",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "info",
+        "modes"
+       ]
+      },
+      "description": "Documentation \u2014 modes, agent types, risk profiles."
+     },
+     "response": [
+      {
+       "name": "Modes documentation \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"modes\": [\"BASIC\", \"ADVANCED\", \"TRADING_SIGNALS\", \"SMART\"], \"agentTypes\": [\"RULE_BASED\", \"ML_BASED\", \"HYBRID\"], \"riskProfiles\": [\"CONSERVATIVE\", \"AGGRESSIVE\", \"SCALPING\"]}"
+      }
+     ]
+    },
+    {
+     "name": "MARL info",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/info",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "info"
+       ]
+      },
+      "description": "Documentation for modes, agent configs, order book, and learning persistence."
+     },
+     "response": [
+      {
+       "name": "MARL info \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentModes\": [\"SINGLE\", \"EVOLUTIONARY\", \"CONTINUOUS\"], \"riskProfiles\": [\"CONSERVATIVE\", \"AGGRESSIVE\", \"SCALPING\"], \"stateSpace\": 50, \"actions\": 5, \"policyNetwork\": \"50->64->32->5\"}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Scrape & Trending (core)",
+   "description": "In-memory trending engine endpoints.",
+   "item": [
+    {
+     "name": "Scrape one symbol",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/scrape/social?symbol=BTC",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "scrape",
+        "social"
+       ],
+       "query": [
+        {
+         "key": "symbol",
+         "value": "BTC"
+        }
+       ]
+      },
+      "description": "Scrape one symbol from social sources and ingest into the trending engine."
+     },
+     "response": [
+      {
+       "name": "Scrape one symbol \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"symbol\": \"BTC\", \"scraped\": 42, \"ingested\": 42}"
+      }
+     ]
+    },
+    {
+     "name": "Batch scrape",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/scrape/batch",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "scrape",
+        "batch"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\",\n    \"SOL\"\n  ]\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Batch scrape up to 20 symbols from social sources."
+     },
+     "response": [
+      {
+       "name": "Batch scrape \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"requested\": 3, \"scraped\": 118, \"ingested\": 118}"
+      }
+     ]
+    },
+    {
+     "name": "Trending topics (engine)",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trending?limit=10",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trending"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "10"
+        }
+       ]
+      },
+      "description": "Ranked trending topics from ingested social posts."
+     },
+     "response": [
+      {
+       "name": "Trending topics (engine) \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"total\": 2, \"topics\": [{\"topic\": \"BTC\", \"mentions\": 120, \"score\": 0.91}, {\"topic\": \"SOL\", \"mentions\": 64, \"score\": 0.77}]}"
+      }
+     ]
+    },
+    {
+     "name": "Ingest posts",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/trending/ingest",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trending",
+        "ingest"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"posts\": [\n    {\n      \"source\": \"reddit\",\n      \"text\": \"$BTC looking strong\",\n      \"createdAt\": \"2026-06-29T07:00:00Z\"\n    }\n  ]\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Manually ingest scraped posts into the trending engine."
+     },
+     "response": [
+      {
+       "name": "Ingest posts \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"ingested\": 1, \"stored_total\": 4213}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "MARL Competition",
+   "description": "Tournaments, comparison, learning state, pre-training.",
+   "item": [
+    {
+     "name": "Start competition",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "start"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"mode\": \"SINGLE\",\n  \"agents\": [\n    {\n      \"id\": \"alpha\",\n      \"riskProfile\": \"AGGRESSIVE\"\n    },\n    {\n      \"id\": \"beta\",\n      \"riskProfile\": \"CONSERVATIVE\"\n    },\n    {\n      \"id\": \"gamma\",\n      \"riskProfile\": \"SCALPING\"\n    }\n  ],\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\"\n  ],\n  \"duration\": 200,\n  \"refreshInterval\": 1000,\n  \"learningEnabled\": true\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Start tournament (fire-and-forget). Returns 202 + competitionId."
+     },
+     "response": [
+      {
+       "name": "Start competition \u2014 202 Accepted",
+       "status": "Accepted",
+       "code": 202,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"status\": \"RUNNING\"}"
+      }
+     ]
+    },
+    {
+     "name": "Competition status",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/comp_123/status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "comp_123",
+        "status"
+       ]
+      },
+      "description": "Poll progress, top performer, and status."
+     },
+     "response": [
+      {
+       "name": "Competition status \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"status\": \"RUNNING\", \"progress\": 0.62, \"topPerformer\": \"alpha\"}"
+      }
+     ]
+    },
+    {
+     "name": "Competition results",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/comp_123/results",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "comp_123",
+        "results"
+       ]
+      },
+      "description": "Full results \u2014 rankings, H2H, equity curve, market impact."
+     },
+     "response": [
+      {
+       "name": "Competition results \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"status\": \"COMPLETED\", \"finalRankings\": [{\"agentId\": \"alpha\", \"return\": 0.123, \"winRate\": 0.58}, {\"agentId\": \"gamma\", \"return\": 0.061, \"winRate\": 0.51}, {\"agentId\": \"beta\", \"return\": -0.012, \"winRate\": 0.47}]}"
+      }
+     ]
+    },
+    {
+     "name": "Equity curves",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/comp_123/equity-curves",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "comp_123",
+        "equity-curves"
+       ]
+      },
+      "description": "Per-agent equity curves for a competition."
+     },
+     "response": [
+      {
+       "name": "Equity curves \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"curves\": {\"alpha\": [10000, 10120, 10240], \"beta\": [10000, 9990, 9988]}}"
+      }
+     ]
+    },
+    {
+     "name": "Competition SSE stream",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept",
+        "value": "text/event-stream"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/comp_123/stream",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "comp_123",
+        "stream"
+       ]
+      },
+      "description": "Server-Sent Events stream of live competition progress."
+     },
+     "response": [
+      {
+       "name": "Competition SSE stream \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"_note\": \"text/event-stream; events arrive as: data: {\\\"type\\\":\\\"progress\\\",\\\"progress\\\":0.5}\"}"
+      }
+     ]
+    },
+    {
+     "name": "Trade log",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competition/comp_123/trade-log?agentId=alpha",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competition",
+        "comp_123",
+        "trade-log"
+       ],
+       "query": [
+        {
+         "key": "agentId",
+         "value": "alpha"
+        }
+       ]
+      },
+      "description": "Full trade log for a competition."
+     },
+     "response": [
+      {
+       "name": "Trade log \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"trades\": [{\"agentId\": \"alpha\", \"symbol\": \"BTC\", \"side\": \"BUY\", \"qty\": 0.1, \"price\": 64000, \"t\": 12}]}"
+      }
+     ]
+    },
+    {
+     "name": "List competitions",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/competitions",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "competitions"
+       ]
+      },
+      "description": "List all competitions (in-memory)."
+     },
+     "response": [
+      {
+       "name": "List competitions \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"total\": 1, \"competitions\": [{\"competitionId\": \"comp_123\", \"status\": \"COMPLETED\", \"mode\": \"SINGLE\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Compare agents (H2H)",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/agents/compare",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "agents",
+        "compare"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"agent1\": {\n    \"id\": \"alpha\",\n    \"riskProfile\": \"AGGRESSIVE\"\n  },\n  \"agent2\": {\n    \"id\": \"beta\",\n    \"riskProfile\": \"CONSERVATIVE\"\n  },\n  \"symbols\": [\n    \"BTC\"\n  ],\n  \"rounds\": 5,\n  \"duration\": 100\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "N-round head-to-head comparison between two agents."
+     },
+     "response": [
+      {
+       "name": "Compare agents (H2H) \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"overallWinner\": \"alpha\", \"agent1WinRate\": 0.6, \"agent2WinRate\": 0.4, \"rounds\": 5}"
+      }
+     ]
+    },
+    {
+     "name": "Coin universe",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/coin-universe?agents=[{\"id\":\"alpha\"}]&universeSize=50&coinsPerAgent=5",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "coin-universe"
+       ],
+       "query": [
+        {
+         "key": "agents",
+         "value": "[{\"id\":\"alpha\"}]"
+        },
+        {
+         "key": "universeSize",
+         "value": "50"
+        },
+        {
+         "key": "coinsPerAgent",
+         "value": "5"
+        }
+       ]
+      },
+      "description": "Compute per-agent coin selections from CoinGecko live data."
+     },
+     "response": [
+      {
+       "name": "Coin universe \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"universeSize\": 50, \"selections\": {\"alpha\": [\"BTC\", \"ETH\", \"SOL\", \"BNB\", \"XRP\"]}}"
+      }
+     ]
+    },
+    {
+     "name": "List learning states",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/agents/learning",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "agents",
+        "learning"
+       ]
+      },
+      "description": "List all persisted agent learning states."
+     },
+     "response": [
+      {
+       "name": "List learning states \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"total\": 1, \"agents\": [{\"agentId\": \"alpha\", \"riskProfile\": \"AGGRESSIVE\", \"episodes\": 420, \"updatedAt\": \"2026-06-28T00:00:00Z\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Reset learning state",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/agents/alpha/learning?riskProfile=AGGRESSIVE",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "agents",
+        "alpha",
+        "learning"
+       ],
+       "query": [
+        {
+         "key": "riskProfile",
+         "value": "AGGRESSIVE"
+        }
+       ]
+      },
+      "description": "Reset agent learning state. Requires x-api-key."
+     },
+     "response": [
+      {
+       "name": "Reset learning state \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agentId\": \"alpha\", \"reset\": true}"
+      }
+     ]
+    },
+    {
+     "name": "Pre-train agent",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/agents/alpha/pretrain",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "agents",
+        "alpha",
+        "pretrain"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"episodes\": 100,\n  \"stepsPerEpisode\": 200,\n  \"riskProfile\": \"AGGRESSIVE\",\n  \"regimes\": [\n    \"BULL_TREND\",\n    \"SIDEWAYS\"\n  ]\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Pre-train on synthetic-market episodes; returns a convergence curve."
+     },
+     "response": [
+      {
+       "name": "Pre-train agent \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agentId\": \"alpha\", \"episodes\": 100, \"convergence\": [{\"episode\": 1, \"avgReward\": -0.2}, {\"episode\": 100, \"avgReward\": 0.31}]}"
+      }
+     ]
+    },
+    {
+     "name": "Set learning algorithm",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/agents/alpha/algorithm",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "agents",
+        "alpha",
+        "algorithm"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"algorithm\": \"DQN\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Set/override an agent's learning algorithm (Q_TABLE / POLICY_GRADIENT / DQN)."
+     },
+     "response": [
+      {
+       "name": "Set learning algorithm \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agentId\": \"alpha\", \"algorithm\": \"DQN\"}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "MARL Evolution",
+   "description": "Evolution analytics across tournaments.",
+   "item": [
+    {
+     "name": "Best genome",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/evolution/best-genome",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "evolution",
+        "best-genome"
+       ]
+      },
+      "description": "Best evolved genome across persisted tournaments."
+     },
+     "response": [
+      {
+       "name": "Best genome \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agentId\": \"agt_777\", \"fitnessScore\": 88.4, \"genome\": {\"entryThreshold\": 42, \"positionSizePct\": 12, \"stopLossPct\": 5}}"
+      }
+     ]
+    },
+    {
+     "name": "Evolution history",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/evolution/history",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "evolution",
+        "history"
+       ]
+      },
+      "description": "Evolutionary tournament history."
+     },
+     "response": [
+      {
+       "name": "Evolution history \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"generations\": [{\"tournamentId\": \"evo_1\", \"generation\": 1, \"bestFitness\": 61.2}, {\"tournamentId\": \"evo_1\", \"generation\": 5, \"bestFitness\": 88.4}]}"
+      }
+     ]
+    },
+    {
+     "name": "Population snapshot",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/evolution/population",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "evolution",
+        "population"
+       ]
+      },
+      "description": "Current evolved population snapshot."
+     },
+     "response": [
+      {
+       "name": "Population snapshot \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentId\": \"evo_1\", \"generation\": 5, \"population\": [{\"agentId\": \"agt_777\", \"fitness\": 88.4}, {\"agentId\": \"agt_778\", \"fitness\": 80.1}]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Broker & Real Trading",
+   "description": "Encrypted broker credentials and order control. All require x-api-key.",
+   "item": [
+    {
+     "name": "Credentials picker",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/credentials/picker",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "credentials",
+        "picker"
+       ]
+      },
+      "description": "Unauthenticated \u2014 id, label, provider, mode for UI dropdowns."
+     },
+     "response": [
+      {
+       "name": "Credentials picker \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"credentials\": [{\"id\": \"cred_1\", \"label\": \"Alpaca Paper\", \"provider\": \"ALPACA\", \"mode\": \"PAPER\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "List credentials",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/credentials",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "credentials"
+       ]
+      },
+      "description": "List stored credential metadata \u2014 no secrets."
+     },
+     "response": [
+      {
+       "name": "List credentials \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"credentials\": [{\"id\": \"cred_1\", \"label\": \"Alpaca Paper\", \"provider\": \"ALPACA\", \"mode\": \"PAPER\", \"createdAt\": \"2026-06-01T00:00:00Z\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Store credentials",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/credentials",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "credentials"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"label\": \"Alpaca Paper\",\n  \"provider\": \"ALPACA\",\n  \"mode\": \"PAPER\",\n  \"apiKey\": \"PK...\",\n  \"apiSecret\": \"SK...\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Store encrypted broker credentials (AES-256-GCM)."
+     },
+     "response": [
+      {
+       "name": "Store credentials \u2014 201 Created",
+       "status": "Created",
+       "code": 201,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"cred_1\", \"label\": \"Alpaca Paper\", \"provider\": \"ALPACA\", \"mode\": \"PAPER\"}"
+      }
+     ]
+    },
+    {
+     "name": "Delete credentials",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/credentials/cred_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "credentials",
+        "cred_1"
+       ]
+      },
+      "description": "Remove stored credential and disconnect adapter."
+     },
+     "response": [
+      {
+       "name": "Delete credentials \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"cred_1\", \"deleted\": true}"
+      }
+     ]
+    },
+    {
+     "name": "Connect broker",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/connect/cred_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "connect",
+        "cred_1"
+       ]
+      },
+      "description": "Decrypt and connect a broker adapter into the in-process registry."
+     },
+     "response": [
+      {
+       "name": "Connect broker \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"cred_1\", \"connected\": true, \"provider\": \"ALPACA\", \"mode\": \"PAPER\"}"
+      }
+     ]
+    },
+    {
+     "name": "List connected adapters",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/connected",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "connected"
+       ]
+      },
+      "description": "List currently connected adapters."
+     },
+     "response": [
+      {
+       "name": "List connected adapters \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"connected\": [{\"id\": \"cred_1\", \"provider\": \"ALPACA\", \"mode\": \"PAPER\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Order audit trail",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/orders/comp_123?agentId=alpha",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "orders",
+        "comp_123"
+       ],
+       "query": [
+        {
+         "key": "agentId",
+         "value": "alpha"
+        }
+       ]
+      },
+      "description": "Order audit trail for a competition."
+     },
+     "response": [
+      {
+       "name": "Order audit trail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"orders\": [{\"agentId\": \"alpha\", \"symbol\": \"BTC\", \"side\": \"BUY\", \"qty\": 0.1, \"status\": \"FILLED\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Emergency stop",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "x-api-key",
+        "value": "{{api_key}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/marl/broker/emergency-stop",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "marl",
+        "broker",
+        "emergency-stop"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"competitionId\": \"comp_123\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Cancel all open orders for a competition."
+     },
+     "response": [
+      {
+       "name": "Emergency stop \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"competitionId\": \"comp_123\", \"cancelled\": 3}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Evolutionary Tournaments",
+   "description": "Multi-generation genome evolution.",
+   "item": [
+    {
+     "name": "Start tournament",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/tournament",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "tournament"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"generations\": 5,\n  \"populationSize\": 12,\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\"\n  ],\n  \"useClaudeDirectives\": true,\n  \"adversarialTraining\": true\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Start a multi-generation evolutionary tournament. Returns 202 + tournamentId."
+     },
+     "response": [
+      {
+       "name": "Start tournament \u2014 202 Accepted",
+       "status": "Accepted",
+       "code": 202,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentId\": \"evo_1\", \"status\": \"RUNNING\"}"
+      }
+     ]
+    },
+    {
+     "name": "List tournaments",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/tournament",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "tournament"
+       ]
+      },
+      "description": "List all tournaments (lightweight)."
+     },
+     "response": [
+      {
+       "name": "List tournaments \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournaments\": [{\"tournamentId\": \"evo_1\", \"status\": \"COMPLETED\", \"generations\": 5}]}"
+      }
+     ]
+    },
+    {
+     "name": "Tournament detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/tournament/evo_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "tournament",
+        "evo_1"
+       ]
+      },
+      "description": "Full tournament status + generation history."
+     },
+     "response": [
+      {
+       "name": "Tournament detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentId\": \"evo_1\", \"status\": \"COMPLETED\", \"generations\": [{\"generation\": 1, \"bestFitness\": 61.2}, {\"generation\": 5, \"bestFitness\": 88.4}]}"
+      }
+     ]
+    },
+    {
+     "name": "Evolutionary summary",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/summary",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "summary"
+       ]
+      },
+      "description": "Dashboard summary of recent tournaments and latest generation fitness timeline."
+     },
+     "response": [
+      {
+       "name": "Evolutionary summary \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"recent\": [{\"tournamentId\": \"evo_1\", \"bestFitness\": 88.4}], \"fitnessTimeline\": [61.2, 70.5, 80.1, 85.0, 88.4]}"
+      }
+     ]
+    },
+    {
+     "name": "Generation checkpoint",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/tournament/evo_1/checkpoint/3",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "tournament",
+        "evo_1",
+        "checkpoint",
+        "3"
+       ]
+      },
+      "description": "Population snapshot + per-agent fitness for one generation."
+     },
+     "response": [
+      {
+       "name": "Generation checkpoint \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentId\": \"evo_1\", \"generation\": 3, \"population\": [{\"agentId\": \"agt_777\", \"fitness\": 80.1}], \"directive\": {\"mutationSeverity\": \"MEDIUM\"}}"
+      }
+     ]
+    },
+    {
+     "name": "Rollback tournament",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/tournament/evo_1/rollback",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "tournament",
+        "evo_1",
+        "rollback"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"generation\": 3\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Roll a tournament back to a prior generation checkpoint."
+     },
+     "response": [
+      {
+       "name": "Rollback tournament \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournamentId\": \"evo_1\", \"rolledBackTo\": 3}"
+      }
+     ]
+    },
+    {
+     "name": "Breed agents",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/evolutionary/breed",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "evolutionary",
+        "breed"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"parent1Id\": \"agt_777\",\n  \"parent2Id\": \"agt_778\",\n  \"strategy\": \"UNIFORM\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Breed two parent agents into a mutated offspring."
+     },
+     "response": [
+      {
+       "name": "Breed agents \u2014 201 Created",
+       "status": "Created",
+       "code": 201,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"offspringId\": \"agt_900\", \"generationNumber\": 6, \"genome\": {\"entryThreshold\": 40, \"positionSizePct\": 11}}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Agent Identity & Stats",
+   "description": "Agent registry, leaderboard, cosmetics, lineage.",
+   "item": [
+    {
+     "name": "List agents",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents?limit=20&offset=0",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "20"
+        },
+        {
+         "key": "offset",
+         "value": "0"
+        }
+       ]
+      },
+      "description": "List active agents (paginated)."
+     },
+     "response": [
+      {
+       "name": "List agents \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"total\": 2, \"agents\": [{\"agent_id\": \"agt_777\", \"custom_name\": \"Apex\", \"win_rate_percent\": 58.2}, {\"agent_id\": \"agt_778\", \"custom_name\": \"Nimbus\", \"win_rate_percent\": 51.0}]}"
+      }
+     ]
+    },
+    {
+     "name": "Leaderboard",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/stats/leaderboard?limit=10",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "stats",
+        "leaderboard"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "10"
+        }
+       ]
+      },
+      "description": "Top agents by win rate."
+     },
+     "response": [
+      {
+       "name": "Leaderboard \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"leaderboard\": [{\"agent_id\": \"agt_777\", \"custom_name\": \"Apex\", \"win_rate_percent\": 58.2, \"pnl\": 1234.5}]}"
+      }
+     ]
+    },
+    {
+     "name": "Agent detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_777",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_777"
+       ]
+      },
+      "description": "Single agent with stats."
+     },
+     "response": [
+      {
+       "name": "Agent detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_777\", \"custom_name\": \"Apex\", \"emoji\": \"\\ud83d\\ude80\", \"color\": \"#2563eb\", \"win_rate_percent\": 58.2, \"total_competitions\": 42}"
+      }
+     ]
+    },
+    {
+     "name": "Customize agent",
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_777/customize",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_777",
+        "customize"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"name\": \"Apex\",\n  \"emoji\": \"\\ud83d\\ude80\",\n  \"color\": \"#2563eb\",\n  \"bio\": \"Aggressive momentum trader.\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Update agent cosmetics (name, emoji, color, bio)."
+     },
+     "response": [
+      {
+       "name": "Customize agent \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_777\", \"custom_name\": \"Apex\", \"emoji\": \"\\ud83d\\ude80\", \"color\": \"#2563eb\", \"bio\": \"Aggressive momentum trader.\"}"
+      }
+     ]
+    },
+    {
+     "name": "Retire agent",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_778/retire",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_778",
+        "retire"
+       ]
+      },
+      "description": "Retire an agent (cull from the active pool)."
+     },
+     "response": [
+      {
+       "name": "Retire agent \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_778\", \"retired\": true}"
+      }
+     ]
+    },
+    {
+     "name": "Agent history",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_777/history",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_777",
+        "history"
+       ]
+      },
+      "description": "Competition history for an agent."
+     },
+     "response": [
+      {
+       "name": "Agent history \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_777\", \"history\": [{\"competitionId\": \"comp_123\", \"rank\": 1, \"return\": 0.123}]}"
+      }
+     ]
+    },
+    {
+     "name": "Agent genome",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_777/genome",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_777",
+        "genome"
+       ]
+      },
+      "description": "Agent genome (evolutionary parameters)."
+     },
+     "response": [
+      {
+       "name": "Agent genome \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_777\", \"genome\": {\"entryThreshold\": 42, \"positionSizePct\": 12, \"stopLossPct\": 5}}"
+      }
+     ]
+    },
+    {
+     "name": "Agent genealogy",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agents/agt_777/genealogy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "agt_777",
+        "genealogy"
+       ]
+      },
+      "description": "Ancestry chain."
+     },
+     "response": [
+      {
+       "name": "Agent genealogy \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"agent_id\": \"agt_777\", \"ancestors\": [{\"agent_id\": \"agt_700\", \"generation\": 1}, {\"agent_id\": \"agt_740\", \"generation\": 3}]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Social Media Intelligence",
+   "description": "Phase 3 multi-source social pipeline.",
+   "item": [
+    {
+     "name": "Trending topics",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/social-media/trending-topics?timeWindow=4h&limit=10&type=coin",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "social-media",
+        "trending-topics"
+       ],
+       "query": [
+        {
+         "key": "timeWindow",
+         "value": "4h"
+        },
+        {
+         "key": "limit",
+         "value": "10"
+        },
+        {
+         "key": "type",
+         "value": "coin"
+        }
+       ]
+      },
+      "description": "Clustered trending topics. Params: timeWindow, limit, type."
+     },
+     "response": [
+      {
+       "name": "Trending topics \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"topics\": [{\"rank\": 1, \"entity\": \"BTC\", \"direction\": \"up\", \"score\": 0.91, \"velocity\": 0.22}]}"
+      }
+     ]
+    },
+    {
+     "name": "Social items",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/social-media/items?coin=BTC&source=reddit&sort=score&limit=20&offset=0",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "social-media",
+        "items"
+       ],
+       "query": [
+        {
+         "key": "coin",
+         "value": "BTC"
+        },
+        {
+         "key": "source",
+         "value": "reddit"
+        },
+        {
+         "key": "sort",
+         "value": "score"
+        },
+        {
+         "key": "limit",
+         "value": "20"
+        },
+        {
+         "key": "offset",
+         "value": "0"
+        }
+       ]
+      },
+      "description": "Paginated scored social items."
+     },
+     "response": [
+      {
+       "name": "Social items \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"items\": [{\"id\": \"itm_1\", \"coin\": \"BTC\", \"source\": \"reddit\", \"composite\": 0.68, \"language\": \"en\", \"sarcasm_flagged\": false}], \"next_cursor\": null}"
+      }
+     ]
+    },
+    {
+     "name": "Social item detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/social-media/item/itm_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "social-media",
+        "item",
+        "itm_1"
+       ]
+      },
+      "description": "Single item with scoring_breakdown and signal weights."
+     },
+     "response": [
+      {
+       "name": "Social item detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"itm_1\", \"coin\": \"BTC\", \"source\": \"reddit\", \"scoring_breakdown\": {\"sentiment\": 0.7, \"engagement\": 0.6, \"authority\": 0.35, \"recency\": 0.9, \"composite\": 0.68}}"
+      }
+     ]
+    },
+    {
+     "name": "Source health stats",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/social-media/stats",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "social-media",
+        "stats"
+       ]
+      },
+      "description": "Source health counters and item totals."
+     },
+     "response": [
+      {
+       "name": "Source health stats \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"total_items\": 1289, \"sources\": {\"reddit\": {\"items_24h\": 120, \"errors_24h\": 1}, \"rss\": {\"items_24h\": 300, \"errors_24h\": 0}}}"
+      }
+     ]
+    },
+    {
+     "name": "Multi-source trend score",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trending-score/BTC?interval=1h",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trending-score",
+        "BTC"
+       ],
+       "query": [
+        {
+         "key": "interval",
+         "value": "1h"
+        }
+       ]
+      },
+      "description": "Multi-source MultiSourceTrendReport. Params: interval."
+     },
+     "response": [
+      {
+       "name": "Multi-source trend score \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"symbol\": \"BTC\", \"compositeScore\": 0.74, \"signals\": {\"sentiment\": 0.7, \"engagement\": 0.6}, \"distribution\": {\"BULL\": 0.6, \"NEUTRAL\": 0.3, \"BEAR\": 0.1}, \"acceleration\": \"rising\", \"comparedToPrevious\": 0.05}"
+      }
+     ]
+    },
+    {
+     "name": "Social refresh",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/social-media/refresh",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "social-media",
+        "refresh"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\"\n  ],\n  \"rss_only\": false\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Fire-and-forget scrape. Returns 202."
+     },
+     "response": [
+      {
+       "name": "Social refresh \u2014 202 Accepted",
+       "status": "Accepted",
+       "code": 202,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"status\": \"refreshing\", \"mode\": \"multi-source\", \"symbols\": [\"BTC\", \"ETH\"]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Trading Service",
+   "description": "Paper / sandbox / live exchange wrapper with safety guards.",
+   "item": [
+    {
+     "name": "Exchange status",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trading/exchange-status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trading",
+        "exchange-status"
+       ]
+      },
+      "description": "Exchange name and connection status."
+     },
+     "response": [
+      {
+       "name": "Exchange status \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"exchange\": \"RealisticPaperExchange\", \"mode\": \"realistic_paper\", \"connected\": true, \"feePreset\": \"binance-us\"}"
+      }
+     ]
+    },
+    {
+     "name": "Current price",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trading/price/BTC",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trading",
+        "price",
+        "BTC"
+       ]
+      },
+      "description": "Current price for a symbol."
+     },
+     "response": [
+      {
+       "name": "Current price \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"symbol\": \"BTC\", \"price\": 65000, \"source\": \"live\"}"
+      }
+     ]
+    },
+    {
+     "name": "Balances",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trading/balances",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trading",
+        "balances"
+       ]
+      },
+      "description": "All non-zero balances from the exchange."
+     },
+     "response": [
+      {
+       "name": "Balances \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"balances\": [{\"asset\": \"USDT\", \"free\": 9876.54}, {\"asset\": \"BTC\", \"free\": 0.05}]}"
+      }
+     ]
+    },
+    {
+     "name": "Place order",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/trading/order",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trading",
+        "order"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbol\": \"BTC\",\n  \"side\": \"BUY\",\n  \"quantity\": 0.01\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Place an order through TradingService safety guards."
+     },
+     "response": [
+      {
+       "name": "Place order \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"success\": true, \"order\": {\"id\": \"ord_1\", \"symbol\": \"BTC\", \"side\": \"BUY\", \"quantity\": 0.01, \"price\": 65010, \"commission\": 0.13, \"status\": \"FILLED\"}}"
+      }
+     ]
+    },
+    {
+     "name": "Trading stats",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/trading/stats",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "trading",
+        "stats"
+       ]
+      },
+      "description": "Capital, PnL, trade counts, and max loss threshold."
+     },
+     "response": [
+      {
+       "name": "Trading stats \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"initialCapital\": 10000, \"equity\": 10120.4, \"realizedPnl\": 120.4, \"trades\": 14, \"maxLossThresholdPct\": 10}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Backtesting",
+   "description": "Configure agents and run historical backtests.",
+   "item": [
+    {
+     "name": "Configure agents",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/agents/configure",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agents",
+        "configure"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"agents\": [\n    {\n      \"type\": \"RULE_BASED\",\n      \"riskProfile\": \"CONSERVATIVE\",\n      \"initialCapital\": 10000\n    },\n    {\n      \"type\": \"ML_BASED\",\n      \"riskProfile\": \"AGGRESSIVE\",\n      \"initialCapital\": 10000\n    },\n    {\n      \"type\": \"HYBRID\",\n      \"riskProfile\": \"SCALPING\",\n      \"initialCapital\": 5000\n    }\n  ]\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Register trading agents (RULE_BASED / ML_BASED / HYBRID)."
+     },
+     "response": [
+      {
+       "name": "Configure agents \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"configured\": 3, \"agentIds\": [\"ag_1\", \"ag_2\", \"ag_3\"]}"
+      }
+     ]
+    },
+    {
+     "name": "Run backtest",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/backtest/run",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "backtest",
+        "run"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"bitcoin\",\n    \"ethereum\"\n  ],\n  \"startDate\": \"2024-09-01\",\n  \"endDate\": \"2025-03-01\",\n  \"slippageModel\": \"VOLUME_BASED\",\n  \"commissionPct\": 0.1\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Run day-by-day backtest over CoinGecko historical data."
+     },
+     "response": [
+      {
+       "name": "Run backtest \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"testId\": \"test_123\", \"status\": \"COMPLETED\", \"topPerformer\": \"ag_2\", \"summary\": {\"averageReturn\": 12.4, \"bestReturn\": 21.0, \"averageWinRate\": 54.2}}"
+      }
+     ]
+    },
+    {
+     "name": "Backtest results",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/backtest/results/test_123",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "backtest",
+        "results",
+        "test_123"
+       ]
+      },
+      "description": "Retrieve full backtest report with equity curves."
+     },
+     "response": [
+      {
+       "name": "Backtest results \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"testId\": \"test_123\", \"results\": [{\"agentId\": \"ag_2\", \"agentType\": \"ML_BASED\", \"totalReturnPct\": 21.0, \"winRate\": 56.0, \"profitFactor\": 1.8, \"maxDrawdown\": -8.2, \"sharpeRatio\": 1.4, \"totalTrades\": 48}]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Rankings & Analysis",
+   "description": "Composite SMART ranking.",
+   "item": [
+    {
+     "name": "Top coins ranking",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/rankings/top-coins?limit=10",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "rankings",
+        "top-coins"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "10"
+        }
+       ]
+      },
+      "description": "Coins ranked by SMART composite score."
+     },
+     "response": [
+      {
+       "name": "Top coins ranking \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"rankings\": [{\"symbol\": \"BTC\", \"smartScore\": 0.82}, {\"symbol\": \"ETH\", \"smartScore\": 0.71}]}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Live Agent Orchestrator & MARL Policy Feeder",
+   "description": "Phase 3 execution + Phase 7 research feeder.",
+   "item": [
+    {
+     "name": "Agent config",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agent/config",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agent",
+        "config"
+       ]
+      },
+      "description": "Current live decision-policy params + exchange mode."
+     },
+     "response": [
+      {
+       "name": "Agent config \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"policy\": {\"minStrength\": 0.3, \"tradeFractionOfCapital\": 0.1}, \"mode\": \"realistic_paper\"}"
+      }
+     ]
+    },
+    {
+     "name": "Run one decision cycle",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/agent/run",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agent",
+        "run"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\"\n  ],\n  \"dryRun\": false\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Run one decision cycle -> OrchestrationReport."
+     },
+     "response": [
+      {
+       "name": "Run one decision cycle \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"decisions\": [{\"symbol\": \"BTC\", \"action\": \"BUY\", \"strength\": 0.62, \"placed\": true}, {\"symbol\": \"ETH\", \"action\": \"HOLD\", \"strength\": 0.1, \"placed\": false}], \"portfolio\": {\"USDT\": 8800.0, \"positions\": [{\"symbol\": \"BTC\", \"qty\": 0.018}]}}"
+      }
+     ]
+    },
+    {
+     "name": "MARL policy recommendation",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agent/marl-policy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agent",
+        "marl-policy"
+       ]
+      },
+      "description": "Recommended policy params mapped from the best evolved genome + provenance."
+     },
+     "response": [
+      {
+       "name": "MARL policy recommendation \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"recommended\": {\"minStrength\": 0.42, \"tradeFractionOfCapital\": 0.12}, \"provenance\": {\"agentId\": \"agt_777\", \"fitnessScore\": 88.4, \"genes\": {\"entryThreshold\": 42, \"positionSizePct\": 12}, \"source\": \"leaderboard-top\"}}"
+      }
+     ]
+    },
+    {
+     "name": "Apply MARL policy",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/agent/apply-marl-policy",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "agent",
+        "apply-marl-policy"
+       ]
+      },
+      "description": "Apply the MARL-fed params to the live orchestrator."
+     },
+     "response": [
+      {
+       "name": "Apply MARL policy \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"applied\": true, \"policy\": {\"minStrength\": 0.42, \"tradeFractionOfCapital\": 0.12}}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Shadow Harness",
+   "description": "Phase 4 continuous runner + Phase 6 SSE feed.",
+   "item": [
+    {
+     "name": "Harness status",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/shadow/status",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "shadow",
+        "status"
+       ]
+      },
+      "description": "Harness state plus recent cycle summaries (newest first)."
+     },
+     "response": [
+      {
+       "name": "Harness status \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"running\": true, \"intervalMs\": 60000, \"symbols\": [\"BTC\", \"ETH\"], \"cycles\": [{\"at\": \"2026-06-29T08:00:00Z\", \"decisions\": 2, \"placed\": 1, \"error\": null}]}"
+      }
+     ]
+    },
+    {
+     "name": "Start harness",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/shadow/start",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "shadow",
+        "start"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\",\n    \"ETH\"\n  ],\n  \"intervalMs\": 60000,\n  \"dryRun\": false,\n  \"maxHistory\": 200\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Start the continuous loop."
+     },
+     "response": [
+      {
+       "name": "Start harness \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"running\": true, \"intervalMs\": 60000, \"symbols\": [\"BTC\", \"ETH\"]}"
+      }
+     ]
+    },
+    {
+     "name": "Stop harness",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/shadow/stop",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "shadow",
+        "stop"
+       ]
+      },
+      "description": "Stop the loop."
+     },
+     "response": [
+      {
+       "name": "Stop harness \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"running\": false}"
+      }
+     ]
+    },
+    {
+     "name": "Run single tick",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/shadow/tick",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "shadow",
+        "tick"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"symbols\": [\n    \"BTC\"\n  ],\n  \"dryRun\": true\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Run a single cycle now -> OrchestrationReport."
+     },
+     "response": [
+      {
+       "name": "Run single tick \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"decisions\": [{\"symbol\": \"BTC\", \"action\": \"BUY\", \"strength\": 0.6, \"placed\": false}], \"portfolio\": {\"USDT\": 10000}}"
+      }
+     ]
+    },
+    {
+     "name": "Shadow SSE stream",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept",
+        "value": "text/event-stream"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/shadow/stream",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "shadow",
+        "stream"
+       ]
+      },
+      "description": "SSE feed: initial status event, then one cycle event per completed cycle."
+     },
+     "response": [
+      {
+       "name": "Shadow SSE stream \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"_note\": \"text/event-stream; events: data: {\\\"type\\\":\\\"status\\\",...} then data: {\\\"type\\\":\\\"cycle\\\",...}\"}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Walk-Forward Validation",
+   "description": "Phase 5 overfitting guard.",
+   "item": [
+    {
+     "name": "Run walk-forward",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/walk-forward/run",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "walk-forward",
+        "run"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"prices\": [\n    100,\n    101,\n    103,\n    102,\n    104,\n    106,\n    105,\n    107,\n    109,\n    108,\n    110,\n    112\n  ],\n  \"inSampleSize\": 6,\n  \"outOfSampleSize\": 3,\n  \"anchored\": false,\n  \"objective\": \"netPnl\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Roll IS/OOS windows. Accepts bars[] or prices[]."
+     },
+     "response": [
+      {
+       "name": "Run walk-forward \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"folds\": [{\"fold\": 1, \"is\": {\"netPnl\": 3.1}, \"oos\": {\"netPnl\": 1.2}}, {\"fold\": 2, \"is\": {\"netPnl\": 2.8}, \"oos\": {\"netPnl\": 1.0}}], \"aggregateOos\": {\"trades\": 4, \"winRate\": 0.5, \"expectancy\": 0.55}, \"walkForwardEfficiency\": 0.37}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Paper Analytics (Net-of-Fees Expectancy)",
+   "description": "Reads the shared exchange order history.",
+   "item": [
+    {
+     "name": "Expectancy stats",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/paper/stats",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "paper",
+        "stats"
+       ]
+      },
+      "description": "ExpectancyReport."
+     },
+     "response": [
+      {
+       "name": "Expectancy stats \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"closedTrades\": 12, \"winRate\": 0.58, \"expectancy\": 6.42, \"profitFactor\": 1.7, \"sharpe\": 1.2, \"sortino\": 1.8, \"maxDrawdown\": -3.1, \"feeDrag\": 4.5, \"unrealizedPnl\": 12.3}"
+      }
+     ]
+    },
+    {
+     "name": "Recent closed trades",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/paper/trades?limit=50",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "paper",
+        "trades"
+       ],
+       "query": [
+        {
+         "key": "limit",
+         "value": "50"
+        }
+       ]
+      },
+      "description": "Most recent reconstructed closed trades."
+     },
+     "response": [
+      {
+       "name": "Recent closed trades \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"trades\": [{\"symbol\": \"BTC\", \"entry\": 64000, \"exit\": 65000, \"qty\": 0.01, \"netPnl\": 9.74, \"commission\": 0.26}]}"
+      }
+     ]
+    },
+    {
+     "name": "Export report",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/paper/export",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "paper",
+        "export"
+       ]
+      },
+      "description": "Write report + closed trades to a timestamped JSON file under <cwd>/data."
+     },
+     "response": [
+      {
+       "name": "Export report \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"written\": true, \"path\": \"data/paper-export-2026-06-29T080000Z.json\", \"closedTrades\": 12}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Tournament Scheduling & Live Control",
+   "description": "Lifecycle control and cron scheduling.",
+   "item": [
+    {
+     "name": "List tournaments",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments"
+       ]
+      },
+      "description": "List all tournaments."
+     },
+     "response": [
+      {
+       "name": "List tournaments \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"tournaments\": [{\"id\": \"tn_1\", \"status\": \"RUNNING\", \"mode\": \"SINGLE\"}]}"
+      }
+     ]
+    },
+    {
+     "name": "Active tournaments",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/active",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "active"
+       ]
+      },
+      "description": "List currently running tournaments."
+     },
+     "response": [
+      {
+       "name": "Active tournaments \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"active\": [{\"id\": \"tn_1\", \"status\": \"RUNNING\", \"progress\": 0.4}]}"
+      }
+     ]
+    },
+    {
+     "name": "Tournament detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/tn_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "tn_1"
+       ]
+      },
+      "description": "Single tournament detail."
+     },
+     "response": [
+      {
+       "name": "Tournament detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"tn_1\", \"status\": \"RUNNING\", \"progress\": 0.4, \"agents\": [\"alpha\", \"beta\"]}"
+      }
+     ]
+    },
+    {
+     "name": "Tournament SSE stream",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Accept",
+        "value": "text/event-stream"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/tn_1/stream",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "tn_1",
+        "stream"
+       ]
+      },
+      "description": "SSE feed of tournament progress."
+     },
+     "response": [
+      {
+       "name": "Tournament SSE stream \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"_note\": \"text/event-stream; data: {\\\"type\\\":\\\"progress\\\",\\\"progress\\\":0.4}\"}"
+      }
+     ]
+    },
+    {
+     "name": "Pause tournament",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/tn_1/pause",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "tn_1",
+        "pause"
+       ]
+      },
+      "description": "Pause a running tournament."
+     },
+     "response": [
+      {
+       "name": "Pause tournament \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"tn_1\", \"status\": \"PAUSED\"}"
+      }
+     ]
+    },
+    {
+     "name": "Resume tournament",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/tn_1/resume",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "tn_1",
+        "resume"
+       ]
+      },
+      "description": "Resume a paused tournament."
+     },
+     "response": [
+      {
+       "name": "Resume tournament \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"tn_1\", \"status\": \"RUNNING\"}"
+      }
+     ]
+    },
+    {
+     "name": "Stop tournament",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/tn_1/stop",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "tn_1",
+        "stop"
+       ]
+      },
+      "description": "Stop a tournament."
+     },
+     "response": [
+      {
+       "name": "Stop tournament \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"tn_1\", \"status\": \"STOPPED\"}"
+      }
+     ]
+    },
+    {
+     "name": "Create schedule",
+     "request": {
+      "method": "POST",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"name\": \"Nightly SINGLE\",\n  \"cron\": \"0 2 * * *\",\n  \"config\": {\n    \"mode\": \"SINGLE\",\n    \"symbols\": [\n      \"BTC\",\n      \"ETH\"\n    ],\n    \"duration\": 200\n  }\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Create a cron-scheduled tournament."
+     },
+     "response": [
+      {
+       "name": "Create schedule \u2014 201 Created",
+       "status": "Created",
+       "code": 201,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"sch_1\", \"name\": \"Nightly SINGLE\", \"cron\": \"0 2 * * *\", \"enabled\": true}"
+      }
+     ]
+    },
+    {
+     "name": "List schedules",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules"
+       ]
+      },
+      "description": "List schedules."
+     },
+     "response": [
+      {
+       "name": "List schedules \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"schedules\": [{\"id\": \"sch_1\", \"name\": \"Nightly SINGLE\", \"cron\": \"0 2 * * *\", \"enabled\": true}]}"
+      }
+     ]
+    },
+    {
+     "name": "Schedule detail",
+     "request": {
+      "method": "GET",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules",
+        "sch_1"
+       ]
+      },
+      "description": "Single schedule."
+     },
+     "response": [
+      {
+       "name": "Schedule detail \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"sch_1\", \"name\": \"Nightly SINGLE\", \"cron\": \"0 2 * * *\", \"enabled\": true, \"config\": {\"mode\": \"SINGLE\"}}"
+      }
+     ]
+    },
+    {
+     "name": "Update schedule",
+     "request": {
+      "method": "PUT",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules",
+        "sch_1"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"cron\": \"0 3 * * *\",\n  \"enabled\": false\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Update a schedule."
+     },
+     "response": [
+      {
+       "name": "Update schedule \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"sch_1\", \"cron\": \"0 3 * * *\", \"enabled\": false}"
+      }
+     ]
+    },
+    {
+     "name": "Delete schedule",
+     "request": {
+      "method": "DELETE",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules/sch_1",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules",
+        "sch_1"
+       ]
+      },
+      "description": "Delete a schedule."
+     },
+     "response": [
+      {
+       "name": "Delete schedule \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"sch_1\", \"deleted\": true}"
+      }
+     ]
+    },
+    {
+     "name": "Run schedule now",
+     "request": {
+      "method": "POST",
+      "header": [],
+      "url": {
+       "raw": "{{base_url}}/api/tournaments/schedules/sch_1/run-now",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "tournaments",
+        "schedules",
+        "sch_1",
+        "run-now"
+       ]
+      },
+      "description": "Trigger a scheduled tournament immediately."
+     },
+     "response": [
+      {
+       "name": "Run schedule now \u2014 202 Accepted",
+       "status": "Accepted",
+       "code": 202,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"id\": \"sch_1\", \"triggered\": true, \"tournamentId\": \"tn_2\"}"
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "name": "Admin Config",
+   "description": "Password-gated runtime app_config (Authorization: Bearer <CONFIG_ADMIN_PASSWORD>).",
+   "item": [
+    {
+     "name": "Read config",
+     "request": {
+      "method": "GET",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{admin_password}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/admin/config",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "admin",
+        "config"
+       ]
+      },
+      "description": "Read runtime app_config values."
+     },
+     "response": [
+      {
+       "name": "Read config \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"config\": {\"SENTIMENT_BATCH_SIZE\": \"50\", \"SOCIAL_SCRAPE_CRON\": \"0 * * * *\", \"TRADING_MODE\": \"realistic_paper\"}}"
+      }
+     ]
+    },
+    {
+     "name": "Set config value",
+     "request": {
+      "method": "PATCH",
+      "header": [
+       {
+        "key": "Content-Type",
+        "value": "application/json"
+       },
+       {
+        "key": "Authorization",
+        "value": "Bearer {{admin_password}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/admin/config/SENTIMENT_BATCH_SIZE",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "admin",
+        "config",
+        "SENTIMENT_BATCH_SIZE"
+       ]
+      },
+      "body": {
+       "mode": "raw",
+       "raw": "{\n  \"value\": \"75\"\n}",
+       "options": {
+        "raw": {
+         "language": "json"
+        }
+       }
+      },
+      "description": "Set a runtime config value."
+     },
+     "response": [
+      {
+       "name": "Set config value \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"key\": \"SENTIMENT_BATCH_SIZE\", \"value\": \"75\", \"updated\": true}"
+      }
+     ]
+    },
+    {
+     "name": "Delete config value",
+     "request": {
+      "method": "DELETE",
+      "header": [
+       {
+        "key": "Authorization",
+        "value": "Bearer {{admin_password}}"
+       }
+      ],
+      "url": {
+       "raw": "{{base_url}}/api/admin/config/SENTIMENT_BATCH_SIZE",
+       "host": [
+        "{{base_url}}"
+       ],
+       "path": [
+        "api",
+        "admin",
+        "config",
+        "SENTIMENT_BATCH_SIZE"
+       ]
+      },
+      "description": "Remove a runtime config value (reverts to .env/default)."
+     },
+     "response": [
+      {
+       "name": "Delete config value \u2014 200 OK",
+       "status": "OK",
+       "code": 200,
+       "_postman_previewlanguage": "json",
+       "header": [
+        {
+         "key": "Content-Type",
+         "value": "application/json"
+        }
+       ],
+       "cookie": [],
+       "body": "{\"key\": \"SENTIMENT_BATCH_SIZE\", \"deleted\": true}"
+      }
+     ]
+    }
+   ]
+  }
+ ],
+ "variable": [
+  {
+   "key": "base_url",
+   "value": "http://localhost:3000"
+  },
+  {
+   "key": "api_key",
+   "value": ""
+  },
+  {
+   "key": "admin_password",
+   "value": ""
+  }
+ ]
+}

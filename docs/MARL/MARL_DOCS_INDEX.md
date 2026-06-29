@@ -1,6 +1,31 @@
 MARL COMPETITIVE TRADING FRAMEWORK - COMPLETE DOCUMENTATION INDEX
 =================================================================
 
+LIVE AGENT PIPELINE (PHASES 4-7) - HOW MARL FEEDS PRODUCTION
+============================================================
+
+The MARL competition + evolutionary system described in this document is now the
+*research engine* behind a live, measurable agent pipeline. The loop closes like this:
+
+- Phase 7 - MarlPolicyFeeder maps the best evolved agent's genome onto the live
+  decision policy (entryThreshold -> minStrength, positionSizePct -> tradeFractionOfCapital).
+- Phase 3 - TradingAgentOrchestrator applies that policy one cycle at a time, routing
+  orders through the safety-guarded TradingService onto a shared (realistic) paper exchange.
+- Phase 4 - ShadowHarness drives the orchestrator continuously to accumulate a track record.
+- Phase 5 - Walk-forward validation guards the fed parameters against overfitting using the
+  SAME policy and the SAME net-of-fees scoring as production.
+- Phase 6 - A Server-Sent Events feed (GET /api/shadow/stream) streams each cycle to the
+  "Shadow Live" dashboard tab.
+- Net-of-fees expectancy analytics (GET /api/paper/*) measure whether the evolved strategy
+  has a real edge after fees and slippage.
+
+So the competitive/adversarial dynamics covered here do not end at the tournament: the winning
+genome is promoted into the live policy, validated, and continuously measured. See the README
+section "Phase 4-7: Live Agent Pipeline" and CLAUDE.md for full detail.
+
+---
+
+
 Your multi-agent reinforcement learning competitive trading system is fully documented!
 Here's how to navigate all the materials.
 

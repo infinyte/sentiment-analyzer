@@ -316,13 +316,13 @@ cd sentiment-analyzer
 # Backend setup
 cd backend
 npm install
-cp .env.example .env
+cp backend.env.template .env
 # Edit .env with local development values
 
 # Frontend setup (separate terminal)
 cd frontend
 npm install
-cp .env.example .env
+cp frontend.env.template .env
 # Edit .env with API endpoint (http://localhost:3000 for local dev)
 ```
 

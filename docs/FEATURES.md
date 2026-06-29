@@ -1,8 +1,10 @@
 # Features & Functionality
 
-> Last updated: 2026-03-23
+> Last updated: 2026-06-29
 
 Status legend: ✅ Fully implemented | ⚠️ Partial / credentials required | 🔴 Stub / not functional
+
+> The **Live Agent Pipeline** (engineering Phases 3–7) — trading orchestrator, shadow harness, walk-forward validation, SSE live UI, net-of-fees expectancy analytics, and the MARL policy feeder — is documented in sections 23–28 at the end of this file.
 
 ---
 
@@ -52,6 +54,12 @@ Status legend: ✅ Fully implemented | ⚠️ Partial / credentials required | �
     - [`docker-compose.yml` Services](#docker-composeyml-services)
   - [21. CI/CD Pipeline](#21-cicd-pipeline)
   - [22. Azure Telemetry / Application Insights](#22-azure-telemetry--application-insights)
+  - [23. Trading Agent Orchestrator (Phase 3)](#23-trading-agent-orchestrator-phase-3)
+  - [24. Shadow Harness (Phase 4) + SSE Live UI (Phase 6)](#24-shadow-harness-phase-4--sse-live-ui-phase-6)
+  - [25. Walk-Forward Validation (Phase 5)](#25-walk-forward-validation-phase-5)
+  - [26. Net-of-Fees Expectancy Analytics](#26-net-of-fees-expectancy-analytics)
+  - [27. MARL Policy Feeder (Phase 7)](#27-marl-policy-feeder-phase-7)
+  - [28. Tournament Scheduling \& Live Control](#28-tournament-scheduling--live-control)
 
 ---
 
@@ -514,8 +522,12 @@ Implementation: `node-cache` (in-memory); no external dependency required.
 |-----------|------|-------------|--------|
 | **Main dashboard** | `App.tsx` (40 KB) | Coin list, sentiment filters, coin detail modal, Sentiment Lab, health pill, sentiment refresh controls, Backtesting tab | ✅ |
 | **MARL Competition Viewer** | `components/MarlCompetitionViewer.tsx` (37 KB) | Tournament launch UI, equity curves, head-to-head comparison, info drawer, manual equity reload, agent cosmetics | ✅ |
-| **Agent Management Dashboard** | `components/AgentManagementDashboard.tsx` | Agent registry, leaderboard, breeding controls, genealogy tree, generation trends, cross-tournament comparison, genome snapshot | ✅ |
+| **Agent Management Dashboard** | `components/AgentManagementDashboard.tsx` | Agent registry, leaderboard, breeding controls, navigable lineage, generation trends, cross-tournament comparison, genome snapshot | ✅ |
 | **Social Dashboard** | `components/SocialDashboard.tsx` | Trending topics, scraper health, manual refresh, trend score panel, scored item detail drill-in | ✅ |
+| **Shadow Harness Dashboard** | `components/ShadowHarnessDashboard.tsx` | "Shadow Live" tab: start/stop/tick controls, live cycle feed via `EventSource` from `/api/shadow/stream`, net-of-fees expectancy snapshot | ✅ |
+| **Tournament Monitor** | `components/TournamentMonitor.tsx` | "Tournaments" tab: live active-tournament table with pause/resume/stop controls and SSE progress | ✅ |
+| **Config Editor** | `components/ConfigEditor.tsx` | "Admin" tab: password-gated runtime `app_config` editor | ✅ |
+| **Agent Avatar** | `components/AgentAvatar.tsx` | Deterministic cartoon agent avatar (original art); seed-stable per agent id, honours accent color | ✅ |
 
 ### Custom Hooks
 
@@ -523,6 +535,7 @@ Implementation: `node-cache` (in-memory); no external dependency required.
 |------|---------|--------|
 | `useMarlCompetition.ts` | Tournament lifecycle: start → poll → results → compare → history | ✅ |
 | `useSocialMedia.ts` | Trending topics, scored items, social stats with auto-refresh | ✅ |
+| `useTournamentScheduler.ts` | Tournament schedule CRUD + run-now state | ✅ |
 
 ### Phase 1 UI Parity Delivered
 
@@ -589,3 +602,76 @@ Implementation: `node-cache` (in-memory); no external dependency required.
 - Winston transport that forwards structured log events to Application Insights
 - Activated automatically when `APPLICATIONINSIGHTS_CONNECTION_STRING` is set in environment
 - No code changes required to enable/disable
+
+---
+
+## 23. Trading Agent Orchestrator (Phase 3)
+
+**Status:** ✅ Fully implemented  
+**Key file:** `backend/src/services/agent/trading-orchestrator.ts` · **Routes:** `backend/src/routes/agent-orchestrator.ts`
+
+The bridge between *signals* and *execution*. `TradingAgentOrchestrator` runs **one** decision cycle: per symbol it takes an `AgentSignal` (direction + 0–1 strength), applies a transparent, asymmetric policy, and routes orders through the safety-guarded `TradingService` onto the shared (realistic) paper exchange — so its trades are measured by `/api/paper/*`. Stateless: exchange balances are the only source of truth.
+
+- Policy: a BUY needs `strength ≥ minStrength` (default 0.3) and no open position; a SELL closes the full position regardless of strength; never shorts. BUY notional = `tradeFractionOfCapital` (default 0.1) × available USDT
+- Pluggable `SignalSource`: `StaticSignalSource` (explicit/HOLD default) and `SentimentSignalSource` (cached sentiment → BUY/SELL/HOLD)
+- `GET /api/agent/config`; `POST /api/agent/run` body `{ symbols?, signals?, dryRun? }` → `OrchestrationReport`
+
+---
+
+## 24. Shadow Harness (Phase 4) + SSE Live UI (Phase 6)
+
+**Status:** ✅ Fully implemented  
+**Key file:** `backend/src/services/agent/shadow-harness.ts` · **Routes:** `backend/src/routes/shadow-harness.ts` · **UI:** `frontend/src/components/ShadowHarnessDashboard.tsx`
+
+Drives the orchestrator on a fixed `setInterval` so a track record builds with no human in the loop. Process-lifetime, in-memory only (bounded ring buffer); `unref()`d timer; overlap guard skips a tick if the prior cycle is still running; per-cycle errors are recorded and the loop continues. Pair with `SHADOW_MODE=true` for the REALISTIC_PAPER exchange.
+
+- `GET /api/shadow/status`, `POST /api/shadow/start` `{ symbols[], intervalMs?, dryRun?, maxHistory? }`, `POST /api/shadow/stop`, `POST /api/shadow/tick`
+- `GET /api/shadow/stream` — Server-Sent Events: initial `status` event, then one `cycle` event per completed cycle, with heartbeats. Consumed by the "Shadow Live" tab via `EventSource`
+
+---
+
+## 25. Walk-Forward Validation (Phase 5)
+
+**Status:** ✅ Fully implemented  
+**Key file:** `backend/src/services/analytics/walk-forward.ts` · **Route:** `backend/src/routes/walk-forward.ts`
+
+Pure, synchronous walk-forward analysis that guards the decision policy against overfitting. Rolls sequential in-sample (IS) / out-of-sample (OOS) windows: optimize `PolicyParams` (`minStrength`, `tradeFractionOfCapital`) on IS, then score them on the unseen OOS window. Reuses the **same** policy (`resolvePolicyAction`) and **same** net-of-fees scoring (`expectancy.ts`) as production.
+
+- `POST /api/walk-forward/run` accepts `bars[]` (price+signal) or a bare `prices[]` (momentum signals), plus `candidates[]`, `inSampleSize`, `outOfSampleSize`, `anchored?`, `objective?`
+- Objectives: `netPnl` (default), `expectancy`, `profitFactor`, `sharpe`. Reports per-fold IS/OOS metrics, aggregate OOS expectancy, and **walk-forward efficiency** = mean(OOS obj) / mean(IS obj)
+
+---
+
+## 26. Net-of-Fees Expectancy Analytics
+
+**Status:** ✅ Fully implemented  
+**Key file:** `backend/src/services/analytics/expectancy.ts` · **Routes:** `backend/src/routes/paper-analytics.ts`
+
+Stateless service that reconstructs round-trip trades by FIFO-matching SELL fills against prior BUY fills per symbol (pro-rating each fill's `commission`), then computes net-of-fees metrics. Most meaningful in REALISTIC_PAPER / shadow mode where commissions are non-zero.
+
+- `GET /api/paper/stats` → `ExpectancyReport` (win rate, expectancy, profit factor, Sharpe/Sortino, max drawdown, fee drag, unrealized P&L)
+- `GET /api/paper/trades?limit=N` → most recent reconstructed closed trades
+- `GET /api/paper/export` → timestamped JSON file under `<cwd>/data`
+
+---
+
+## 27. MARL Policy Feeder (Phase 7)
+
+**Status:** ✅ Fully implemented  
+**Key file:** `backend/src/services/agent/marl-policy-feeder.ts`
+
+Closes the loop from evolution back to the live agent: reads the best evolved agent (leaderboard top + persisted genome) and maps its genome onto live `PolicyParams` — `entryThreshold` → `minStrength`, `positionSizePct` → `tradeFractionOfCapital` (clamped to safety rails).
+
+- `GET /api/agent/marl-policy` → recommended params + provenance (404 until a tournament has produced an agent)
+- `POST /api/agent/apply-marl-policy` → applies them to the live orchestrator. Phase 5 walk-forward can validate before they are trusted
+
+---
+
+## 28. Tournament Scheduling & Live Control
+
+**Status:** ✅ Fully implemented  
+**Key files:** `backend/src/services/tournament-scheduler.ts`, `backend/src/services/tournament-service.ts` · **Routes:** `backend/src/routes/tournaments.ts`, `backend/src/routes/tournament-schedules.ts` · **UI:** `frontend/src/components/TournamentMonitor.tsx`
+
+- Live control: `GET /api/tournaments`, `/active`, `/:id`; `POST /api/tournaments/:id/pause` · `/resume` · `/stop`; `GET /api/tournaments/:id/stream` (SSE)
+- Cron scheduling: `POST/GET/PUT/DELETE /api/tournaments/schedules[/:id]`; `POST /api/tournaments/schedules/:id/run-now`
+- Surfaced in the "Tournaments" tab with a live active-count badge

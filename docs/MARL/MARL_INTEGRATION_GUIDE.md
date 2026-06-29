@@ -3,6 +3,8 @@ MARL INTEGRATION GUIDE
 
 This document describes how the MARL competition system is integrated in the current repository.
 
+> **Now part of a live pipeline (Phases 4-7).** The MARL/evolution stack integrated here is the research engine for a live agent loop: the best evolved genome is mapped onto the live decision policy by the **MarlPolicyFeeder** (Phase 7), run continuously by the **ShadowHarness** (Phase 4) through the safety-guarded `TradingService`, validated by **walk-forward analysis** (Phase 5), streamed to the "Shadow Live" UI over SSE (Phase 6), and measured by **net-of-fees expectancy analytics** (`/api/paper/*`). See the README section "Phase 4-7: Live Agent Pipeline" and `CLAUDE.md`.
+
 CURRENT STATUS
 ==============
 
@@ -123,7 +125,7 @@ Backend (API only, no Redis):
 ```bash
 cd backend
 npm install
-cp .env.example .env
+cp backend.env.template .env
 npm run dev
 ```
 
@@ -131,6 +133,7 @@ Backend with BullMQ workers (optional — requires Redis):
 
 ```bash
 # Start Redis (or use docker-compose up redis)
+
 # Set REDIS_URL=redis://localhost:6379 in backend/.env
 
 cd backend
@@ -172,7 +175,7 @@ TROUBLESHOOTING
 ===============
 
 Issue: backend health says misconfigured
-Solution: populate backend/.env from backend/.env.example.
+Solution: populate backend/.env from backend/backend.env.template.
 
 Issue: /api/marl/competition/:id/results returns 202
 Solution: the tournament is still running; keep polling status.
