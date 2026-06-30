@@ -108,6 +108,42 @@ export class UserRepository {
       .run({ now, userId });
   }
 
+  // ── M2: account lockout bookkeeping ───────────────────────────────────────
+
+  /** Increment failed_login_attempts and return the new count. */
+  incrementFailedLogin(userId: string): number {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE users
+         SET failed_login_attempts = failed_login_attempts + 1, updated_at = @now
+         WHERE id = @userId`,
+      )
+      .run({ now, userId });
+    const row = this.db
+      .prepare('SELECT failed_login_attempts AS n FROM users WHERE id = ?')
+      .get(userId) as { n: number } | undefined;
+    return row?.n ?? 0;
+  }
+
+  /** Set (or clear, with null) the lockout expiry on an account. */
+  setLockedUntil(userId: string, lockedUntilIso: string | null): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare('UPDATE users SET locked_until = @lockedUntil, updated_at = @now WHERE id = @userId')
+      .run({ lockedUntil: lockedUntilIso, now, userId });
+  }
+
+  /** Reset failed_login_attempts to 0 and clear any lock (on successful login). */
+  resetFailedLogin(userId: string): void {
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, updated_at = @now WHERE id = @userId',
+      )
+      .run({ now, userId });
+  }
+
   /**
    * Insert an email-verification token row. The raw token is hashed (SHA-256)
    * before storage — only the hash is persisted. Returns the row id.

@@ -33,6 +33,17 @@ export function createAuthSystem(db: Database.Database, config: AuthConfig = loa
 
 export { loadAuthConfig } from './config.js';
 export type { AuthConfig } from './config.js';
+
+// M2 surface: tenant context (the seam M3's TenantScopedRepository consumes) + CSRF.
+export {
+  runWithPrincipal,
+  getCurrentUserId,
+  getCurrentPrincipal,
+  tryGetCurrentPrincipal,
+  setDatabaseTenant,
+} from './tenant-context.js';
+export { csrfTokenForSession, createOriginCheck, createCsrfGuard, issueCsrfCookie } from './csrf.js';
+export { createRateLimiters } from './rate-limiters.js';
 export type {
   AuthenticatedPrincipal,
   IIdentityProvider,

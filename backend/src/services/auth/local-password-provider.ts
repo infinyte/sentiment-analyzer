@@ -11,10 +11,14 @@
  *     existence.
  *   • Anti-enumeration `register`: identical outcome whether or not the email
  *     exists, and never a second row for a duplicate.
+ *   • Account-associated exponential-backoff lockout (M2): past a threshold of
+ *     failed attempts the account enters a 2^(n-threshold) backoff window;
+ *     success resets the counter. Locked accounts fail generically (no leak).
  *
- * NOT here (later milestones): account lockout / backoff (M2), the
- * password-reset and email-verification *flows* + real mail sending (M4). A
- * verification token row IS created on register; the mailer call is stubbed.
+ * NOT here (later milestones): the password-reset and email-verification *flows*
+ * + real mail sending (M4). A verification token row IS created on register; the
+ * mailer call is stubbed. The forgot-password path (M4) must stay usable even
+ * when an account is locked.
  */
 
 import argon2 from 'argon2';
@@ -85,8 +89,19 @@ export class LocalPasswordProvider implements IIdentityProvider {
 
     if (!user) {
       // Constant-time: verify against a dummy hash so timing matches the
-      // real-account path, then fail. Result is ignored.
+      // real-account path, then fail. Result is ignored. No lockout for unknown
+      // emails — lockout is account-associated (OWASP), and counting unknown
+      // emails would both leak nothing useful and enable DoS-by-lockout probing.
       await this.verifyAgainstDummy(credentials.password);
+      return null;
+    }
+
+    // M2 lockout: if the account is in a backoff window, reject WITHOUT revealing
+    // the lock in the public response (generic failure; detail logged server-side).
+    // Still burn a dummy verify so timing matches the password-check path.
+    if (this.isLocked(user.lockedUntil)) {
+      await this.verifyAgainstDummy(credentials.password);
+      logger.warn('auth.authenticate: attempt on locked account', { userId: user.id });
       return null;
     }
 
@@ -99,12 +114,37 @@ export class LocalPasswordProvider implements IIdentityProvider {
       return null;
     }
 
-    // M2: increment failed_login_attempts / enforce lockout here. The schema
-    // columns exist; the logic is deliberately out of scope for M1.
-    if (!valid) return null;
+    if (!valid) {
+      this.registerFailedAttempt(user.id);
+      return null;
+    }
 
+    // Success resets the failed-attempt counter and clears any lock.
+    this.users.resetFailedLogin(user.id);
     this.users.touchLastLogin(user.id);
     return toPrincipal(user);
+  }
+
+  // ── M2: lockout helpers ───────────────────────────────────────────────────
+
+  private isLocked(lockedUntil: string | null): boolean {
+    return lockedUntil !== null && new Date(lockedUntil).getTime() > Date.now();
+  }
+
+  /**
+   * Count a failed attempt and, past the threshold, set an exponential-backoff
+   * lock: 2^(n - threshold) × base, capped at lockoutCapMs (Cognito-style).
+   */
+  private registerFailedAttempt(userId: string): void {
+    const count = this.users.incrementFailedLogin(userId);
+    const { lockoutThreshold, lockoutBackoffBaseMs, lockoutCapMs } = this.config;
+    if (count >= lockoutThreshold) {
+      const exponent = count - lockoutThreshold; // n=threshold → 2^0
+      const lockMs = Math.min(lockoutCapMs, lockoutBackoffBaseMs * 2 ** exponent);
+      const lockedUntil = new Date(Date.now() + lockMs).toISOString();
+      this.users.setLockedUntil(userId, lockedUntil);
+      logger.warn('auth.authenticate: account locked (backoff)', { userId, count, lockMs });
+    }
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
