@@ -8,6 +8,7 @@ import { container, TOKENS } from './container.js';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import type { Coin, OnChainMetrics, Sentiment, TrendingSentiment } from './types.js';
 import type { SentimentMomentum, TrendingTopicRecord } from './types/social-media.js';
@@ -37,6 +38,7 @@ import { createPaperAnalyticsRouter } from './routes/paper-analytics.js';
 import { createAgentOrchestratorRouter } from './routes/agent-orchestrator.js';
 import { createShadowHarnessRouter } from './routes/shadow-harness.js';
 import { createWalkForwardRouter } from './routes/walk-forward.js';
+import { createAuthRouter } from './routes/auth.js';
 import {
   TradingAgentOrchestrator,
   SentimentSignalSource,
@@ -79,8 +81,22 @@ app.use(
     },
   })
 );
-app.use(cors({ origin: process.env.ALLOWED_ORIGINS || '*' }));
+// CORS: when ALLOWED_ORIGINS is configured we enable credentialed CORS against
+// that explicit allow-list (required for the cookie-based auth seam — no wildcard,
+// since `credentials: true` is invalid with `*`). With no config we preserve the
+// pre-auth permissive default so existing behavior is unchanged.
+const allowedOrigins = (process.env.ALLOWED_ORIGINS ?? '')
+  .split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+app.use(
+  allowedOrigins.length > 0
+    ? cors({ origin: allowedOrigins, credentials: true })
+    : cors({ origin: '*' })
+);
 app.use(express.json());
+// Parse cookies so the auth seam can read the hardened session cookie.
+app.use(cookieParser());
 
 // HTTP request logger — records method, path, status, and duration for every request
 app.use((req, res, next) => {
@@ -987,6 +1003,8 @@ if (storage.isHealthy()) {
   app.use(createAgentStatsRouter(repos.agents));
   app.use(createEvolutionaryRouter(storage.getDb(), repos.agents));
   app.use('/api/admin/config', createAdminConfigRouter());
+  // Multi-user auth (M1): email+password, sessions, /api/v1/auth/*.
+  app.use(createAuthRouter(storage.getDb()));
 } else {
   logger.warn('DB-dependent routes skipped (storage not connected)');
 }
