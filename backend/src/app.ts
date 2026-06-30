@@ -71,6 +71,13 @@ dotenv.config();
 const app = express();
 export const port = process.env.PORT || 3000;
 
+// ── Global middleware order (M2) ────────────────────────────────────────────
+// security headers (helmet) → credentialed CORS → body parser → cookie parser
+// → routers. The auth router then layers, per protected route:
+//   rate limiter → authenticate (binds tenant context) → CSRF guard → handler.
+// Rationale: headers/CORS must wrap everything; cookies must be parsed before
+// authenticate can read the session; rate limiting runs before auth so floods
+// are shed cheaply; CSRF runs after authenticate so it can bind to the session.
 app.use(
   helmet({
     contentSecurityPolicy: {
