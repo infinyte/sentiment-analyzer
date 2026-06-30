@@ -48,8 +48,6 @@ pids/
 .DS_Store
 Thumbs.db
 *.db
-backend/package-lock.json
-backend/package-lock.json
 backend/node_modules/.package-lock.json
 backend/sentiment_analyzer.db
 */node_modules/*
