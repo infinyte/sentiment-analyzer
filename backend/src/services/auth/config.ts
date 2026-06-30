@@ -29,6 +29,34 @@ export interface AuthConfig {
    * non-TLS local tooling can opt out. Production must leave this true.
    */
   cookieSecure: boolean;
+
+  // ── M2: CSRF ────────────────────────────────────────────────────────────
+  /**
+   * Explicit allow-list of acceptable request origins for the CSRF Origin/Referer
+   * check (state-changing requests). No wildcard. Empty → Origin enforcement is
+   * skipped (dev default); production MUST set ALLOWED_ORIGINS.
+   */
+  allowedOrigins: string[];
+  /** Server-side key for the session-bound CSRF HMAC. */
+  csrfSecret: string;
+  /** Non-HttpOnly cookie carrying the CSRF token (readable by the SPA in M5). */
+  csrfCookieName: string;
+
+  // ── M2: Account lockout (exponential backoff) ─────────────────────────────
+  /** Failed-attempt count after which backoff begins. */
+  lockoutThreshold: number;
+  /** Base unit for the 2^(n-threshold) backoff curve, in ms. */
+  lockoutBackoffBaseMs: number;
+  /** Maximum lock duration (cap on the exponential curve), in ms. */
+  lockoutCapMs: number;
+
+  // ── M2: Rate limiting ─────────────────────────────────────────────────────
+  rateLimit: {
+    loginWindowMs: number;
+    loginMax: number;
+    registerWindowMs: number;
+    registerMax: number;
+  };
 }
 
 function intFromEnv(name: string, fallback: number): number {
@@ -38,7 +66,18 @@ function intFromEnv(name: string, fallback: number): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+import crypto from 'node:crypto';
+
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const MIN_MS = 60 * 1000;
+
+function originsFromEnv(): string[] {
+  return (process.env.ALLOWED_ORIGINS ?? '')
+    .split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
+}
 
 /** Build the auth config from environment, applying spec defaults. */
 export function loadAuthConfig(): AuthConfig {
@@ -54,5 +93,25 @@ export function loadAuthConfig(): AuthConfig {
     cookieName: process.env.AUTH_COOKIE_NAME ?? '__Host-sa_session',
     // Default true: the `__Host-` prefix is invalid without Secure.
     cookieSecure: process.env.AUTH_COOKIE_SECURE !== 'false',
+
+    // M2: CSRF. The secret falls back to a per-process random value so single-
+    // instance deploys work out of the box; set AUTH_CSRF_SECRET (and a shared
+    // store) for multi-instance — see the // Azure/scale: note in csrf.ts.
+    allowedOrigins: originsFromEnv(),
+    csrfSecret: process.env.AUTH_CSRF_SECRET ?? crypto.randomBytes(32).toString('hex'),
+    csrfCookieName: process.env.AUTH_CSRF_COOKIE_NAME ?? '__Host-sa_csrf',
+
+    // M2: lockout. Cognito-style 2^(n-threshold) seconds, capped ~15 min.
+    lockoutThreshold: intFromEnv('AUTH_LOCKOUT_THRESHOLD', 5),
+    lockoutBackoffBaseMs: intFromEnv('AUTH_LOCKOUT_BACKOFF_BASE_MS', 1000),
+    lockoutCapMs: intFromEnv('AUTH_LOCKOUT_CAP_MS', 15 * MIN_MS),
+
+    // M2: rate limits (the design doc's suggested starting values).
+    rateLimit: {
+      loginWindowMs: intFromEnv('AUTH_RL_LOGIN_WINDOW_MS', 15 * MIN_MS),
+      loginMax: intFromEnv('AUTH_RL_LOGIN_MAX', 5),
+      registerWindowMs: intFromEnv('AUTH_RL_REGISTER_WINDOW_MS', HOUR_MS),
+      registerMax: intFromEnv('AUTH_RL_REGISTER_MAX', 10),
+    },
   };
 }
