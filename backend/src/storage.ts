@@ -24,6 +24,7 @@ import type {
   ExchangeMode,
   EncryptedBlob,
 } from './types/broker.js';
+import { runMigrations, ALL_MIGRATIONS } from './database/migrations/index.js';
 import logger from './logger.js';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -66,6 +67,9 @@ export class StorageService {
     this.db.pragma('foreign_keys = ON');
 
     this.createTables();
+    // Versioned, reversible migrations (schema_migrations-tracked). Legacy tables
+    // above are still owned by createTables(); the runner begins at the M1 auth schema.
+    runMigrations(this.db, ALL_MIGRATIONS);
     logger.info('sqlite connected', { path: this.dbPath });
   }
 
