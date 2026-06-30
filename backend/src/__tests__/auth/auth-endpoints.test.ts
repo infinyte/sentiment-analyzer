@@ -151,7 +151,12 @@ describe('auth endpoints (/api/v1/auth)', () => {
     expect((await request(app).get('/api/v1/auth/me').set('Cookie', cookie)).status).toBe(200);
     expect((db.prepare('SELECT COUNT(*) AS c FROM sessions').get() as { c: number }).c).toBe(1);
 
-    const logout = await request(app).post('/api/v1/auth/logout').set('Cookie', cookie);
+    // M2: /logout is CSRF-guarded — obtain the session-bound token first.
+    const csrf = await request(app).get('/api/v1/auth/csrf').set('Cookie', cookie);
+    const logout = await request(app)
+      .post('/api/v1/auth/logout')
+      .set('Cookie', cookie)
+      .set('X-CSRF-Token', csrf.body.csrfToken);
     expect(logout.status).toBe(200);
 
     // Server-side row is gone — not merely the client cookie.

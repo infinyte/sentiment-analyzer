@@ -8,12 +8,15 @@
  */
 
 import Database from 'better-sqlite3';
+import express, { type Express } from 'express';
+import cookieParser from 'cookie-parser';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { runMigrations, ALL_MIGRATIONS } from '../../database/migrations/index.js';
 import { loadAuthConfig, type AuthConfig } from '../../services/auth/config.js';
+import { createAuthRouter } from '../../routes/auth.js';
 
 export interface TestDb {
   db: Database.Database;
@@ -54,4 +57,19 @@ export function testAuthConfig(overrides: Partial<AuthConfig> = {}): AuthConfig 
     argon2: { memoryCost: 512, timeCost: 1, parallelism: 1 },
     ...overrides,
   };
+}
+
+/** Build a minimal Express app mounting the auth router over the given db/config. */
+export function buildAuthApp(db: Database.Database, config: AuthConfig): Express {
+  const app = express();
+  app.use(express.json());
+  app.use(cookieParser());
+  app.use(createAuthRouter(db, config));
+  return app;
+}
+
+/** Pull the raw `name=value` pair from a Set-Cookie header array for resending. */
+export function cookiePair(setCookie: unknown, name: string): string | undefined {
+  const arr = (setCookie as string[] | undefined) ?? [];
+  return arr.find(c => c.startsWith(`${name}=`))?.split(';')[0];
 }
